@@ -146,6 +146,8 @@ Manna와 Bethlehem은 같은 화면을 쓴다. Bethlehem은 왼쪽 화면 목록
 | 상태 열림 / 진행 중 / 완료 / 보류 | `neutral` / `primary` / `success` / `warning` (항상 레이블 병기) |
 | 유형 이슈 | `error` |
 
+**브랜드 자산.** `docs/icon.png`는 Bethlehem 창·앱 아이콘과 Manna 파비콘(64px, 약 14KB)으로, `docs/key_art.png`는 Bethlehem 첫 화면에 쓴다. 키 아트는 용량(0.8MB) 때문에 Manna 에 넣지 않는다. 툴바 로고는 키 아트의 잎 마크를 SVG 로 옮긴 것이고, 그 녹색은 로고에만 쓴다 — UI 색상은 가이드 팔레트만 쓴다.
+
 ---
 
 ## 5. 화면 품기 — 가상 파일 시스템
@@ -205,7 +207,7 @@ interface Annotation {
 interface Anchor {
   fp: Fingerprint;
   region?: { x: number; y: number; w: number; h: number };  // 요소 박스 기준 0~1
-  view: string[];              // 달 때 보이던 최상위 컨테이너 id (예: ['viewA'])
+  trail: string[];             // 달 때 선택되어 있던 탭·토글 레이블 (예: ['모니터링', 'LIVE'])
   props?: Record<string, string>;  // 크기, 색상, 폰트 등 계산된 스타일 (개발자용)
 }
 
@@ -222,7 +224,7 @@ interface Fingerprint {
 
 ### 6.2 앵커 — 요소 + 영역
 
-- **클릭**: 요소를 잡는다. 하이라이트 상태에서 `↑`/`↓`로 부모/자식으로 옮긴다.
+- **클릭**: 요소를 잡는다. 하이라이트 상태에서 `↑`/`↓`로 부모/자식으로 옮긴다. 작성 창에 글을 쓰는 중에는 `Alt+↑`/`Alt+↓`.
 - **드래그**: 영역을 잡는다. 시작점 아래 요소(canvas면 그 canvas, 아니면 드래그 박스를 모두 품는 가장 깊은 요소)를 기준으로 상대 좌표 0~1을 저장한다. proto의 3D 맵 위 레일 결함 지점, FAB 조망의 특정 구역이 이 방식으로 달린다.
 - 상대 좌표이므로 스케일, `zoom`, 창 크기가 바뀌어도 같은 자리를 가리킨다.
 
@@ -231,11 +233,14 @@ interface Fingerprint {
 마커 레이어는 iframe 바깥(부모 문서)에 있다. 매 프레임 앵커 요소의 `getBoundingClientRect()`를 스테이지 스케일로 변환해 마커를 옮긴다.
 
 - 앵커 요소가 `checkVisibility()`로 보이고 뷰포트 안에 있을 때만 마커를 띄운다.
-- 안 보이는 항목은 TODO 패널에서 흐리게 표시하고, 달 때의 `view`를 붙여 "BAY-4 상세에서 보임"처럼 안내한다. 패널은 `view`별로 묶어 보여 준다.
+- 패널은 "지금 화면에 보이는 항목"과 "다른 화면 상태에 있는 항목"으로 나눠 보여 준다. 안 보이는 항목은 흐리게, 달 때의 `trail`을 붙여 "모니터링 · LIVE 상태에서 작성"처럼 안내한다.
+- `trail`은 화면의 `aria-selected` · `aria-pressed` · `aria-current` 요소 레이블에서 자동으로 얻는다. 접근성 속성을 쓰지 않는 화면에서는 비어 있을 수 있다.
 
 ### 6.4 찾기와 재부착
 
 열 때는 `id` → `selector` → 지문 점수 순으로 요소를 찾는다. 점수는 태그, 클래스, 텍스트, 속성, 조상 일치를 가중합한다. 새 화면 버전으로 넘어갈 때(재부착) Bethlehem이 모든 어노테이션을 새 버전에서 다시 찾아 신뢰도를 보여 주고, 낮은 것만 작성자가 다시 지정한다.
+
+**Phase 0 현재**: 새 버전 등록 시 "기존 어노테이션을 새 버전으로 옮기기"를 고르면 버전 번호만 옮기고, 화면에서는 지문 점수로 찾는다. 신뢰도 표시와 재지정 UI는 아직 없다. proto의 v1(`index - old.html`)로 옮겼을 때 `#tabB`(설비정보 확인)에 단 항목이 옛 화면의 다른 탭에 붙는 것을 확인했다 — 같은 id가 다른 탭을 가리키기 때문이다. Phase 1에서 신뢰도와 함께 "텍스트가 달라졌음" 같은 차이를 보여 줘야 한다.
 
 ---
 
@@ -265,20 +270,28 @@ interface Fingerprint {
 
 ```
 Bethlehem/
-├── package.json             npm workspaces · npm start = Manna 런타임 빌드 + electron-vite dev
+├── package.json             패키지 하나 · npm start = Manna 런타임 빌드 + electron-vite dev
+├── electron.vite.config.ts  main · preload(cjs) · renderer
 ├── apps/
-│   └── bethlehem/           Electron
-│       ├── main/            파일 입출력, 외부 리소스 다운로드, 창
-│       ├── preload/         렌더러에 노출할 최소 API (contextIsolation)
-│       └── renderer/        Bethlehem UI (packages/manna 컴포넌트 재사용)
+│   └── bethlehem/
+│       ├── main/            창, 파일 입출력, 화면 패키징·외부 리소스 다운로드 (net.fetch)
+│       ├── preload/         렌더러에 노출할 최소 API (contextBridge)
+│       ├── shared/          preload ↔ renderer API 타입
+│       ├── renderer/        화면 목록, 화면 등록 대화상자, 첫 화면 — 나머지는 packages/manna 의 틀
+│       └── resources/       앱 아이콘 (docs/icon.png 에서 만든 크기별 PNG)
 ├── packages/
-│   ├── core/                문서 스키마, 블롭 코덱, 가상 FS, Leaven(지문·찾기), 병합 — 브라우저/Node 공용
-│   └── manna/               Manna 런타임 — 단일 IIFE + CSS로 빌드되어 내보낸 HTML에 인라인
+│   ├── core/src/            문서 스키마, 블롭 코덱, 가상 FS, Leaven(지문·찾기), Manna 파일 읽기·쓰기 — 브라우저/Node 공용
+│   ├── core/node/           폴더 훑기·패키징 — Node 전용
+│   └── manna/               Manna 런타임 — 단일 IIFE + CSS 로 빌드되어 내보낸 HTML 에 인라인 (packages/manna/vite.config.ts)
+├── scripts/bake.ts          명령줄 굽기 (Bethlehem 없이 폴더 → Manna)
+├── tests/                   E2E — e2e.ts(Manna, Chrome) · e2e-bethlehem.ts(Electron)
 ├── example/proto/           첫 빵
 └── docs/
 ```
 
-품은 화면은 임의의 스크립트를 실행하므로 Electron 렌더러는 `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`로 띄운다. 품은 화면은 Node에 닿지 않는다.
+npm workspaces 로 나누지 않고 패키지 하나에 폴더만 나눴다. 세 갈래가 같은 TypeScript 소스를 경로 별칭(`@core`, `@core/node`, `@manna`)으로 직접 가져다 쓰므로, 패키지 사이 빌드 순서를 관리할 일이 없다.
+
+**보안.** Electron 렌더러는 `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`로 띄운다. 품은 화면은 Node 에 닿지 않는다. 다만 품은 화면은 Bethlehem UI 와 같은 출처(srcdoc)에서 돌기 때문에 `window.parent.bethlehem` API 를 부를 수 있다. 그래서 메인 프로세스는 사용자가 대화상자로 고르거나 창에 끌어다 놓은 경로만 읽고 쓴다. 끌어다 놓은 경로는 preload 가 `webUtils.getPathForFile`로 진짜 `File` 에서만 얻으므로 스크립트가 지어낼 수 없다. 렌더러 CSP 는 품은 화면에 그대로 물려지므로 인라인 스크립트·eval·CDN 을 막지 않는다.
 
 ---
 
@@ -299,9 +312,22 @@ proto를 Manna 한 장으로 구워 내는 것까지. 가장 위험한 기술(�
 
 **검증 항목**: CSS `zoom` 안 요소의 `getBoundingClientRect()` 값 (Chromium 128+ 표준 zoom 동작), srcdoc iframe에서 동적 `<script>` 순차 로딩, 1.9MB 데이터 블롭 해제 속도.
 
+**결과 (2026-10-01)**
+
+| 기준 | 상태 | 근거 |
+|---|---|---|
+| 1 화면 등록 | 완료 | `test:e2e:app` — 엔트리 자동 감지, `assets/` 3개와 옛 HTML 에 "미참조 추정", README 설명, Pretendard 단일 woff2 로 포함 |
+| 2 원본과 같은 동작 | 완료 | 두 E2E 모두 데이터 6채널 로딩 완료, 찾지 못한 파일 0 |
+| 3 어노테이션 | 완료 | 요소 클릭, `canvas#fabCv` 영역 드래그, 일시정지(시계 정지 확인), 설비정보 탭 이동 시 FAB 마커 숨김 → 복귀 시 다시 표시 |
+| 4 HTML 한 장 · 오프라인 | Chrome 완료 | `test:e2e` — `file://`, 외부 네트워크 없이 Pretendard 적용. **Firefox 는 설치돼 있지 않아 확인하지 못했다** |
+| 5 수신자 흐름 | Chrome 완료 | 이름 입력 → 어노테이션 → 다운로드 저장 → 다시 열기, "새 N" 번호. `showSaveFilePicker` 덮어쓰기는 대화상자라 자동 확인하지 못했다 |
+| 6 버전 · 중복 제거 | 완료 | v1+v2 = 4.1MB (데이터 블롭 공유, 예상 4.3MB) |
+
+검증 항목은 모두 문제가 없었다: `zoom` 안의 `getBoundingClientRect()`는 확대가 반영된 값을 돌려주고, `file://` 문서가 만든 `blob:null/…` URL 을 srcdoc iframe 이 불러오며, 문서 열기부터 화면 스플래시 종료까지 약 1초다.
+
 ### Phase 1 — 협업
 
-병합, 재부착(지문 점수), 요소 속성 표시와 화면 CSS 변수 이름 역추적(`#F86517` → `--brand`), 화면 설명 탭(README), 변경 이력, 버전 나란히 비교, 어노테이션 썸네일(`capturePage`).
+병합, 재부착 신뢰도와 재지정 UI(§6.4), 화면 CSS 변수 이름 역추적(`#F86517` → `--brand`), 변경 이력 화면, 버전 나란히 비교, 어노테이션 썸네일(`capturePage`), Firefox·Safari 확인.
 
 ### Phase 2 — 빵집 확장
 

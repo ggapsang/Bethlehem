@@ -1,0 +1,36 @@
+{
+  "name": "bethlehem",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Terrarium — 동작하는 화면을 품은 화면정의서. Bethlehem(작성 프로그램)과 Manna(내보낸 문서).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "start": "npm run build:manna && electron-vite dev",
+    "build:manna": "vite build -c packages/manna/vite.config.ts",
+    "bake": "npm run build:manna && tsx scripts/bake.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:e2e": "npm run bake -- example/proto out/e2e/proto.manna.html --entry \"index - old.html,index.html\" && tsx tests/e2e.ts",
+    "test:e2e:app": "npm run build:manna && electron-vite build && tsx tests/e2e-bethlehem.ts"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^26.6.3",
+    "electron": "^44.5.1",
+    "electron-vite": "^5.0.0",
+    "playwright-core": "^1.63.0",
+    "pretendard": "^1.3.9",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.3",
+    "lucide-preact": "^1.49.0",
+    "marked": "^18.0.14",
+    "preact": "^10.29.8"
+  }
+}
