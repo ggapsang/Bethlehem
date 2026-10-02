@@ -10,8 +10,15 @@ import {
 
 /** 영역 Comment 를 캡처로 다는가 — 찍을 그림이 있고(작성 프로그램), 그림 화면이 아니고, 영역을 그렸을 때 */
 export function captureMode(): boolean {
+  return snipAvailable() && snipMode.peek() === 'capture';
+}
+
+/** 캡처 · 녹화 · 붙이기를 고를 수 있는가 — 찍을 그림이 있고, 그림 화면이 아니고, 영역을 그렸거나 URL 화면일 때.
+ * URL 화면은 사이트가 언제 어떻게 바뀔지 몰라 요소를 골라도 캡처가 기본이다 */
+export function snipAvailable(): boolean {
   const d = draft.peek();
-  return !!d?.picked.region && !!still.peek() && version.peek()?.source?.mode !== 'image' && snipMode.peek() === 'capture';
+  const mode = version.peek()?.source?.mode;
+  return !!d && !!still.peek() && mode !== 'image' && (!!d.picked.region || mode === 'site');
 }
 
 export function needName(): boolean {
@@ -30,7 +37,7 @@ export async function addFromDraft(body: string, title = ''): Promise<string | n
   const d = draft.peek();
   const s = screen.peek();
   const v = version.peek();
-  if (!d || !s || !v || !body.trim() || needName()) return null;
+  if (!d || !s || !v || (!body.trim() && !title.trim()) || needName()) return null;
   const p = d.picked;
   let shot: Shot | undefined;
   const st = still.peek();

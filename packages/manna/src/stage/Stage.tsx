@@ -21,6 +21,7 @@ import { prepareScreen } from './loader';
 import { StageHeader } from './StageHeader';
 import { ScreenTabs } from './ScreenTabs';
 import { MarkerStrip } from './MarkerStrip';
+import { SiteGallery } from './SiteGallery';
 import { useBlobUrl } from './media';
 
 interface Fit {
@@ -109,6 +110,10 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
   const markerColor = doc.value.meta.marker ?? 'auto';
   const live = !!host.site && v?.source?.mode === 'site';
   const isImage = v?.source?.mode === 'image';
+  /* 받는 사람 쪽 URL 화면 — 사이트를 띄울 수 없으니 캡처 · 클립 모음으로. 사본이 있으면 바꿔 볼 수 있다 */
+  const [copyView, setCopyView] = useState(false);
+  const gallery = !host.site && v?.source?.mode === 'site' && !copyView;
+  const hasCopy = !!v && v.source?.mode === 'site' && v.external.length > 0; // 사본은 그 페이지와 리소스를 external 로 담는다
   /* 지금 보고 있는 페이지 — 폴더 화면은 패키지 안의 다른 HTML 로 옮겨 갈 수 있고, URL 화면은 사이트 안에서 이동한다 */
   const [page, setPage] = useState<string | null>(null);
   const [liveUrl, setLiveUrl] = useState<string | null>(null);
@@ -118,11 +123,13 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
   useEffect(() => {
     setPage(null);
     setLiveUrl(null);
+    setCopyView(false);
   }, [vkey]);
   useEffect(() => {
     stagePage.value = currentPage;
   }, [currentPage]);
-  const frameKey = `${vkey}#${page ?? ''}#${reloadNo}`;
+  // 캡처 모음 ↔ 사본을 오가면 화면을 새로 띄운다 (모음일 때는 iframe 이 없다)
+  const frameKey = `${vkey}#${page ?? ''}#${reloadNo}${gallery ? '#gallery' : ''}`;
   const sel = list.find((a) => a.id === selected.value) ?? null;
   const showShot = !!sel?.shot && shotView.value && !draft.value;
   const shotSrc = useBlobUrl(sel?.shot?.sha, 'image/jpeg');
@@ -159,13 +166,19 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [vw, baseH, vfit, !!scr, z, stretch, pad, fillMode]);
+  }, [vw, baseH, vfit, !!scr, z, stretch, pad, fillMode, gallery]);
   const vh = fit.h || baseH;
   const vhRef = useRef(vh);
   vhRef.current = vh;
   useEffect(() => {
     stageViewport.value = { w: vw, h: vh };
   }, [vw, vh]);
+
+  /* 새로 고침 — URL 화면은 사이트를 다시 불러오고(지금 사이트 그대로), 폴더 화면은 처음 상태로 */
+  const reloadScreen = () => {
+    if (live) (webview.current as unknown as { reload?: () => void } | null)?.reload?.();
+    else setReloadNo((n) => n + 1);
+  };
 
   /* Ctrl+휠 — 화면 배율 (프레임 밖 여백에서. 화면 안의 휠은 화면이 쓴다) */
   const onStageWheel = (e: WheelEvent) => {
@@ -246,6 +259,8 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
         syncAgent();
         takeSnapshot(4000);
         readyWaiters.current.splice(0).forEach((w) => w());
+      } else if (m.type === 'nav') {
+        if (live) setLiveUrl(m.url);
       } else if (m.type === 'frame') {
         rects.current = m.rects;
         paint();
@@ -550,16 +565,27 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
     ? { x: (shotFit.x + shotBox.x * shotFit.w) / fit.s, y: (shotFit.y + shotBox.y * shotFit.h) / fit.s, w: (shotBox.w * shotFit.w) / fit.s, h: (shotBox.h * shotFit.h) / fit.s }
     : null;
   const dr = draft.value;
-  const snipStyle = dr?.picked.region
+  const snipStyle = dr && (dr.picked.region || v?.source?.mode === 'site')
     ? { left: `${dr.picked.rect[0] * fit.s}px`, top: `${dr.picked.rect[1] * fit.s}px`, width: `${dr.picked.rect[2] * fit.s}px`, height: `${dr.picked.rect[3] * fit.s}px` }
     : null;
 
   return (
     <div class="stage-col">
-      <ScreenTabs tools={tabTools} />
-      <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} scale={fit.s} versionTools={versionTools} screenActions={screenActions} />
+      <ScreenTabs tools={tabTools} canRename={host.author} />
+      <div class="full-hot" aria-hidden="true" />
+      <div class="stage-top">
+      <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} onReload={reloadScreen} scale={fit.s} versionTools={versionTools} screenActions={screenActions} />
       <MarkerStrip />
+      </div>
+    {gallery ? (
+      <div class="stage stage-gallery">
+        <SiteGallery host={host} scr={scr} v={v} hasCopy={hasCopy} onCopy={() => setCopyView(true)} />
+      </div>
+    ) : (
     <div class={`stage ${scrolls ? 'stage-scroll' : ''}`} ref={area} onWheel={onStageWheel}>
+      {copyView && (
+        <button type="button" class="stage-badge stage-badge-shot gal-back" onClick={() => setCopyView(false)}>캡처 모음으로</button>
+      )}
       {scrolls && <div class="stage-spacer" style={spacer} />}
       <div class={`stage-frame ${recording.value || capturing || snipRec.value ? 'is-recording' : ''}`} style={frameStyle} ref={frameBox}>
         {live ? (
@@ -648,6 +674,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
       )}
       {(misses.value.length > 0 || warnings.length > 0) && <Diagnostics warnings={warnings} />}
     </div>
+    )}
     </div>
   );
 }

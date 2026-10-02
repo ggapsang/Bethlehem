@@ -527,11 +527,9 @@ export function rememberScreen(): void {
   if (m.kind === 'workspace' && screenId.peek() && versionNo.peek() != null) api.wsRememberScreen({ dir: m.dir, screen: screenId.peek()!, version: versionNo.peek()! });
 }
 
-/** 시작 — 마지막 작업 폴더를 그대로 연다 */
+/** 시작 — 저절로 열지 않는다. 첫 화면에 최근 작업 폴더 · URL · 문서를 보이고 고르게 한다 */
 export async function start(): Promise<void> {
-  const last = await api.wsLast().catch(() => null);
-  if (last) await openWorkspace(last);
-  refreshRecent();
+  await refreshRecent();
 }
 
 export { save };

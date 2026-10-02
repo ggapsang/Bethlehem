@@ -29,7 +29,7 @@ export interface Miss {
 
 /* notes 는 키를 바꿨다 — 개요는 이제 기본으로 접혀 있다 (전에 펼쳐 둔 기록을 따르지 않는다) */
 const LS = {
-  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels',
+  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels', fullPin: 'terr.fullPanelPin',
   tabs: (docId: string) => `terr.tabs.${docId}`,
 };
 
@@ -111,6 +111,12 @@ export const fitMode = signal<FitMode>(lsGet(LS.fit) === 'fill' ? 'fill' : 'fit'
 /** 지금 스테이지가 쓰는 뷰포트 — 꽉 채우기면 높이가 버전의 기준과 다르다 */
 /** 화면의 마커 옆에 제목 · 이름을 보일지 (기본 보임) */
 export const markerLabels = signal(lsGet(LS.labels) !== '0');
+/** 전체화면에서 오른쪽 패널을 붙여 둘지 — 아니면 오른쪽 끝에 마우스를 대면 그 위로 뜬다 */
+export const fullPanelPinned = signal(lsGet(LS.fullPin) === '1');
+export function setFullPanelPinned(on: boolean): void {
+  fullPanelPinned.value = on;
+  lsSet(LS.fullPin, on ? '1' : '0');
+}
 export function setMarkerLabels(on: boolean): void {
   markerLabels.value = on;
   lsSet(LS.labels, on ? '1' : '0');
@@ -250,7 +256,8 @@ export function loadDocument(d: MannaDoc, b: BlobStore, name: string | null = nu
     /* 기록이 깨졌다 — 첫 화면만 */
   }
   const first = d.screens.find((s) => s.id === tabs[0]) ?? d.screens[0];
-  openTabs.value = tabs.length ? tabs : first ? [first.id] : [];
+  // 처음 여는 문서면 모든 화면을 탭으로 — 받은 사람이 어떤 화면이 있는지 바로 본다
+  openTabs.value = tabs.length ? tabs : d.screens.map((s) => s.id);
   screenId.value = first?.id ?? null;
   versionNo.value = first ? latest(first).v : null;
   zoom.value = null;

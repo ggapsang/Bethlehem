@@ -1,7 +1,7 @@
 /* 화면이 없을 때 — 폴더나 문서를 열고, 작업 폴더가 있으면 화면을 추가한다 */
-import { FileText, FolderOpen, FolderPlus, Globe, Image } from 'lucide-preact';
+import { FileText, FolderGit2, FolderOpen, FolderPlus, Globe, Image } from 'lucide-preact';
 import keyArt from '../../../../docs/key_art.png';
-import { addImageScreen, addScreenFromFolder, askUrl, docAsk, mode, openDocument, openFolder, unpackInto, urlAsk } from './session';
+import { addImageScreen, addScreenFromFolder, askUrl, docAsk, mode, openDocument, openFolder, openUrl, openWorkspace, recent, unpackInto, urlAsk } from './session';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
@@ -24,8 +24,43 @@ export function Welcome() {
             <button type="button" class="btn btn-secondary" onClick={() => (urlAsk.value = { open: true })}><Globe {...ICON} /> URL 열기</button>
           </div>
         )}
+        {!inWorkspace && <RecentPlaces />}
       </div>
     </div>
+  );
+}
+
+const when = (iso: string) => {
+  const d = new Date(iso);
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  return days < 1 ? d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : days < 7 ? `${days}일 전` : d.toLocaleDateString('ko-KR');
+};
+
+/** 최근에 연 곳 — 작업 폴더 · URL · 문서 */
+function RecentPlaces() {
+  const r = recent.value;
+  const items = [
+    ...r.workspaces.map((x) => ({ key: `w:${x.path}`, icon: <FolderGit2 {...ICON} />, name: x.name, sub: x.path, at: x.at, open: () => openWorkspace(x.path) })),
+    ...r.urls.map((x) => ({ key: `u:${x.url}`, icon: <Globe {...ICON} />, name: x.url.replace(/^https?:\/\//, ''), sub: 'URL', at: x.at, open: () => openUrl(x.url) })),
+    ...r.files.map((x) => ({ key: `f:${x.path}`, icon: <FileText {...ICON} />, name: x.name, sub: x.path, at: x.at, open: () => openDocument(x.path) })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  if (!items.length) return null;
+  return (
+    <section class="recent-places" aria-label="최근">
+      <h2 class="recent-title">최근</h2>
+      <ul>
+        {items.slice(0, 12).map((it) => (
+          <li key={it.key}>
+            <button type="button" class="recent-item" title={it.sub} onClick={it.open}>
+              {it.icon}
+              <span class="recent-name ellipsis">{it.name}</span>
+              <span class="recent-sub muted small ellipsis">{it.sub}</span>
+              <span class="recent-at muted small">{when(it.at)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

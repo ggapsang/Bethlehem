@@ -23,6 +23,8 @@ export const MARKER_LABEL: Record<MarkerColor, string> = {
 };
 
 export function enterFullscreen(): void {
+  // 누른 단추에 포커스가 남으면 숨겨야 할 화면 막대가 떠 있게 된다
+  (document.activeElement as HTMLElement | null)?.blur?.();
   document.documentElement.requestFullscreen?.().catch(() => {});
 }
 

@@ -40,6 +40,7 @@ export type HostMsg =
 
 export type AgentMsg =
   | { type: 'ready'; url: string; title: string }
+  | { type: 'nav'; url: string }
   | { type: 'frame'; rects: Record<string, RectTuple> }
   | { type: 'key'; phase: 'down' | 'up'; key: string; ctrl: boolean; shift: boolean; meta: boolean; alt: boolean; repeat: boolean; typing: boolean }
   | { type: 'reply'; rid: number; data: unknown };

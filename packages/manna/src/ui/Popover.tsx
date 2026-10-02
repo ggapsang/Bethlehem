@@ -4,7 +4,7 @@ import type { RefObject } from 'preact';
 import { Camera, Circle, Film, Pin, Square, Trash2, X } from 'lucide-preact';
 import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
-import { addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleSnipRecording } from '../actions';
+import { snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleSnipRecording } from '../actions';
 import type { Host } from '../host';
 import { annotations, draft, draftClip, popHidden, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
@@ -136,8 +136,9 @@ function Composer() {
 
 /** 영역을 그렸을 때 — 윈도우 캡처 도구처럼 캡처(기본) · 그 자리만 녹화 · 화면에 붙이기 */
 function SnipBar() {
-  const d = draft.value;
-  const can = !!d?.picked.region && !!still.value && version.value?.source?.mode !== 'image';
+  draft.value;
+  still.value;
+  const can = snipAvailable();
   const rec = snipRec.value;
   const clip = draftClip.value;
   const [, tick] = useState(0);

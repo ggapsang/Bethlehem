@@ -216,6 +216,8 @@ async function main() {
   check('Comment 2개 · 마커 2개', (await cardCount(page)) === 2 && (await visibleMarkers(page)).length === 2, JSON.stringify(await visibleMarkers(page)));
   check('브라우저에서는 영역도 화면에 붙는다 (찍을 그림이 없어 캡처 없음)', !(await page.$('.snip-bar')) && !!(await until(async () => (await page.$$('.mk-list .mk-live')).length === 2, 3000)), JSON.stringify(await page.$$eval('.mk-strip .mk-list .mk', (m) => m.map((x) => (x as HTMLElement).dataset.state))));
   check('유형·상태·담당 입력이 없다 (제목 칸 하나만)', !(await page.$('.detail select')) && !(await page.$('.detail input:not([type=checkbox]):not(.title-input)')));
+  await selectCard(page, 2);
+  await page.waitForSelector('.popover-card');
   check('Comment 팝업은 모서리로 크기를 바꿀 수 있다', (await page.$eval('.popover-card', (el) => getComputedStyle(el).resize)) === 'both');
   await page.screenshot({ path: resolve(OUT, '2-comments.png') });
 
@@ -387,7 +389,25 @@ async function main() {
   await page.waitForTimeout(400);
   const full = await page.evaluate(() => !!document.fullscreenElement);
   check('전체화면 — 툴바가 숨고 화면 막대에 조작이 남는다', full && !(await page.$('.toolbar')) && !!(await page.$('.sc-bar button[aria-label="피커"]')));
+  const topOpacity = () => page.$eval('.stage-top', (el) => getComputedStyle(el).opacity);
+  check('전체화면 — 탭은 없고 화면 막대는 숨어 있다가 위쪽 끝에 마우스를 대면 뜬다', !(await page.isVisible('.tabs')) && (await topOpacity()) === '0');
+  await page.mouse.move(800, 3);
+  await page.waitForTimeout(250);
+  check('위쪽 끝 → 화면 막대가 뜬다', (await topOpacity()) === '1');
+  await page.mouse.move(700, 500);
+  await page.waitForTimeout(250);
+  check('전체화면 — 패널은 숨어 있다 (화면이 꽉)', !(await page.$('.panel-dock')) && !(await page.$('.panel-float')));
+  const vw = await page.evaluate(() => innerWidth);
+  await page.mouse.move(vw - 3, 400);
+  await page.waitForTimeout(200);
+  check('오른쪽 끝에 마우스를 대면 패널이 화면 위로 뜬다', !!(await page.$('.panel-float .panel')));
+  await page.click('.panel-float button[aria-label="패널 고정"]');
+  await page.waitForTimeout(200);
+  check('고정하면 패널이 붙고 화면은 그만큼 줄어든다', !!(await page.$('.panel-dock .panel')) && !(await page.$('.panel-float')));
+  await page.click('.panel-dock button[aria-label="패널 고정 풀기"]');
   await page.screenshot({ path: resolve(OUT, '3-fullscreen.png') });
+  await page.mouse.move(800, 3);
+  await page.waitForTimeout(250);
   await page.click('button[aria-label="전체화면 나가기"]');
   await page.waitForTimeout(300);
   const frameW = async () => (await (await page.$('.stage-frame'))!.boundingBox())!.width;
@@ -414,6 +434,23 @@ async function main() {
   await page.waitForTimeout(300);
 
   console.log('\n[10] 개요 편집 · 저장 → 다시 열기');
+  f = await screenFrame(page);
+  // 제목만 단 Comment — 본문을 비워 둬도 된다
+  const n0 = await cardCount(page);
+  await ctrlClick(page, await pagePoint(page, f, '#tabC'));
+  await page.waitForSelector('.composer .title-input');
+  await page.fill('.composer .title-input', '제목만');
+  await page.keyboard.press('Control+Enter');
+  await page.waitForTimeout(300);
+  const titleOnly = (await cardCount(page)) === n0 + 1;
+  check('제목만 있으면 본문을 비워 둬도 단다', titleOnly);
+  if (titleOnly) {
+    await page.mouse.click(5, 300);
+    await selectCard(page, n0 + 1);
+    await page.locator('body').evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(300);
+  }
   await page.click('.notes .section-head');
   await page.click('.notes .cm-content');
   await page.keyboard.press('Control+Home');

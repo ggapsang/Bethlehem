@@ -3,9 +3,9 @@
  * versionTools 는 버전 칩 옆(Bethlehem: 새 버전), screenActions 는 끝(Bethlehem: 화면 지우기).
  */
 import type { ComponentChildren } from 'preact';
-import { Pipette, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus } from 'lucide-preact';
+import { RotateCw, Pipette, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus } from 'lucide-preact';
 import type { Screen, ScreenVersion } from '@core';
-import { draft, fitMode, fullscreen, mode, setFitMode, panelOpen, paused, picking, recording, rev, selectScreen, togglePanel, zoom, zoomStep } from '../store';
+import { fullPanelPinned, setFullPanelPinned, draft, fitMode, fullscreen, mode, setFitMode, paused, picking, recording, rev, selectScreen, zoom, zoomStep } from '../store';
 import { MarkerColorPicker, RecordButton, enterFullscreen } from '../ui/Toolbar';
 
 const ICON = { size: 18, strokeWidth: 1.5 };
@@ -15,13 +15,14 @@ export interface StageHeaderProps {
   v: ScreenVersion;
   page: string | null;
   onHome: () => void;
+  onReload: () => void;
   /** 지금 실제 배율 (맞춤일 때도) */
   scale: number;
   versionTools?: ComponentChildren;
   screenActions?: ComponentChildren;
 }
 
-export function StageHeader({ scr, v, page, onHome, scale, versionTools, screenActions }: StageHeaderProps) {
+export function StageHeader({ scr, v, page, onHome, onReload, scale, versionTools, screenActions }: StageHeaderProps) {
   rev.value;
   const image = v.source?.mode === 'image';
   const site = v.source?.mode === 'site';
@@ -74,6 +75,11 @@ export function StageHeader({ scr, v, page, onHome, scale, versionTools, screenA
           {paused.value ? <Play {...ICON} /> : <Pause {...ICON} />}
         </button>
       )}
+      {!image && (
+        <button type="button" class="btn-icon" aria-label="새로 고침" title={site ? '새로 고침 — 사이트를 지금 모습으로 다시 불러온다' : '새로 고침 — 화면을 처음 상태로'} onClick={onReload}>
+          <RotateCw {...ICON} />
+        </button>
+      )}
       {!image && <RecordButton />}
       <MarkerColorPicker />
       <span class="sc-sep" />
@@ -107,7 +113,7 @@ export function StageHeader({ scr, v, page, onHome, scale, versionTools, screenA
         </button>
       )}
       {fullscreen.value && (
-        <button type="button" class={`btn-icon ${panelOpen.value ? 'is-on-soft' : ''}`} aria-label="노트·Comment 패널" onClick={() => togglePanel()}>
+        <button type="button" class={`btn-icon ${fullPanelPinned.value ? 'is-on-soft' : ''}`} aria-pressed={fullPanelPinned.value} aria-label="노트·Comment 패널 고정" title="패널 고정 — 풀면 오른쪽 끝에 마우스를 댈 때만 뜬다" onClick={() => setFullPanelPinned(!fullPanelPinned.value)}>
           <PanelRight {...ICON} />
         </button>
       )}

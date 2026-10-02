@@ -4,11 +4,18 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { Check, ChevronDown, X } from 'lucide-preact';
-import { closeTab, doc, moveTab, openTabs, rev, screenId, selectScreen } from '../store';
+import { closeTab, doc, moveTab, mutate, openTabs, rev, screenId, selectScreen } from '../store';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
-export function ScreenTabs({ tools }: { tools?: ComponentChildren }) {
+export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; canRename?: boolean }) {
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const finish = (id: string, v: string) => {
+    setRenaming(null);
+    const s = doc.peek().screens.find((x) => x.id === id);
+    const t = v.trim();
+    if (s && t && t !== s.title) mutate(() => (s.title = t), { label: '화면 이름' });
+  };
   rev.value;
   const d = doc.value;
   const cur = screenId.value;
@@ -46,19 +53,36 @@ export function ScreenTabs({ tools }: { tools?: ComponentChildren }) {
         const on = id === cur;
         return (
           <div key={id} class={`tab ${on ? 'is-on' : ''}`} data-id={id}>
+            {renaming === id ? (
+              <input
+                class="tab-input"
+                aria-label="화면 이름"
+                defaultValue={s.title}
+                ref={(el) => {
+                  if (el && el !== document.activeElement) requestAnimationFrame(() => (el.focus(), el.select()));
+                }}
+                onBlur={(e) => finish(id, e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') finish(id, e.currentTarget.value);
+                  if (e.key === 'Escape') setRenaming(null);
+                }}
+              />
+            ) : (
             <button
               type="button"
               role="tab"
               aria-selected={on}
               class="tab-main"
-              title={`${s.id} ${s.title}`}
+              title={canRename ? `${s.id} ${s.title} — 두 번 눌러 이름 바꾸기` : `${s.id} ${s.title}`}
               onPointerDown={(e) => onDown(e, id)}
               onClick={() => !drag.current?.moved && !on && selectScreen(id)}
+              onDblClick={() => canRename && setRenaming(id)}
               onAuxClick={(e) => e.button === 1 && closeTab(id)}
             >
               <span class="tab-id mono">{s.id}</span>
               <span class="tab-title ellipsis">{s.title}</span>
             </button>
+            )}
             {ids.length > 1 && (
               <button type="button" class="tab-x" aria-label={`${s.id} 탭 닫기`} title="탭 닫기 (가운데 클릭)" onClick={() => closeTab(id)}>
                 <X {...ICON} size={14} />

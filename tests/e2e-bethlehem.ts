@@ -287,6 +287,16 @@ async function main() {
     return w.executeJavaScript('({ map: !!document.querySelector("xms-fe-map-monitor"), agent: !!window.__terrAgent })');
   }) as { map: boolean; agent: boolean };
   check('사이트 지도와 에이전트가 들어 있다', live.map && live.agent, JSON.stringify(live));
+  check('화면 막대에 새로 고침', !!(await page.$('.sc-bar button[aria-label="새로 고침"]')));
+  const hdr = await page.evaluate(() => (document.querySelector('webview') as unknown as { executeJavaScript(c: string): Promise<{ x: number; y: number } | null> })
+    .executeJavaScript('(() => { const e = [...document.querySelectorAll("body *")].find((x) => { const r = x.getBoundingClientRect(); return r.width > 80 && r.width < 600 && r.height > 20 && r.height < 120 && r.top < 300 && !x.shadowRoot; }); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()'));
+  if (hdr) {
+    await ctrlPick(page, await stagePoint(page, hdr.x, hdr.y));
+    await page.waitForSelector('.popover-card .composer');
+    check('URL 화면은 요소를 골라도 캡처가 기본', (await page.getAttribute('.snip-btn:has-text("캡처")', 'aria-pressed').catch(() => null)) === 'true');
+    await page.keyboard.press('Escape');
+    await page.click('.popover-card button[aria-label="취소"]').catch(() => {});
+  }
   // 지도 위 영역에 Comment
   await ctrlPick(page, await stagePoint(page, 800, 450), await stagePoint(page, 1100, 650));
   await page.waitForSelector('.popover-card .composer');
@@ -376,6 +386,12 @@ async function main() {
   await openScreen(page, 'SCR-004');
   check('화면 목록에서 고르면 탭으로 다시 열린다', (await page.$$('.tabs .tab')).length === 4 && (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-004');
 
+  await page.dblclick('.tab[data-id="SCR-004"] .tab-main');
+  await page.fill('.tab-input', '앱 아이콘');
+  await page.keyboard.press('Enter');
+  check('탭을 두 번 눌러 화면 이름을 바꾼다', ((await page.textContent('.tab[data-id="SCR-004"] .tab-title')) ?? '') === '앱 아이콘'
+    && !!(await until(() => JSON.parse(readFileSync(join(WS, 'screens', 'SCR-004', 'screen.json'), 'utf8')).title === '앱 아이콘', 5000)));
+
   console.log('\n[6] 다른 이름으로 저장');
   await nextSave(app, EXPORT);
   await page.click('button[aria-label="다른 이름으로 저장"]');
@@ -390,7 +406,13 @@ async function main() {
   await rp.goto(pathToFileURL(dist).href);
   await rp.fill('.modal input', '수신자');
   await rp.click('.modal button[type=submit]');
+  check('처음 열면 모든 화면이 탭으로 열려 있다', (await rp.$$('.tabs .tab')).length === 4, `${(await rp.$$('.tabs .tab')).length}개`);
   await openScreen(rp, 'SCR-002');
+  check('URL 화면은 캡처 · 클립 모음으로 보인다', !!(await until(() => rp.$('.gallery .gal-item .gal-shot img'), 8000)), `${(await rp.$$('.gallery .gal-item')).length}개`);
+  await rp.click('.gallery .gal-item .gal-main');
+  check('캡처를 누르면 그 자리에서 크게 펼쳐 본문 · 답글을 본다', !!(await until(() => rp.$('.gal-item.is-sel .gal-detail .detail'), 3000)));
+  await rp.screenshot({ path: resolve(OUT, 'b7-recipient-gallery.png') });
+  await rp.click('.gallery button:has-text("마지막 사본 보기")');
   const rf = await screenFrame(rp);
   await rp.waitForTimeout(1500);
   const map = await rf.evaluate(() => {
@@ -425,12 +447,15 @@ async function main() {
 
   check('렌더러 오류가 없다', errors.length === 0, errors.slice(0, 3).join(' | '));
 
-  console.log('\n[9] 다시 켜면 이어서');
+  console.log('\n[9] 다시 켜면 — 첫 화면의 최근 목록에서');
   await openScreen(page, 'SCR-002');
   await page.waitForTimeout(1500);
   await app.close();
   ({ app, page } = await launch());
-  check('마지막 작업 폴더가 그대로 열린다', !!(await until(async () => ((await page.textContent('.tb-place').catch(() => '')) ?? '').includes(WS.split(/[\\/]/).pop()!), 15000)));
+  const wsName = WS.split(/[\\/]/).pop()!;
+  check('저절로 열지 않고 첫 화면에 최근 목록이 보인다', !!(await until(() => page.$(`.recent-places .recent-item:has-text("${wsName}")`), 10000)) && !(await page.$('.tabs')));
+  await page.click(`.recent-places .recent-item:has-text("${wsName}")`);
+  check('최근 목록에서 고르면 그 작업 폴더가 열린다', !!(await until(async () => ((await page.textContent('.tb-place').catch(() => '')) ?? '').includes(wsName), 15000)));
   check('마지막으로 보던 화면(SCR-002)으로', !!(await until(async () => (await page.getAttribute('.tab.is-on', 'data-id').catch(() => '')) === 'SCR-002', 10000)));
   check('Comment 가 그대로 있다', (await page.$$('.cards > .card')).length === 1);
 

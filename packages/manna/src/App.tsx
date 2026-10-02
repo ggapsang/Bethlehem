@@ -1,5 +1,6 @@
 /* Manna 와 Bethlehem 이 같이 쓰는 화면 틀 — 툴바 · 스테이지 | 크기 조절 손잡이 | 개요·Comment 패널 */
-import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { Pin, PinOff } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
 import type { Host } from './host';
 import { flushAutosave, scheduleAutosave } from './host';
@@ -7,7 +8,7 @@ import { onKeyDown, onKeyUp, setKeyHost } from './keys';
 import { Stage } from './stage/Stage';
 import {
   askName, dirty, fullscreen, holdPick, mode, panelOpen, panelWidth, rev, screen, setPanelWidth, setUser, theme,
-  toast, user,
+  toast, user, fullPanelPinned, setFullPanelPinned,
 } from './store';
 import { Panel } from './ui/Panel';
 import { Toolbar, type ToolbarProps } from './ui/Toolbar';
@@ -76,7 +77,32 @@ export function App({ host, start, tabTools, versionTools, screenActions, empty,
   }, [host]);
 
   const full = fullscreen.value;
-  const showPanel = panelOpen.value && !!screen.value;
+  /* 전체화면 — 그 화면만. 패널은 붙여 두거나(고정), 오른쪽 끝에 마우스를 대면 화면 위로 뜬다 */
+  const floatPanel = full && !fullPanelPinned.value && !!screen.value;
+  const showPanel = !!screen.value && (full ? fullPanelPinned.value : panelOpen.value);
+  const [peek, setPeek] = useState(false);
+  const peekTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => setPeek(false), [full, fullPanelPinned.value]);
+  const peekOn = () => {
+    clearTimeout(peekTimer.current);
+    setPeek(true);
+  };
+  const peekOff = () => {
+    clearTimeout(peekTimer.current);
+    peekTimer.current = setTimeout(() => setPeek(false), 350);
+  };
+  const pinBtn = full && (
+    <button
+      type="button"
+      class={`btn-icon btn-xs panel-pin ${fullPanelPinned.value ? 'is-on' : ''}`}
+      aria-pressed={fullPanelPinned.value}
+      aria-label={fullPanelPinned.value ? '패널 고정 풀기' : '패널 고정'}
+      title={fullPanelPinned.value ? '고정 풀기 — 오른쪽 끝에 마우스를 댈 때만 뜬다' : '고정 — 화면 옆에 붙여 두고 화면은 그만큼 줄인다'}
+      onClick={() => setFullPanelPinned(!fullPanelPinned.value)}
+    >
+      {fullPanelPinned.value ? <PinOff size={14} strokeWidth={1.75} /> : <Pin size={14} strokeWidth={1.75} />}
+    </button>
+  );
   const width = Math.max(MIN_PANEL, Math.min(panelWidth.value, Math.round(window.innerWidth * 0.7)));
 
   return (
@@ -87,8 +113,20 @@ export function App({ host, start, tabTools, versionTools, screenActions, empty,
           <Stage host={host} empty={empty ?? <p class="muted">이 문서에는 아직 화면이 없습니다.</p>} tabTools={tabTools} versionTools={versionTools} screenActions={screenActions} />
         </main>
         {showPanel && <Splitter />}
-        {showPanel && <Panel host={host} />}
+        {showPanel && (
+          <div class="panel-dock">
+            {pinBtn}
+            <Panel host={host} />
+          </div>
+        )}
       </div>
+      {floatPanel && <div class="panel-hot" aria-hidden="true" onPointerEnter={peekOn} />}
+      {floatPanel && peek && (
+        <div class="panel-float" style={{ width: `${width}px` }} onPointerEnter={peekOn} onPointerLeave={peekOff}>
+          {pinBtn}
+          <Panel host={host} />
+        </div>
+      )}
       {!full && bottom}
       {askName.value && <NameDialog host={host} />}
       {toast.value && (

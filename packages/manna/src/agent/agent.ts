@@ -299,6 +299,23 @@ declare global {
   window.addEventListener('keyup', onKey('up'), true);
   window.addEventListener('blur', () => send({ type: 'key', phase: 'up', key: 'Control', ctrl: false, shift: false, meta: false, alt: false, repeat: false, typing: false }));
 
+  /* 페이지를 다시 불러오지 않고 주소만 바뀌는 사이트(SPA) — 지금 주소를 알려 마커를 그 주소의 것만 붙이게 한다 */
+  let lastUrl = location.href;
+  const navCheck = () => {
+    if (location.href === lastUrl) return;
+    lastUrl = location.href;
+    send({ type: 'nav', url: lastUrl });
+  };
+  for (const k of ['pushState', 'replaceState'] as const) {
+    const orig = history[k].bind(history);
+    history[k] = ((...a: Parameters<History['pushState']>) => {
+      orig(...a);
+      setTimeout(navCheck, 0);
+    }) as History['pushState'];
+  }
+  window.addEventListener('popstate', navCheck);
+  window.addEventListener('hashchange', navCheck);
+
   const ready = () => send({ type: 'ready', url: location.href, title: document.title });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready);
   else ready();
