@@ -3,9 +3,9 @@
  * versionTools 는 버전 칩 옆(Bethlehem: 새 버전), screenActions 는 끝(Bethlehem: 화면 지우기).
  */
 import type { ComponentChildren } from 'preact';
-import { RotateCw, Pipette, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus } from 'lucide-preact';
+import { MapPin, Navigation, SquareDashedMousePointer, RotateCw, Pipette, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus } from 'lucide-preact';
 import type { Screen, ScreenVersion } from '@core';
-import { fullPanelPinned, setFullPanelPinned, draft, fitMode, fullscreen, mode, setFitMode, paused, picking, recording, rev, selectScreen, zoom, zoomStep } from '../store';
+import { pinTool, setShowBoxes, showBoxes, fullPanelPinned, setFullPanelPinned, draft, fitMode, fullscreen, mode, setFitMode, paused, picking, recording, rev, selectScreen, zoom, zoomStep } from '../store';
 import { MarkerColorPicker, RecordButton, enterFullscreen } from '../ui/Toolbar';
 
 const ICON = { size: 18, strokeWidth: 1.5 };
@@ -90,6 +90,24 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
       )}
       {!image && <RecordButton />}
       <MarkerColorPicker />
+      <button
+        type="button"
+        class={`btn-icon ${showBoxes.value ? 'is-on-soft' : ''}`}
+        aria-pressed={showBoxes.value}
+        aria-label="박스 보이기"
+        title={showBoxes.value ? '박스 숨기기 — 고르거나 마우스를 올릴 때만' : '박스 보이기 — 모든 Comment 의 대상을 늘 박스로'}
+        onClick={() => setShowBoxes(!showBoxes.value)}
+      >
+        <SquareDashedMousePointer {...ICON} />
+      </button>
+      <div class="seg seg-sm pin-tools" role="group" aria-label="핀 꽂기">
+        <button type="button" class="seg-btn" aria-pressed={pinTool.value === 'pin'} aria-label="핀 꽂기" title="핀 꽂기 — 화면을 한 번 누르면 그 자리에 박힌다" onClick={() => (pinTool.value = pinTool.value === 'pin' ? null : 'pin')}>
+          <MapPin size={15} strokeWidth={1.75} />
+        </button>
+        <button type="button" class="seg-btn" aria-pressed={pinTool.value === 'nav'} aria-label="화살표 꽂기" title="화살표 꽂기 — 길 안내 화살표 모양" onClick={() => (pinTool.value = pinTool.value === 'nav' ? null : 'nav')}>
+          <Navigation size={15} strokeWidth={1.75} />
+        </button>
+      </div>
       <span class="sc-sep" />
       <div class="seg seg-sm" role="radiogroup" aria-label="화면 맞춤">
         <button type="button" role="radio" aria-checked={fitMode.value === 'fit'} class="seg-btn" title="여백을 두고 화면 비율 그대로" onClick={() => setFitMode('fit')}>여백</button>

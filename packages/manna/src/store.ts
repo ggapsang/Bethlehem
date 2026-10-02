@@ -29,7 +29,7 @@ export interface Miss {
 
 /* notes 는 키를 바꿨다 — 개요는 이제 기본으로 접혀 있다 (전에 펼쳐 둔 기록을 따르지 않는다) */
 const LS = {
-  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels', fullPin: 'terr.fullPanelPin', showDone: 'terr.showDone',
+  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels', fullPin: 'terr.fullPanelPin', showDone: 'terr.showDone', boxes: 'terr.showBoxes',
   tabs: (docId: string) => `terr.tabs.${docId}`,
 };
 
@@ -162,6 +162,18 @@ export const annotations = computed(() => {
   if (!s || !v) return [];
   return s.annotations.filter((a) => a.version === v.v);
 });
+
+/** 핀 꽂기 — 고른 모양으로 화면을 한 번 누르면 박힌다 */
+export const pinTool = signal<'pin' | 'nav' | null>(null);
+/** 고른 핀 (Delete 로 지운다) · 이름 짓는 중인 핀 */
+export const pinSel = signal<string | null>(null);
+export const pinNaming = signal<string | null>(null);
+/** 모든 Comment 의 대상 박스를 늘 보일지 (기본은 고르거나 마우스를 올릴 때만) */
+export const showBoxes = signal(lsGet(LS.boxes) === '1');
+export function setShowBoxes(on: boolean): void {
+  showBoxes.value = on;
+  lsSet(LS.boxes, on ? '1' : '0');
+}
 
 /** 완료한 Comment 도 보일지 — 기본은 숨긴다 (지운 것이 아니다) */
 export const showDone = signal(lsGet(LS.showDone) === '1');

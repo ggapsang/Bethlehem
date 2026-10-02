@@ -1,18 +1,18 @@
 /* 툴바 — 문서 수준만 (가이드 §17: 현재 문서 → 현재 화면 → 작업 모드 → 저장). 화면에 붙은 조작은 화면 컨테이너 머리에 */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
-  Circle, FileOutput, Moon, Pipette, MousePointer2, PanelRight, PencilLine, Redo2, Save, Square, Sun, Undo2, UserRound,
+  Circle, FileOutput, FolderDown, Moon, Pipette, MousePointer2, PanelRight, PencilLine, Redo2, Save, Square, Sun, Undo2, UserRound,
 } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
 import type { MarkerColor } from '@core';
 import { MARKER_COLORS } from '@core';
 import { setMarkerColor, toggleRecording } from '../actions';
 import type { Host } from '../host';
-import { canConnectFile, connectFile, save, saveScreenOnly } from '../host';
+import { canConnectFile, connectFile, downloadSource, save, saveScreenOnly } from '../host';
 import { ago } from './labels';
 import {
   askName, canRedo, canUndo, dirty, doc, rev, saveState, draft, mode, mutate, panelOpen, recording, redo, screen,
-  markerLabels, setMarkerLabels, setTheme, setTitleWidth, theme, titleWidth, togglePanel, undo, user,
+  version, markerLabels, setMarkerLabels, setTheme, setTitleWidth, theme, titleWidth, togglePanel, undo, user,
 } from '../store';
 import { Logo } from './Logo';
 
@@ -184,6 +184,18 @@ function SaveMenu({ host }: { host: Host }) {
           </button>
           <button type="button" role="menuitem" class="popover-item" aria-label="현재 탭만 저장" disabled={!scr} onClick={() => { setOpen(false); saveScreenOnly(host); }}>
             <FileOutput {...ICON} size={16} /> 현재 탭만 저장…{scr && <span class="muted small ellipsis"> {scr.id} {scr.title}</span>}
+          </button>
+          <div class="popover-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            class="popover-item"
+            aria-label="원본 파일 내려받기"
+            disabled={!scr || version.value?.source?.mode === 'site'}
+            title={version.value?.source?.mode === 'site' ? 'URL 화면은 원본 파일이 없습니다' : '지금 화면 · 버전의 HTML · CSS · JS · 데이터 · 그림을 원래 폴더 모양 그대로 zip 으로'}
+            onClick={() => { setOpen(false); downloadSource(); }}
+          >
+            <FolderDown {...ICON} size={16} /> 원본 파일 내려받기 (zip)
           </button>
         </div>
       )}

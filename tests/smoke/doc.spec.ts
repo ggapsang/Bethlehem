@@ -1,4 +1,5 @@
 /* 문서(받는 사람 브라우저) 스모크 — 기능마다 따로, 새 브라우저 맥락에서 */
+import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -240,7 +241,7 @@ export const docSpecs: Spec[] = [
       await p2.click('.tab[data-id="SCR-002"] .tab-main');
       await p2.click('button[aria-label="저장 방식"]');
       const items = await p2.$$eval('.save-menu .popover-item', (els) => els.map((e) => e.getAttribute('aria-label')));
-      check('저장 옆 단추를 누르면 다른 이름으로 저장 · 현재 탭만 저장', items.join(',') === '다른 이름으로 저장,현재 탭만 저장', items.join(','));
+      check('저장 옆 단추를 누르면 다른 이름으로 저장 · 현재 탭만 저장 · 원본 파일 내려받기', items.join(',') === '다른 이름으로 저장,현재 탭만 저장,원본 파일 내려받기', items.join(','));
       const dl2 = p2.waitForEvent('download');
       await p2.click('.save-menu button[aria-label="현재 탭만 저장"]');
       const one = join(OUT, 'smoke-one-tab.terr.html');
@@ -248,6 +249,98 @@ export const docSpecs: Spec[] = [
       const oneDoc = parseManna(readFileSync(one, 'utf8')).doc;
       check('현재 탭만 저장 — 그 화면 하나만 담긴다 (문서 id 는 그대로)', oneDoc.screens.length === 1 && oneDoc.screens[0]!.id === 'SCR-002' && oneDoc.id === nd.id, oneDoc.screens.map((s) => s.id).join(','));
       check('새 판을 열면 작성자의 새 Comment 가 보이고, 이 브라우저에서 단 것도 합쳐진다', names.includes('작성자 새 Comment') && names.some((n) => n.includes('저장 확인')), JSON.stringify(names));
+    },
+  },
+  {
+    name: 'doc-pins',
+    kind: 'doc',
+    files: [/^packages\/manna\/src\/stage\/(Pins|Stage|StageHeader)\.tsx$/, /^packages\/manna\/src\/(actions|keys|store)\.ts$/, /^packages\/core\/src\/(types|merge)\.ts$/],
+    async run() {
+      const { page, f } = await openDoc();
+      const frameBox = async () => (await (await page.$('.stage-frame'))!.boundingBox())!;
+      const pinBox = async () => (await (await page.$('.pin .pin-icon'))!.boundingBox())!;
+      await page.click('button[aria-label="핀 꽂기"]');
+      check('핀 꽂기를 누르면 화면에 꽂을 자리가 뜬다', !!(await page.$('.pin-place')));
+      const fb = await frameBox();
+      const at = { x: fb.x + fb.width * 0.4, y: fb.y + fb.height * 0.5 };
+      await page.mouse.click(at.x, at.y);
+      await page.waitForSelector('.pin-input');
+      await page.click('.pin-input');
+      await page.keyboard.type('입구');
+      await page.keyboard.press('Enter');
+      check('누른 자리에 핀이 박히고 이름을 단다', ((await page.textContent('.pin .pin-name')) ?? '') === '입구');
+      const tip = async () => { const b = await pinBox(); return { x: b.x + b.width / 2, y: b.y + b.height }; };
+      const t0 = await tip();
+      check('핀 끝이 누른 점을 가리킨다', Math.abs(t0.x - at.x) < 4 && Math.abs(t0.y - at.y) < 6, `${Math.round(t0.x - at.x)},${Math.round(t0.y - at.y)}`);
+      // 화면 내용이 바뀌어도 그 자리
+      await f.click('#tabB');
+      await page.waitForTimeout(400);
+      const t1 = await tip();
+      check('화면 내용이 바뀌어도(탭 전환) 핀은 그 자리', Math.abs(t1.x - t0.x) < 1 && Math.abs(t1.y - t0.y) < 1);
+      // 확대하면 화면과 같이 움직인다 — 프레임 안의 비율 자리는 그대로
+      const rel = async () => { const b = await frameBox(); const t = await tip(); return { x: (t.x - b.x) / b.width, y: (t.y - b.y) / b.height }; };
+      const r0 = await rel();
+      await page.click('button[aria-label="확대"]');
+      await page.click('button[aria-label="확대"]');
+      await page.waitForTimeout(200);
+      const r1 = await rel();
+      check('확대하면 화면과 같이 움직인다 (화면 안의 자리는 그대로)', Math.abs(r1.x - r0.x) < 0.01 && Math.abs(r1.y - r0.y) < 0.01);
+      await page.click('.zoom-val');
+      await page.waitForTimeout(200);
+      // 끌어서 옮기기
+      const tA = await tip();
+      await page.mouse.move(tA.x, tA.y - 12);
+      await page.mouse.down();
+      await page.mouse.move(tA.x + 120, tA.y + 40, { steps: 6 });
+      await page.mouse.up();
+      const tB = await tip();
+      check('끌어서 옮긴다', tB.x > tA.x + 100 && tB.y > tA.y + 25);
+      // 화살표
+      await page.click('button[aria-label="화살표 꽂기"]');
+      await page.mouse.click(fb.x + fb.width * 0.6, fb.y + fb.height * 0.3);
+      await page.waitForSelector('.pin-input');
+      await page.keyboard.press('Enter');
+      check('화살표 모양도 꽂는다 (이름 없이도)', (await page.$$('.pin')).length === 2 && !!(await page.$('.pin.pin-nav')));
+      // 골라서 Delete
+      check('방금 꽂은 화살표가 골라져 있다', !!(await page.$('.pin.pin-nav.is-sel')));
+      await page.keyboard.press('Escape');
+      check('Esc 로 고르기를 푼다', !(await page.$('.pin.is-sel')));
+      await page.click('.pin.pin-nav .pin-icon');
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.keyboard.press('Delete');
+      check('골라서 Delete 로 지운다', !!(await until(async () => (await page.$$('.pin')).length === 1, 2000)));
+      await page.keyboard.press('Control+z');
+      check('Ctrl+Z 로 되살린다', !!(await until(async () => (await page.$$('.pin')).length === 2, 2000)));
+      // 박스 보이기
+      await f.click('#tabC');
+      await page.waitForTimeout(300);
+      await ctrlPick(page, await pagePoint(page, f, '#tabB'));
+      await typeIn(page, '.composer .cm-content', '박스');
+      await page.keyboard.press('Control+Enter');
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      await page.mouse.move(5, 300);
+      const allShown = () => page.$$eval('.box-layer .hl-all', (bs) => bs.filter((b) => (b as HTMLElement).style.display === 'block').length);
+      check('박스는 기본으로 숨어 있다', (await allShown()) === 0);
+      await page.click('button[aria-label="박스 보이기"]');
+      check('박스 보이기 — 대상 박스가 실선으로 늘 보인다', !!(await until(async () => (await allShown()) === 1, 2000)) && (await page.$eval('.hl-all', (el) => getComputedStyle(el).borderTopStyle)) === 'solid');
+      // 저장하고 다시 열면 핀이 남는다
+      await page.waitForTimeout(1300);
+      const dl = page.waitForEvent('download');
+      await page.click('.toolbar .split-main');
+      const saved = join(OUT, 'smoke-pins.terr.html');
+      await (await dl).saveAs(saved);
+      const re = await openDoc(saved, '다른사람');
+      check('저장하고 다시 열어도 핀과 이름이 남는다', (await re.page.$$('.pin')).length === 2 && ((await re.page.textContent('.pin .pin-name')) ?? '') === '입구');
+      // 원본 파일 내려받기 (zip)
+      await re.page.click('button[aria-label="저장 방식"]');
+      const dz = re.page.waitForEvent('download');
+      await re.page.click('.save-menu button[aria-label="원본 파일 내려받기"]');
+      const z = await dz;
+      const zp = join(OUT, 'smoke-source.zip');
+      await z.saveAs(zp);
+      const list = execSync(`python -c "import zipfile,sys;z=zipfile.ZipFile(sys.argv[1]);assert z.testzip() is None;print(chr(10).join(z.namelist()))" "${zp}"`, { encoding: 'utf8' }).split(/\r?\n/).filter(Boolean);
+      check('원본 파일 내려받기 — 원래 폴더 모양 그대로 zip (풀리고 CRC 가 맞는다)', /원본\.zip$/.test(z.suggestedFilename()) && list.includes('index.html') && list.some((n) => n.startsWith('data/')), `${list.length}개: ${list.slice(0, 4).join(', ')}`);
     },
   },
   {

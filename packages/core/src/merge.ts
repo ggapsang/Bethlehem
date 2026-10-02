@@ -39,6 +39,13 @@ export function mergeDoc(base: MannaDoc, incoming: MannaDoc, baseBlobs: BlobStor
     const versions = new Set(s.versions.map((v) => v.v));
     const latest = Math.max(...s.versions.map((v) => v.v));
 
+    // 핀
+    for (const p of inc.pins ?? []) {
+      const mine = (s.pins ??= []).find((x) => x.id === p.id);
+      if (!mine) s.pins.push({ ...p });
+      else if (p.at > mine.at) Object.assign(mine, p);
+    }
+    if (!s.pins?.length) delete s.pins;
     // 자유 노트의 다른 탭 — 없는 탭은 더하고, 원본이 그대로면 회신본 내용으로
     for (const t of inc.moreNotes ?? []) {
       const mine = (s.moreNotes ??= []).find((x) => x.id === t.id);

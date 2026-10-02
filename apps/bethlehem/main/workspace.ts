@@ -17,7 +17,7 @@ import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/p
 import { resolve, basename, join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { encFor, isManna, parseManna } from '@core';
-import type { Annotation, EncodedBlob, MannaDoc, Screen, ScreenVersion } from '@core';
+import type { Annotation, EncodedBlob, MannaDoc, Screen, ScreenVersion, Pin } from '@core';
 
 export const WS_FILE = 'terrarium.json';
 const FORMAT = 'terrarium-workspace/1';
@@ -46,6 +46,8 @@ interface ScreenJson {
   notesTitle?: string;
   /** 나머지 탭 — 본문은 notes-<id>.md */
   moreNotes?: { id: string; title: string }[];
+  /** 핀 */
+  pins?: Pin[];
   versions: ScreenVersion[];
   link?: SourceLink;
 }
@@ -115,6 +117,7 @@ export async function writeWorkspace(dir: string, doc: MannaDoc, blobs: [string,
       title: s.title,
       ...(s.notesTitle ? { notesTitle: s.notesTitle } : {}),
       ...(s.moreNotes?.length ? { moreNotes: s.moreNotes.map((t) => ({ id: t.id, title: t.title })) } : {}),
+      ...(s.pins?.length ? { pins: s.pins } : {}),
       versions: s.versions,
       ...(links[s.id] ? { link: links[s.id] } : {}),
     };
@@ -167,6 +170,7 @@ export async function readWorkspace(dir: string): Promise<WorkspaceData> {
     for (const t of sj.moreNotes ?? []) moreNotes.push({ ...t, body: await readFile(join(sd, `notes-${t.id}.md`), 'utf8').catch(() => '') });
     screens.push({
       id: sj.id, title: sj.title, notes, ...(sj.notesTitle ? { notesTitle: sj.notesTitle } : {}), ...(moreNotes.length ? { moreNotes } : {}),
+      ...(sj.pins?.length ? { pins: sj.pins } : {}),
       versions: sj.versions, annotations,
     });
     if (sj.link) links[id] = sj.link;

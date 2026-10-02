@@ -36,6 +36,16 @@ export const appSpecs: Spec[] = [
         const c = await until(() => comments(ws, 'SCR-001').find((x: { body: string }) => x.body.includes('캡처 확인')), 8000);
         check('캡처 Comment — 그림 · 클립과 함께 저장', c?.kind === 'capture' && !!c?.shot && c?.clips?.length === 1);
         check('마커 줄에 캡처로', !!(await page.$('.mk-list .mk-capture')));
+        // 핀 — 작업 폴더의 screen.json 에 남는다
+        await page.keyboard.press('Escape');
+        await page.click('button[aria-label="핀 꽂기"]');
+        const fb = (await (await page.$('.stage-frame'))!.boundingBox())!;
+        await page.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2);
+        await page.waitForSelector('.pin-input');
+        await page.click('.pin-input');
+        await page.keyboard.type('여기');
+        await page.keyboard.press('Enter');
+        check('핀이 작업 폴더에 저장된다 (screen.json)', !!(await until(() => JSON.parse(readFileSync(join(ws, 'screens', 'SCR-001', 'screen.json'), 'utf8')).pins?.[0]?.name === '여기', 8000)));
       } finally {
         await app.close();
       }

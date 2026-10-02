@@ -5,8 +5,8 @@
  */
 import type { Host } from './host';
 import { save } from './host';
-import { removeComment } from './actions';
-import { annotations, draft, fullscreen, holdPick, mode, notify, popHidden, redo, selected, stageScale, undo, user, zoom, zoomStep } from './store';
+import { removeComment, removePin } from './actions';
+import { pinSel, pinTool, annotations, draft, fullscreen, holdPick, mode, notify, popHidden, redo, selected, stageScale, undo, user, zoom, zoomStep } from './store';
 
 let host: Host | null = null;
 export function setKeyHost(h: Host): void {
@@ -54,6 +54,17 @@ export function onKeyDown(e: KeyboardEvent, inScreen = false): void {
     return;
   }
   // Delete — 고른 Comment 를 지운다 (되돌릴 수 있다)
+  if (e.key === 'Delete' && !isTyping(e) && !e.altKey && !e.shiftKey && pinSel.peek()) {
+    e.preventDefault();
+    removePin(pinSel.peek()!);
+    notify('핀을 지웠습니다.', 'info', { label: '되돌리기', run: undo });
+    return;
+  }
+  if (e.key === 'Escape' && !isTyping(e) && (pinTool.peek() || pinSel.peek())) {
+    pinTool.value = null;
+    pinSel.value = null;
+    return;
+  }
   if (e.key === 'Delete' && !isTyping(e) && !e.altKey && !e.shiftKey) {
     const a = annotations.peek().find((x) => x.id === selected.peek());
     if (!a) return;

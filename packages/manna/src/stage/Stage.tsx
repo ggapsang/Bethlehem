@@ -9,12 +9,12 @@ import type { Host } from '../host';
 import { onKeyDown, onKeyUp } from '../keys';
 import {
   annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, requestReveal, reveal, revealing, rev,
-  draftClip, fitMode, markerLabels, popHidden, showDone, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
+  draftClip, fitMode, markerLabels, pinNaming, pinSel, pinTool, popHidden, showBoxes, showDone, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
   visible, zoom, zoomStep,
 } from '../store';
 import type { ComponentChildren } from 'preact';
 import { ago } from '../ui/labels';
-import { applySiteSnapshot, stopSnipRecording } from '../actions';
+import { addPin, applySiteSnapshot, stopSnipRecording } from '../actions';
 import { StagePopover } from '../ui/Popover';
 import { iframeBridge, webviewBridge, type Bridge, type WebviewLike } from './bridge';
 import { prepareScreen } from './loader';
@@ -23,6 +23,7 @@ import { ScreenTabs } from './ScreenTabs';
 import { whoText } from '../ui/Who';
 import { MarkerStrip } from './MarkerStrip';
 import { SiteGallery } from './SiteGallery';
+import { PinLayer } from './Pins';
 import { useBlobUrl } from './media';
 
 interface Fit {
@@ -81,6 +82,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
   const iframe = useRef<HTMLIFrameElement>(null);
   const webview = useRef<WebviewLike>(null);
   const markers = useRef<HTMLDivElement>(null);
+  const boxes = useRef<HTMLDivElement>(null);
   const selBox = useRef<HTMLDivElement>(null);
   const pickBox = useRef<HTMLDivElement>(null);
   const dragBox = useRef<HTMLDivElement>(null);
@@ -428,6 +430,14 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
       if (t && t[4]) selRect = tupleBox(t);
     }
     place(selBox.current, selRect, s);
+    // 박스 보이기 — 화면에 붙어 보이는 Comment 의 대상을 모두 박스로
+    const bl = boxes.current;
+    if (bl) {
+      for (const node of Array.from(bl.children) as HTMLElement[]) {
+        const t = rects.current[node.dataset.id!];
+        place(node, showBoxes.peek() && t && t[4] && seen.has(node.dataset.id!) ? tupleBox(t) : null, s);
+      }
+    }
     const dr = draft.peek();
     if (dr) place(pickBox.current, tupleBox(dr.picked.rect), s);
     const prev = visible.peek();
@@ -438,7 +448,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
     const want = st && st[4] ? tupleBox(st) : null;
     setPopRect((old) => (old && want && Math.abs(old.x - want.x) + Math.abs(old.y - want.y) + Math.abs(old.w - want.w) < 6 ? old : want));
   };
-  useEffect(paint, [fit, list.length, selected.value, hovered.value, draft.value]);
+  useEffect(paint, [fit, list.length, selected.value, hovered.value, draft.value, showBoxes.value]);
 
   /* ── 피커 ─────────────────────────────────────────────────────────── */
   const pick = useRef<{ down: { x: number; y: number } | null; dragging: boolean; hoverBusy: boolean; hoverNext: { x: number; y: number } | null }>({
@@ -639,9 +649,30 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
           <div class="pick-layer" onPointerMove={onMove} onPointerDown={onDown} onPointerUp={onUp} onWheel={onWheel}
             onPointerLeave={() => !pick.current.down && !draft.peek() && place(pickBox.current, null, 1)} />
         )}
+        <div class={`box-layer ${showBoxes.value ? 'is-on' : ''}`} ref={boxes} aria-hidden="true">
+          {list.filter((a) => a.anchor && a.kind !== 'capture' && v.source?.mode !== 'site' && (!a.done || showDone.value)).map((a) => <div key={a.id} class="hl-box hl-all" data-id={a.id} />)}
+        </div>
         <div class="hl-box hl-sel" ref={selBox} />
         <div class="hl-box hl-pick" ref={pickBox} />
         <div class="hl-box hl-drag" ref={dragBox} />
+        <PinLayer scale={fit.s} page={currentPage} frame={() => frameBox.current} />
+        {pinTool.value && (
+          <div
+            class={`pin-place pin-place-${pinTool.value}`}
+            title="누른 자리에 박는다 (Esc 로 그만)"
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              e.preventDefault();
+              const p = local(e);
+              const id = addPin(p.x, p.y, pinTool.peek()!);
+              pinTool.value = null;
+              if (id) {
+                pinSel.value = id;
+                pinNaming.value = id;
+              }
+            }}
+          />
+        )}
         <div class="marker-layer" ref={markers} data-color={markerColor} data-labels={markerLabels.value ? 'on' : 'off'}>
           {list.filter((a) => a.anchor && a.kind !== 'capture' && v.source?.mode !== 'site' && (!a.done || showDone.value)).map((a) => <Marker key={a.id} a={a} scr={scr} />)}
         </div>

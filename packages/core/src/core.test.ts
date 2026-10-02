@@ -166,6 +166,21 @@ describe('manna-file', () => {
   });
 });
 
+describe('zip', () => {
+  it('CRC32 · 중앙 목록 · UTF-8 이름', async () => {
+    const { crc32, makeZip } = await import('./zip');
+    expect(crc32(enc.encode('123456789'))).toBe(0xcbf43926);
+    const z = makeZip([{ path: 'index.html', bytes: enc.encode('<p>hi</p>') }, { path: 'data/설비.js', bytes: enc.encode('x=1') }]);
+    const dv = new DataView(z.buffer);
+    const end = z.length - 22;
+    expect(dv.getUint32(end, true)).toBe(0x06054b50);
+    expect(dv.getUint16(end + 10, true)).toBe(2);
+    const cd = dv.getUint32(end + 16, true);
+    expect(dv.getUint32(cd, true)).toBe(0x02014b50);
+    expect(dec.decode(z)).toContain('data/설비.js');
+  });
+});
+
 describe('doc', () => {
   it('화면 ID', () => {
     const d = newDoc();

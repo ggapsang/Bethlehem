@@ -707,3 +707,29 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .save-menu { min-width: 280px; }
 .save-menu .popover-item:disabled { opacity: .5; }
 .save-menu .saveas-icon .saveas-pen { background: var(--bg-panel); color: var(--text-primary); }
+
+/* 박스 보이기 — 대상 박스를 늘 실선으로. 고른 것 · 마우스를 올린 것도 실선 */
+.box-layer { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.hl-all { border: 1.5px solid var(--accent); background: rgb(248 101 23 / 0.06); }
+.hl-sel { border: 2px solid var(--accent); background: rgb(248 101 23 / 0.10); }
+.stage-frame.is-recording .box-layer { visibility: hidden; }
+
+/* 핀 — 화면 좌표에 박힌다. 끝(아래 · 화살표 머리)이 그 점을 가리킨다 */
+.pin-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.pin { position: absolute; pointer-events: auto; cursor: grab; display: flex; align-items: flex-start; touch-action: none; }
+.pin.is-drag { cursor: grabbing; z-index: 2; }
+.pin-icon { display: block; color: var(--accent); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .6)) drop-shadow(0 0 2px rgb(255 255 255 / .7)); }
+.pin-icon svg { display: block; fill: var(--accent); stroke: var(--white); }
+.pin-icon svg circle { fill: var(--white); stroke: var(--accent); }
+.pin-pin { transform: translate(-15px, -30px); }
+.pin-nav { transform: translate(-13px, -3px); }
+.pin.is-sel .pin-icon { filter: drop-shadow(0 0 0 var(--white)) drop-shadow(0 0 3px var(--accent)) drop-shadow(0 1px 2px rgb(0 0 0 / .6)); }
+.pin-name, .pin-input {
+  margin: 4px 0 0 2px; padding: 2px 8px; border-radius: 4px; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+  background: rgb(12 10 9 / .85); color: var(--white); font-size: 12px; font-weight: 700; line-height: 18px; box-shadow: 0 1px 3px rgb(0 0 0 / .4);
+}
+.pin-input { border: 1px solid var(--accent); outline: none; width: 180px; font-weight: 600; cursor: text; }
+.pin-x { position: absolute; left: 22px; top: -8px; width: 18px; height: 18px; border: 0; border-radius: 9px; display: grid; place-items: center; background: var(--error-600); color: var(--white); cursor: pointer; }
+.pin-place { position: absolute; inset: 0; z-index: 6; cursor: crosshair; background: rgb(248 101 23 / 0.04); }
+.pin-tools .seg-btn { padding: 0 var(--unit-1-5); }
+.pin-tools .seg-btn[aria-pressed="true"] { background: var(--accent); color: var(--white); }

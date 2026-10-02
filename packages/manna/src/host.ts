@@ -2,9 +2,9 @@
  * 저장은 둘 다 "라이브 문서"다 — 고치면 잠시 뒤 자동으로 저장된다. 저장 버튼은 지금 바로, 다른 이름으로는 사본.
  */
 import type { EncodedBlob, ExternalEntry, MannaDoc, Runtime } from '@core';
-import { referencedShas, serializeManna, mergeDoc } from '@core';
+import { decodeBlob, makeZip, mergeDoc, referencedShas, serializeManna } from '@core';
 import { idbGet, idbPut } from './idb';
-import { blobs, dirty, doc, fileName, notify, rev, saveState, user, screenId } from './store';
+import { blobs, dirty, doc, fileName, notify, rev, saveState, user, screenId, versionNo } from './store';
 
 export interface SiteSnap {
   entry: string;
@@ -58,6 +58,40 @@ export async function buildHtml(host: Host, only?: string[]): Promise<string> {
   // 일부 화면만 — 문서 id 는 그대로 둔다 (받은 사람이 돌려보내면 원래 문서에 그대로 합쳐진다). 그 화면이 쓰는 블롭만 담긴다
   const out = only ? { ...d, screens: d.screens.filter((s) => only.includes(s.id)) } : d;
   return serializeManna(out, blobs, await host.runtime());
+}
+
+/** 원본 파일 내려받기 — 지금 화면 · 버전의 파일들을 원래 폴더 모양 그대로 zip 으로. URL 화면은 원본이 없다 */
+export async function downloadSource(): Promise<boolean> {
+  const s = doc.peek().screens.find((x) => x.id === screenId.peek());
+  const v = s?.versions.find((x) => x.v === versionNo.peek()) ?? s?.versions[s.versions.length - 1];
+  if (!s || !v) return false;
+  const paths = Object.keys(v.files);
+  if (!paths.length) {
+    notify('URL 화면은 원본 파일이 없습니다 — Comment 를 달 때 찍은 캡처만 있습니다.', 'error');
+    return false;
+  }
+  try {
+    const files: { path: string; bytes: Uint8Array }[] = [];
+    for (const p of paths.sort()) {
+      const b = blobs.get(v.files[p]!.sha);
+      if (b) files.push({ path: p, bytes: await decodeBlob(b) });
+    }
+    const zip = makeZip(files);
+    const name = `${safe(s.title)}_${s.id}_v${v.v}_원본.zip`;
+    const url = URL.createObjectURL(new Blob([zip as BlobPart], { type: 'application/zip' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    notify(`원본 파일 ${files.length}개를 내려받았습니다 — ${name}`);
+    return true;
+  } catch (e) {
+    notify(`내려받지 못했습니다: ${(e as Error).message}`, 'error');
+    return false;
+  }
 }
 
 /** 현재 탭만 저장 — 지금 화면 하나(모든 버전 · Comment · 자유 노트)를 새 파일로. 지금 문서의 저장 위치는 바꾸지 않는다 */

@@ -5,7 +5,7 @@
 import { app, dialog, Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron';
 
 export type MenuCommand =
-  | 'save-tab' | 'open-folder' | 'open-doc' | 'open-url' | 'terminal' | 'reload' | 'save' | 'save-as' | 'reveal-dist' | 'reveal-returned'
+  | 'save-tab' | 'download-source' | 'open-folder' | 'open-doc' | 'open-url' | 'terminal' | 'reload' | 'save' | 'save-as' | 'reveal-dist' | 'reveal-returned'
   | 'undo' | 'redo'
   | 'add-folder' | 'add-url' | 'add-image' | 'add-files' | 'new-version' | 'picker' | 'pause'
   | 'panel' | 'theme' | 'guide' | 'zoom-in' | 'zoom-out' | 'zoom-fit';
@@ -29,6 +29,7 @@ export function buildMenu(getWin: () => BrowserWindow | null): Menu {
         item('저장', 'save', 'Ctrl+S'),
         item('다른 이름으로 저장…', 'save-as', 'Ctrl+Shift+S'),
         item('현재 탭만 저장…', 'save-tab'),
+        item('원본 파일 내려받기 (zip)…', 'download-source'),
         { type: 'separator' },
         item('보낼 파일 폴더(dist) 열기', 'reveal-dist'),
         item('돌아온 문서 폴더(returned) 열기', 'reveal-returned'),

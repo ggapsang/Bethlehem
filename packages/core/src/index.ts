@@ -6,3 +6,4 @@ export * from './doc';
 export * from './fingerprint';
 export * from './merge';
 export * from './ai-guide';
+export * from './zip';

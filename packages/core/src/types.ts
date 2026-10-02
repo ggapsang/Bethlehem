@@ -62,8 +62,26 @@ export interface Screen {
   notesTitle?: string;
   /** 자유 노트의 나머지 탭 — 화면의 어느 자리에도 묶이지 않는 글 */
   moreNotes?: NoteTab[];
+  /** 핀 — 화면 좌표에 박아 넣은 표시 (요소와 무관하게 늘 그 자리) */
+  pins?: Pin[];
   versions: ScreenVersion[];
   annotations: Annotation[];
+}
+
+export interface Pin {
+  id: string;
+  /** 어느 화면 버전 위의 핀인가 */
+  version: number;
+  /** 화면 뷰포트 좌표 (px). 핀 끝이 가리키는 점 */
+  x: number;
+  y: number;
+  /** pin = 지도 핀, nav = 길 안내 화살표 */
+  shape: 'pin' | 'nav';
+  name?: string;
+  /** 단 페이지 (여러 페이지 화면 · URL 화면). 없으면 시작 페이지 */
+  page?: string;
+  author: string;
+  at: string;
 }
 
 export interface NoteTab {

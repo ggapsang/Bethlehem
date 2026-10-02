@@ -4,7 +4,7 @@ import { moveAnnotation, now, setField, sha256, toBase64, touchParticipant, uid 
 import type { SiteSnap } from './host';
 import { startRecording, type Recorder } from './stage/record';
 import {
-  annotations, shownAnnotations, showDone, undo, dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
+  pinSel, annotations, shownAnnotations, showDone, undo, dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
   stageViewport, still, user, version,
 } from './store';
 
@@ -122,6 +122,44 @@ export function addScreenComment(body = ''): string | null {
   }, { label: 'Comment 추가' });
   selected.value = a.id;
   return a.id;
+}
+
+/* ── 핀 ──────────────────────────────────────────────────────────────── */
+export function addPin(x: number, y: number, shape: 'pin' | 'nav'): string | null {
+  const s = screen.peek();
+  const v = version.peek();
+  if (!s || !v || needName()) return null;
+  const id = uid();
+  const page = stagePage.peek();
+  mutate((d) => {
+    (s.pins ??= []).push({ id, version: v.v, x: Math.round(x), y: Math.round(y), shape, author: user.value!, at: now(), ...(page && page !== v.entry && page !== v.source?.url ? { page } : {}) });
+    touchParticipant(d, user.value!);
+  }, { label: shape === 'nav' ? '화살표 꽂기' : '핀 꽂기' });
+  return id;
+}
+const pinOf = (id: string) => screen.peek()?.pins?.find((p) => p.id === id);
+export function movePin(id: string, x: number, y: number): void {
+  const p = pinOf(id);
+  if (p) mutate(() => Object.assign(p, { x: Math.round(x), y: Math.round(y), at: now() }), { label: '핀 옮기기' });
+}
+export function renamePin(id: string, name: string): void {
+  const p = pinOf(id);
+  const v = name.trim();
+  if (!p || (p.name ?? '') === v) return;
+  mutate(() => {
+    if (v) p.name = v;
+    else delete p.name;
+    p.at = now();
+  }, { label: '핀 이름' });
+}
+export function removePin(id: string): void {
+  const s = screen.peek();
+  if (!s?.pins?.some((p) => p.id === id)) return;
+  mutate(() => {
+    s.pins = s.pins!.filter((p) => p.id !== id);
+    if (!s.pins.length) delete s.pins;
+  }, { label: '핀 지우기' });
+  if (pinSel.peek() === id) pinSel.value = null;
 }
 
 /** 완료 체크 · 풀기 — 지우지 않고 숨긴다. 번호는 그대로 */
