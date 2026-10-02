@@ -185,10 +185,13 @@ async function main() {
   await page.keyboard.up('Control');
   await page.waitForTimeout(100);
   check('Ctrl 을 떼면 피커가 꺼지고 작성 창은 남는다', !(await page.$('.pick-layer')) && !!(await page.$('.composer')));
+  await page.fill('.composer .title-input', '탭 이름 띄어쓰기');
   await typeComposer(page, '## 탭 이름\n- [ ] 띄어쓰기 "설비 정보"');
   await page.keyboard.press('Control+Enter');
   await page.waitForTimeout(300);
   check('Comment 가 생긴다', (await cardCount(page)) === 1);
+  check('카드에 제목과 이름이 보인다', ((await page.textContent('.cards > .card:first-child .card-name')) ?? '') === '탭 이름 띄어쓰기' && ((await page.textContent('.cards > .card:first-child .author')) ?? '') === '검증봇');
+  check('화면의 마커 옆에도 제목 · 이름', (await page.getAttribute('.marker', 'data-label')) === '탭 이름 띄어쓰기 · 검증봇' && (await page.getAttribute('.marker-layer', 'data-labels')) === 'on');
   check('다크 테마가 기본이다', (await page.getAttribute('html', 'data-theme')) === 'dark');
   check('마커 줄에 번호가 늘어선다', (await page.$$('.mk-strip .mk-list .mk')).length === 1 && !!(await page.$('.mk-list .mk-live')));
   check('화면 머리에 화면 ID · 버전 · 실행 상태가 보인다',
@@ -212,7 +215,8 @@ async function main() {
   await page.waitForTimeout(400);
   check('Comment 2개 · 마커 2개', (await cardCount(page)) === 2 && (await visibleMarkers(page)).length === 2, JSON.stringify(await visibleMarkers(page)));
   check('브라우저에서는 영역도 화면에 붙는다 (찍을 그림이 없어 캡처 없음)', !(await page.$('.snip-bar')) && !!(await until(async () => (await page.$$('.mk-list .mk-live')).length === 2, 3000)), JSON.stringify(await page.$$eval('.mk-strip .mk-list .mk', (m) => m.map((x) => (x as HTMLElement).dataset.state))));
-  check('유형·상태·담당 입력이 없다', !(await page.$('.detail select')) && !(await page.$('.detail input:not([type=checkbox])')));
+  check('유형·상태·담당 입력이 없다 (제목 칸 하나만)', !(await page.$('.detail select')) && !(await page.$('.detail input:not([type=checkbox]):not(.title-input)')));
+  check('Comment 팝업은 모서리로 크기를 바꿀 수 있다', (await page.$eval('.popover-card', (el) => getComputedStyle(el).resize)) === 'both');
   await page.screenshot({ path: resolve(OUT, '2-comments.png') });
 
   console.log('\n[3] 마커 색');
@@ -443,6 +447,19 @@ async function main() {
   await page.click('.comments .section-head');
   check('Comment 도 접힌다', !(await page.$('.cards')));
   await page.click('.comments .section-head');
+  check('개요 대신 "자유 노트"', ((await page.textContent('.notes .section-head')) ?? '').includes('자유 노트'));
+  // 노트 탭 — 더하고 이름 짓고 쓴다
+  await page.click('.note-tab-add');
+  await page.waitForSelector('.note-tab-input');
+  await page.fill('.note-tab-input', '회의록');
+  await page.keyboard.press('Enter');
+  await page.click('.notes .cm-content');
+  await page.waitForTimeout(200);
+  await page.keyboard.type('10월 회의 — 색 대비 다시 보기');
+  await page.click('.note-tab-main:has-text("개요")');
+  check('노트 탭을 더하고 이름을 짓고 오간다', (await page.$$('.note-tab')).length === 2 && ((await page.textContent('.notes .cm-content')) ?? '').startsWith('검증 메모'));
+  await page.click('.note-tab-main:has-text("회의록")');
+  check('탭마다 따로 쓴다', ((await page.textContent('.notes .cm-content')) ?? '').includes('10월 회의'));
   await page.click('.toolbar .tb-title').catch(() => {});
   await page.waitForTimeout(500);
   const dl = page.waitForEvent('download');
@@ -459,6 +476,10 @@ async function main() {
   check('Comment 3개가 남아 있다', (await cardCount(page2)) === 3);
   const notes2 = (await page2.textContent('.notes .cm-content')) ?? '';
   check('개요 편집이 남아 있다', notes2.startsWith('검증 메모'), JSON.stringify(notes2.slice(0, 40)));
+  await page2.click('.notes .section-head').catch(() => {});
+  if (!(await page2.$('.note-tab'))) await page2.click('.notes .section-head');
+  await page2.click('.note-tab-main:has-text("회의록")').catch(() => {});
+  check('노트 탭도 남아 있다', ((await page2.textContent('.notes .cm-content').catch(() => '')) ?? '').includes('10월 회의'));
   check('클립이 남아 있다', ((await page2.textContent('.cards')) ?? '').length > 0 && (await page2.$$('.card .badge-icon')).length > 0);
 
   console.log('\n[11] 버전 · 테마');

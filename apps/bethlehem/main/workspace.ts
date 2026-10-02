@@ -4,7 +4,7 @@
  *   ├── terrarium.json              문서 정보 · 화면 순서 · 참여자 · 변경 이력
  *   ├── screens/SCR-001/
  *   │   ├── screen.json             제목 · 버전들(파일 → 블롭) · 원본 폴더 연결(link)
- *   │   ├── notes.md                개요
+ *   │   ├── notes.md                자유 노트 첫 탭 (나머지 탭은 notes-<id>.md)
  *   │   └── comments.json           Comment · 답글
  *   ├── blobs/ab/abcdef…            내용 해시로 저장한 파일 (원래 바이트)
  *   ├── returned/                   돌아온 .terr.html 을 넣는 곳 — 테라리움이 알아채고 병합 대기에 올린다
@@ -14,7 +14,7 @@
  */
 import { existsSync, watch, type FSWatcher } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { resolve, basename, join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { encFor, isManna, parseManna } from '@core';
 import type { Annotation, EncodedBlob, MannaDoc, Screen, ScreenVersion } from '@core';
@@ -42,6 +42,10 @@ interface WsJson {
 interface ScreenJson {
   id: string;
   title: string;
+  /** 자유 노트 첫 탭(notes.md)의 제목 */
+  notesTitle?: string;
+  /** 나머지 탭 — 본문은 notes-<id>.md */
+  moreNotes?: { id: string; title: string }[];
   versions: ScreenVersion[];
   link?: SourceLink;
 }
@@ -106,9 +110,21 @@ export async function writeWorkspace(dir: string, doc: MannaDoc, blobs: [string,
   for (const s of screens) {
     const sd = join(dir, 'screens', s.id);
     await mkdir(sd, { recursive: true });
-    const sj: ScreenJson = { id: s.id, title: s.title, versions: s.versions, ...(links[s.id] ? { link: links[s.id] } : {}) };
+    const sj: ScreenJson = {
+      id: s.id,
+      title: s.title,
+      ...(s.notesTitle ? { notesTitle: s.notesTitle } : {}),
+      ...(s.moreNotes?.length ? { moreNotes: s.moreNotes.map((t) => ({ id: t.id, title: t.title })) } : {}),
+      versions: s.versions,
+      ...(links[s.id] ? { link: links[s.id] } : {}),
+    };
     await writeIfChanged(join(sd, 'screen.json'), pretty(sj));
     await writeIfChanged(join(sd, 'notes.md'), s.notes ?? '');
+    for (const t of s.moreNotes ?? []) await writeIfChanged(join(sd, `notes-${t.id}.md`), t.body);
+    for (const name of await readdir(sd).catch(() => [] as string[])) {
+      const m = /^notes-(.+)\.md$/.exec(name);
+      if (m && !s.moreNotes?.some((t) => t.id === m[1])) await rm(join(sd, name), { force: true });
+    }
     await writeIfChanged(join(sd, 'comments.json'), pretty(s.annotations));
   }
   // 지운 화면의 폴더는 정리한다
@@ -118,7 +134,11 @@ export async function writeWorkspace(dir: string, doc: MannaDoc, blobs: [string,
   await writeIfChanged(join(dir, WS_FILE), pretty(ws));
 }
 
+/** 테라리움이 마지막으로 쓴 내용 — 바깥(터미널 · 편집기)에서 바꾼 것과 가른다 */
+export const ownWrites = new Map<string, string>();
+
 async function writeIfChanged(p: string, text: string): Promise<void> {
+  ownWrites.set(resolve(p), text);
   const old = await readFile(p, 'utf8').catch(() => null);
   if (old !== text) await writeFile(p, text, 'utf8');
 }
@@ -141,8 +161,14 @@ export async function readWorkspace(dir: string): Promise<WorkspaceData> {
     const sj = await readJson<ScreenJson>(join(sd, 'screen.json'));
     if (!sj) continue;
     const notes = await readFile(join(sd, 'notes.md'), 'utf8').catch(() => '');
+    ownWrites.set(resolve(join(sd, 'notes.md')), notes);
     const annotations = (await readJson<Annotation[]>(join(sd, 'comments.json'))) ?? [];
-    screens.push({ id: sj.id, title: sj.title, notes, versions: sj.versions, annotations });
+    const moreNotes = [];
+    for (const t of sj.moreNotes ?? []) moreNotes.push({ ...t, body: await readFile(join(sd, `notes-${t.id}.md`), 'utf8').catch(() => '') });
+    screens.push({
+      id: sj.id, title: sj.title, notes, ...(sj.notesTitle ? { notesTitle: sj.notesTitle } : {}), ...(moreNotes.length ? { moreNotes } : {}),
+      versions: sj.versions, annotations,
+    });
     if (sj.link) links[id] = sj.link;
   }
   const doc = { ...ws.doc, screens } as MannaDoc;

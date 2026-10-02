@@ -29,7 +29,7 @@ export interface Miss {
 
 /* notes 는 키를 바꿨다 — 개요는 이제 기본으로 접혀 있다 (전에 펼쳐 둔 기록을 따르지 않는다) */
 const LS = {
-  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit',
+  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels',
   tabs: (docId: string) => `terr.tabs.${docId}`,
 };
 
@@ -109,6 +109,12 @@ export const notesRatio = signal(Math.min(0.85, Math.max(0.15, Number(lsGet(LS.n
 export type FitMode = 'fit' | 'fill';
 export const fitMode = signal<FitMode>(lsGet(LS.fit) === 'fill' ? 'fill' : 'fit');
 /** 지금 스테이지가 쓰는 뷰포트 — 꽉 채우기면 높이가 버전의 기준과 다르다 */
+/** 화면의 마커 옆에 제목 · 이름을 보일지 (기본 보임) */
+export const markerLabels = signal(lsGet(LS.labels) !== '0');
+export function setMarkerLabels(on: boolean): void {
+  markerLabels.value = on;
+  lsSet(LS.labels, on ? '1' : '0');
+}
 export const stageViewport = signal<{ w: number; h: number }>({ w: 1920, h: 1080 });
 /** 영역 Comment 작성 방식 — 캡처(기본) · 화면에 붙이기. 녹화는 캡처에 클립을 더한다 */
 export const snipMode = signal<'capture' | 'pin'>('capture');

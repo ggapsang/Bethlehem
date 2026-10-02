@@ -39,6 +39,20 @@ export function mergeDoc(base: MannaDoc, incoming: MannaDoc, baseBlobs: BlobStor
     const versions = new Set(s.versions.map((v) => v.v));
     const latest = Math.max(...s.versions.map((v) => v.v));
 
+    // 자유 노트의 다른 탭 — 없는 탭은 더하고, 원본이 그대로면 회신본 내용으로
+    for (const t of inc.moreNotes ?? []) {
+      const mine = (s.moreNotes ??= []).find((x) => x.id === t.id);
+      if (!mine) {
+        s.moreNotes.push({ ...t });
+        r.notes++;
+      } else if (mine.body !== t.body || mine.title !== t.title) {
+        if (!since || base.meta.updatedAt <= since) {
+          Object.assign(mine, t);
+          r.notes++;
+        } else r.conflicts.push(`${s.id} 노트 "${mine.title}" — 원본도 바뀌어 원본을 남겼습니다`);
+      }
+    }
+    if (!s.moreNotes?.length) delete s.moreNotes;
     if ((inc.notes ?? '') !== (s.notes ?? '')) {
       if (!since || base.meta.updatedAt <= since) {
         s.notes = inc.notes;
@@ -58,6 +72,11 @@ export function mergeDoc(base: MannaDoc, incoming: MannaDoc, baseBlobs: BlobStor
         if (copy.shot) takeBlob(copy.shot.sha);
         r.added++;
         continue;
+      }
+      // 제목 — 작성 프로그램 쪽이 그대로면 회신본 것으로 (충돌이면 이쪽 것을 둔다)
+      if ((ia.title ?? '') !== (a.title ?? '') && !(since && a.updatedAt > since)) {
+        a.history.push({ at: now(), by, field: 'title', from: a.title ?? '', to: ia.title ?? '' });
+        a.title = ia.title;
       }
       if (ia.body !== a.body) {
         const baseChanged = !!since && a.updatedAt > since;

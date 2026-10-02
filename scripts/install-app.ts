@@ -21,10 +21,10 @@ for (const d of ['main', 'preload', 'renderer', 'manna']) {
   rmSync(join(RUN, d), { recursive: true, force: true });
   cpSync(join(OUT, d), join(RUN, d), { recursive: true });
 }
+rmSync(join(RUN, 'docs'), { recursive: true, force: true }); // 예전 실행본의 가이드 파일 — 이제 프로그램 안에 들어 있다
 mkdirSync(join(RUN, 'resources'), { recursive: true });
 cpSync(join(ROOT, 'apps/bethlehem/resources/icon-256.png'), join(RUN, 'resources/icon-256.png'));
-mkdirSync(join(RUN, 'docs'), { recursive: true });
-cpSync(join(ROOT, 'docs/USER_GUIDE.md'), join(RUN, 'docs/USER_GUIDE.md'));
+cpSync(join(ROOT, 'docs/WORKSPACE_FORMAT.md'), join(RUN, 'resources/WORKSPACE_FORMAT.md'));
 writeFileSync(
   join(RUN, 'package.json'),
   JSON.stringify({ name: 'terrarium', productName: 'Terrarium', version: pkg.version, private: true, type: 'module', main: 'main/index.js' }, null, 2),

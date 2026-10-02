@@ -53,3 +53,46 @@
 .tb-returned { color: var(--accent-text); background: var(--accent-soft); }
 .popover-returned { gap: var(--unit-3); align-items: center; cursor: default; }
 .popover-returned > .grow { display: flex; flex-direction: column; min-width: 0; }
+
+/* 사용자 가이드 창 — 떠 있고, 옮기고, 크기를 바꾼다 */
+.guide-win {
+  position: fixed; z-index: 120; width: 760px; height: min(80vh, 820px); min-width: 360px; min-height: 240px;
+  max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
+  display: flex; flex-direction: column; resize: both; overflow: hidden;
+  background: var(--bg-panel); border: 1px solid var(--border-strong); border-radius: var(--unit-3); box-shadow: var(--shadow-pop);
+}
+.guide-head {
+  display: flex; align-items: center; gap: var(--unit-1); height: 40px; padding: 0 var(--unit-2) 0 var(--unit-4); flex: none;
+  border-bottom: 1px solid var(--border); cursor: move; user-select: none;
+}
+.guide-font { font-size: var(--text-xs); color: var(--text-tertiary); min-width: 34px; text-align: center; font-variant-numeric: tabular-nums; }
+.guide-body { flex: 1; min-height: 0; overflow: auto; padding: var(--unit-4) var(--unit-6) var(--unit-10); line-height: 1.7; }
+/* 마크다운 그리기 */
+.md-render h1 { font-size: 1.7em; margin: .4em 0 .6em; }
+.md-render h2 { font-size: 1.3em; margin: 1.6em 0 .5em; padding-bottom: .3em; border-bottom: 1px solid var(--border); }
+.md-render h3 { font-size: 1.1em; margin: 1.3em 0 .4em; }
+.md-render p, .md-render ul, .md-render ol { margin: .5em 0; }
+.md-render ul, .md-render ol { padding-left: 1.4em; }
+.md-render li { margin: .2em 0; }
+.md-render blockquote { margin: .8em 0; padding: .2em 1em; border-left: 3px solid var(--accent); color: var(--text-secondary); background: var(--bg-hover); border-radius: 0 var(--unit-1) var(--unit-1) 0; }
+.md-render code { font-family: var(--font-mono); font-size: .88em; padding: .1em .35em; border-radius: 4px; background: var(--bg-hover); }
+.md-render pre { padding: .8em 1em; border-radius: var(--unit-2); background: var(--bg-hover); overflow: auto; line-height: 1.45; }
+.md-render pre code { padding: 0; background: transparent; font-size: .85em; }
+.md-render table { border-collapse: collapse; margin: .8em 0; width: 100%; font-size: .94em; }
+.md-render th, .md-render td { border: 1px solid var(--border); padding: .4em .7em; text-align: left; vertical-align: top; }
+.md-render th { background: var(--bg-hover); font-weight: 700; }
+.md-render hr { border: 0; border-top: 1px solid var(--border); margin: 1.6em 0; }
+.md-render a { color: var(--accent-text); }
+
+/* 터미널 — 창 아래, 기본은 접혀 있다 */
+.term { position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--bg-panel); border-top: 1px solid var(--border); }
+.term-grip { position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: row-resize; z-index: 5; }
+.term-grip:hover { background: var(--accent); opacity: .5; }
+.term-bar { display: flex; align-items: center; gap: var(--unit-1); height: 32px; padding: 0 var(--unit-2); flex: none; white-space: nowrap; min-width: 0; }
+.term-toggle { display: inline-flex; align-items: center; gap: var(--unit-1-5); height: 26px; padding: 0 var(--unit-2); border: 0; border-radius: var(--unit-1-5); background: transparent; color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600; }
+.term-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+.term-cwd { min-width: 0; max-width: 40vw; font-family: var(--font-mono); }
+.term-body { overflow: hidden; flex: none; }
+.term-host { height: 100%; padding: 4px 0 0 var(--unit-2); background: var(--bg-stage); }
+.term-host .xterm { height: 100%; }
+.term-host .xterm-viewport { scrollbar-width: thin; }

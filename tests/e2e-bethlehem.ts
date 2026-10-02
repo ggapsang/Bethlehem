@@ -454,6 +454,80 @@ async function main() {
   check('가져온 화면은 탭으로 열린다', (await page.$$('.tabs .tab')).length >= 5, `${(await page.$$('.tabs .tab')).length}개`);
   const s5 = JSON.parse(readFileSync(join(UNPACK, 'screens', 'SCR-005', 'comments.json'), 'utf8'));
   check('가져온 화면의 Comment 도 따라온다', s5.length >= 1, `${s5.length}개`);
+
+  console.log('\n[12] 자유 노트 탭 · 바깥에서 고치면 다시 불러오기');
+  await openScreen(page, 'SCR-001');
+  if (!(await page.$('.note-tabs'))) await page.click('.notes .section-head');
+  await page.click('.note-tab-add');
+  await page.fill('.note-tab-input', '회의록');
+  await page.keyboard.press('Enter');
+  await page.click('.notes .cm-content');
+  await page.keyboard.type('첫 회의');
+  await page.mouse.click(5, 400);
+  const sj = await until(() => {
+    const j = JSON.parse(readFileSync(join(UNPACK, 'screens', 'SCR-001', 'screen.json'), 'utf8'));
+    return j.moreNotes?.[0]?.title === '회의록' ? j : null;
+  }, 8000);
+  const tabFile = sj ? join(UNPACK, 'screens', 'SCR-001', `notes-${sj.moreNotes[0].id}.md`) : '';
+  check('노트 탭은 screen.json 과 notes-<id>.md 로', !!sj && existsSync(tabFile) && readFileSync(tabFile, 'utf8') === '첫 회의');
+  // 바깥(터미널의 Claude Code 같은)에서 고친다
+  const cj = join(UNPACK, 'screens', 'SCR-001', 'comments.json');
+  const list = JSON.parse(readFileSync(cj, 'utf8'));
+  list[0].title = '바깥에서 단 제목';
+  writeFileSync(cj, JSON.stringify(list, null, 2));
+  if (tabFile) writeFileSync(tabFile, '첫 회의\n- [ ] 바깥에서 더한 할 일');
+  const reloaded = await until(async () => ((await page.textContent('.cards > .card:first-child .card-name')) ?? '') === '바깥에서 단 제목', 10000);
+  check('바깥에서 comments.json 을 고치면 바로 다시 불러온다', !!reloaded);
+  await page.click('.note-tab-main:has-text("회의록")');
+  check('노트 파일을 고친 것도 들어온다', ((await page.textContent('.notes .cm-content')) ?? '').includes('바깥에서 더한 할 일'));
+  await page.keyboard.press('Control+z').catch(() => {});
+
+  console.log('\n[13] 터미널');
+  await page.mouse.click(5, 400);
+  await page.keyboard.press('Control+Backquote');
+  check('Ctrl+` 로 아래에 터미널이 펴진다', !!(await until(() => page.$('.term.is-open .xterm'), 5000)));
+  const termText = () => page.evaluate(() => document.querySelector('.term .xterm-rows')?.textContent ?? '');
+  await until(async () => /PS |\$ /.test(await termText()), 15000);
+  await page.click('.term .xterm');
+  await page.keyboard.type('echo terr-ok; (Get-Location).Path');
+  await page.keyboard.press('Enter');
+  const out = await until(async () => {
+    const t = await termText();
+    return t.includes('terr-ok') && t.toLowerCase().includes('unpack-ws') ? t : null;
+  }, 15000);
+  check('셸이 돌고, 작업 폴더에서 시작한다', !!out, (await termText()).slice(-120));
+  check('Claude Code 단추가 있다', !!(await page.$('.term button:has-text("Claude Code")')));
+  await page.screenshot({ path: resolve(OUT, 'b13-terminal.png') });
+  await page.keyboard.press('Control+Backquote');
+  check('다시 누르면 접힌다', !(await page.$('.term.is-open')));
+
+  console.log('\n[14] 사용자 가이드 창');
+  await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.find((m) => m.label.startsWith('도움말'))?.submenu?.items.find((i) => i.label === '사용자 가이드')?.click());
+  check('도움말 → 사용자 가이드가 프로그램 안에 뜬다', !!(await until(() => page.$('.guide-win .md-render h1'), 5000)));
+  check('마크다운이 그려진다 (표 · 제목)', (await page.$$('.guide-win table')).length > 3);
+  const fs0 = await page.$eval('.guide-body', (el) => getComputedStyle(el).fontSize);
+  await page.click('.guide-win button[aria-label="글자 크게"]');
+  await page.click('.guide-win button[aria-label="글자 크게"]');
+  const fs1 = await page.$eval('.guide-body', (el) => getComputedStyle(el).fontSize);
+  check('글자 크기를 바꾼다', parseFloat(fs1) > parseFloat(fs0), `${fs0} → ${fs1}`);
+  check('창 크기를 바꿀 수 있다', (await page.$eval('.guide-win', (el) => getComputedStyle(el).resize)) === 'both');
+  await page.screenshot({ path: resolve(OUT, 'b14-guide.png') });
+  await page.click('.guide-win button[aria-label="가이드 닫기"]');
+
+  console.log('\n[15] URL 열기 — 탭이 아니라 그 주소의 문서로');
+  await page.click('button[aria-label="작업 폴더 · 문서"]');
+  await page.click('.popover-item:has-text("URL 열기")');
+  await page.fill('.modal input[aria-label="주소"]', SITE);
+  await page.click('.modal button[type=submit]');
+  const urlPlace = await until(async () => ((await page.textContent('.tb-place')) ?? '').includes('semicon-xms.xdt.com/monitor'), 15000);
+  check('그 주소의 문서가 열리고 툴바에 주소가 보인다', !!urlPlace, (await page.textContent('.tb-place')) ?? '');
+  const sites = join(UD, 'sites');
+  const siteDir = existsSync(sites) ? readdirSync(sites).find((n) => n.startsWith('semicon-xms')) : undefined;
+  check('작업 폴더는 프로그램 안에 저절로 생긴다', !!siteDir && !!(await until(() => existsSync(join(sites, siteDir!, 'terrarium.json')), 8000)), siteDir);
+  check('URL 화면 하나로 시작한다', !!(await until(() => page.$('webview.stage-webview'), 8000)) && (await page.$$('.tabs .tab')).length === 1);
+  await page.click('button[aria-label="작업 폴더 · 문서"]');
+  check('최근 URL 에 남는다', !!(await page.$('.popover-item:has-text("semicon-xms.xdt.com/monitor")')));
+  await page.mouse.click(5, 400);
   await app.close();
 
   for (const d of [WS, SRC, UD]) rmSync(d, { recursive: true, force: true });

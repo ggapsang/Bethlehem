@@ -4,7 +4,7 @@ import type { RefObject } from 'preact';
 import { Camera, Circle, Film, Pin, Square, Trash2, X } from 'lucide-preact';
 import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
-import { addFromDraft, addReply, editBody, editReply, removeClip, removeComment, toggleSnipRecording } from '../actions';
+import { addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleSnipRecording } from '../actions';
 import type { Host } from '../host';
 import { annotations, draft, draftClip, popHidden, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
@@ -12,7 +12,9 @@ import { MarkdownEditor } from './editor/MarkdownEditor';
 import { ago } from './labels';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
-const W = 380;
+/** 기본 폭 — 클립(영상)이 있으면 훨씬 크게. 오른쪽 아래 모서리를 끌어 크기를 바꾼다 */
+const W = 400;
+const W_CLIP = 680;
 const GAP = 12;
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -33,6 +35,7 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
   const sel = !d && !popHidden.value ? annotations.value.find((a) => a.id === selected.value) ?? null : null;
   const v = version.value;
   const open = !!d || !!sel;
+  const w0 = (sel?.clips?.length ?? 0) > 0 || (d && draftClip.value) ? W_CLIP : W;
 
   useLayoutEffect(() => {
     const area = areaRef.current;
@@ -44,6 +47,7 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
     const aw = area.clientWidth;
     const ah = area.clientHeight;
     const ph = el.offsetHeight;
+    const W = el.offsetWidth || w0;
     const { s, ox, oy } = fit;
     let left: number;
     let top: number;
@@ -77,7 +81,8 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
     <div
       ref={ref}
       class={`popover-card pop-${pos?.side ?? 'right'}`}
-      style={{ left: `${pos?.left ?? -9999}px`, top: `${pos?.top ?? 0}px`, width: `${W}px` }}
+      key={d ? 'draft' : sel?.id}
+      style={{ left: `${pos?.left ?? -9999}px`, top: `${pos?.top ?? 0}px`, width: `${w0}px` }}
       role="dialog"
       aria-label={d ? '새 Comment' : 'Comment'}
       onPointerDown={(e) => e.stopPropagation()}
@@ -89,7 +94,8 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
 
 function Composer() {
   const text = useRef('');
-  const add = () => addFromDraft(text.current);
+  const title = useRef('');
+  const add = () => addFromDraft(text.current, title.current);
   return (
     <div class="composer" aria-label="새 Comment">
       <div class="row">
@@ -98,6 +104,16 @@ function Composer() {
         <button type="button" class="btn-icon btn-xs" aria-label="취소" onClick={() => (draft.value = null)}><X {...ICON} /></button>
       </div>
       <SnipBar />
+      <input
+        class="input title-input"
+        placeholder="제목 (없어도 됩니다)"
+        aria-label="Comment 제목"
+        onInput={(e) => (title.current = e.currentTarget.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) add();
+          if (e.key === 'Escape') draft.value = null;
+        }}
+      />
       <MarkdownEditor
         value=""
         minRows={6}
@@ -176,10 +192,22 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
     <div class="detail">
       <div class="row detail-head">
         <span class={`no ${a.anchor ? '' : 'no-screen'}`}>{displayNo(scr, a)}</span>
-        <span class="card-meta">{a.author} · {ago(a.createdAt)}</span>
+        <span class="card-meta"><strong class="author">{a.author}</strong> · {ago(a.createdAt)}</span>
         <span class="grow" />
         <button type="button" class="btn-icon btn-xs" aria-label="닫기" title="팝업 닫기 (선택은 그대로)" onClick={() => (popHidden.value = true)}><X {...ICON} /></button>
       </div>
+      {mine ? (
+        <input
+          key={`t-${a.id}`}
+          class="input title-input"
+          placeholder="제목 (없어도 됩니다)"
+          aria-label="Comment 제목"
+          defaultValue={a.title ?? ''}
+          onChange={(e) => editTitle(a, e.currentTarget.value)}
+        />
+      ) : (
+        a.title && <h3 class="detail-title">{a.title}</h3>
+      )}
       <MarkdownEditor
         key={a.id}
         value={a.body}

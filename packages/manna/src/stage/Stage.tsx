@@ -9,7 +9,7 @@ import type { Host } from '../host';
 import { onKeyDown, onKeyUp } from '../keys';
 import {
   annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, requestReveal, reveal, revealing, rev,
-  draftClip, fitMode, popHidden, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
+  draftClip, fitMode, markerLabels, popHidden, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
   visible, zoom, zoomStep,
 } from '../store';
 import type { ComponentChildren } from 'preact';
@@ -611,7 +611,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
         <div class="hl-box hl-sel" ref={selBox} />
         <div class="hl-box hl-pick" ref={pickBox} />
         <div class="hl-box hl-drag" ref={dragBox} />
-        <div class="marker-layer" ref={markers} data-color={markerColor}>
+        <div class="marker-layer" ref={markers} data-color={markerColor} data-labels={markerLabels.value ? 'on' : 'off'}>
           {list.filter((a) => a.anchor && a.kind !== 'capture').map((a) => <Marker key={a.id} a={a} scr={scr} />)}
         </div>
         {(loading || revealing.value) && !error && <div class="stage-note" aria-label="불러오는 중"><span class="spinner" /></div>}
@@ -660,7 +660,8 @@ function Marker({ a, scr }: { a: Annotation; scr: Screen }) {
       type="button"
       data-id={a.id}
       class={`marker ${sel ? 'is-sel' : ''}`}
-      title={`${displayNo(scr, a)} · ${a.author}`}
+      title={`${displayNo(scr, a)}${a.title ? ` ${a.title}` : ''} · ${a.author}`}
+      data-label={a.title ? `${a.title} · ${a.author}` : a.author}
       onClick={(e) => {
         e.stopPropagation();
         if (sel && popHidden.peek()) popHidden.value = false;

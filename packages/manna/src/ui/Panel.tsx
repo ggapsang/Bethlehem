@@ -1,10 +1,10 @@
 /* 오른쪽 패널 — 위에 화면 개요(마크다운), 아래에 Comment 목록. 한 스크롤로 이어진다 */
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Camera, ChevronDown, ChevronRight, EyeOff, Film, GripVertical, MessageSquare, Plus } from 'lucide-preact';
+import { Camera, ChevronDown, ChevronRight, EyeOff, Film, GripVertical, MessageSquare, Plus, X } from 'lucide-preact';
 import type { Annotation, Screen } from '@core';
 import { displayNo } from '@core';
-import { addScreenComment, editBody, editNotes, reorder } from '../actions';
+import { MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, reorder } from '../actions';
 import type { Host } from '../host';
 import {
   annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible,
@@ -17,9 +17,9 @@ const ICON = { size: 16, strokeWidth: 1.5 };
 
 export function Panel(_props: { host: Host }) {
   const scr = screen.value;
-  if (!scr) return <aside class="panel" aria-label="개요와 Comment" />;
+  if (!scr) return <aside class="panel" aria-label="자유 노트와 Comment" />;
   return (
-    <aside class="panel" aria-label="개요와 Comment">
+    <aside class="panel" aria-label="자유 노트와 Comment">
       <Notes scr={scr} />
       {notesOpen.value && <NotesSplitter />}
       <Comments scr={scr} />
@@ -50,7 +50,7 @@ function NotesSplitter() {
       class="notes-splitter"
       role="separator"
       aria-orientation="horizontal"
-      aria-label="개요 높이 조절"
+      aria-label="자유 노트 높이 조절"
       tabIndex={0}
       onPointerDown={onDown}
       onDblClick={() => setNotesRatio(0.5)}
@@ -62,25 +62,102 @@ function NotesSplitter() {
   );
 }
 
+/** 자유 노트 — 화면의 어느 자리에도 묶이지 않는 글. 탭을 여러 개 두고 탭마다 이름을 단다 (더블클릭해 이름 바꾸기) */
 function Notes({ scr }: { scr: Screen }) {
   rev.value; // 문서는 제자리에서 고치므로 props 가 같아도 다시 그려야 한다 (signals 의 얕은 비교를 피한다)
   const open = notesOpen.value;
+  const tabs = noteTabs(scr);
+  const [cur, setCur] = useState(MAIN_NOTE);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const tab = tabs.find((t) => t.id === cur) ?? tabs[0]!;
+  useEffect(() => setCur(MAIN_NOTE), [scr.id]);
+  const finishRename = (id: string, v: string) => {
+    renameNoteTab(id, v);
+    setRenaming(null);
+  };
   return (
     <section class={`notes ${open ? 'is-open' : ''}`} style={open ? { height: `${notesRatio.value * 100}%` } : undefined}>
-      <button type="button" class="section-head" aria-expanded={open} onClick={() => toggleNotes()}>
-        {open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
-        <span>개요</span>
-        {!open && scr.notes && <span class="muted small ellipsis">{plainText(scr.notes).split('\n')[0]}</span>}
-      </button>
+      <div class="section-row">
+        <button type="button" class="section-head" aria-expanded={open} onClick={() => toggleNotes()} title="화면의 어느 자리에도 묶이지 않는 글">
+          {open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
+          <span>자유 노트</span>
+          {!open && <span class="count">{tabs.length > 1 ? `탭 ${tabs.length}` : ''}</span>}
+          {!open && scr.notes && <span class="muted small ellipsis">{plainText(scr.notes).split('\n')[0]}</span>}
+        </button>
+      </div>
+      {open && (
+        <div class="note-tabs" role="tablist" aria-label="노트 탭">
+          {tabs.map((t) => (
+            <div key={t.id} class={`note-tab ${t.id === tab.id ? 'is-on' : ''}`}>
+              {renaming === t.id ? (
+                <input
+                  class="note-tab-input"
+                  aria-label="노트 이름"
+                  defaultValue={t.title}
+                  ref={(el) => {
+                    if (el && el !== document.activeElement) requestAnimationFrame(() => (el.focus(), el.select()));
+                  }}
+                  onBlur={(e) => finishRename(t.id, e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') finishRename(t.id, e.currentTarget.value);
+                    if (e.key === 'Escape') setRenaming(null);
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={t.id === tab.id}
+                  class="note-tab-main"
+                  title="두 번 눌러 이름 바꾸기"
+                  onClick={() => setCur(t.id)}
+                  onDblClick={() => setRenaming(t.id)}
+                >
+                  {t.title}
+                </button>
+              )}
+              {t.id !== MAIN_NOTE && t.id === tab.id && renaming !== t.id && (
+                <button
+                  type="button"
+                  class="note-tab-x"
+                  aria-label={`${t.title} 탭 지우기`}
+                  onClick={() => {
+                    if (t.body.trim() && !confirm(`"${t.title}" 노트를 지울까요? (Ctrl+Z 로 되돌릴 수 있습니다)`)) return;
+                    removeNoteTab(t.id);
+                    setCur(MAIN_NOTE);
+                  }}
+                >
+                  <X {...ICON} size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            class="note-tab-add"
+            aria-label="노트 탭 추가"
+            title="노트 탭 추가"
+            onClick={() => {
+              const id = addNoteTab();
+              if (id) {
+                setCur(id);
+                setRenaming(id);
+              }
+            }}
+          >
+            <Plus {...ICON} size={14} />
+          </button>
+        </div>
+      )}
       {open && (
         <MarkdownEditor
-          key={scr.id}
-          value={scr.notes}
-          onChange={editNotes}
+          key={`${scr.id}:${tab.id}`}
+          value={tab.body}
+          onChange={(t) => editNoteTab(tab.id, t)}
           allowCheck
           minRows={3}
-          placeholder="개요"
-          label="화면 개요"
+          placeholder={tab.title}
+          label={`자유 노트 — ${tab.title}`}
           class="notes-editor"
         />
       )}
@@ -183,17 +260,21 @@ function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip
         </span>
         <button type="button" class="card-title" aria-expanded={sel} onClick={() => (sel && shown && !popHidden.value ? (selected.value = null) : open())}>
           <span class={`no ${a.anchor ? '' : 'no-screen'}`}>{displayNo(scr, a)}</span>
-          <span class="card-meta">{a.author} · {ago(a.createdAt)}</span>
-          {!a.anchor && <span class="chip">화면 전체</span>}
+          <span class="card-lines">
+            <span class={`card-name ellipsis ${a.title ? '' : 'is-untitled'}`}>{a.title || plainText(a.body).split('\n').find((l) => l.trim()) || '제목 없음'}</span>
+            <span class="card-sub">
+              <span class="card-meta"><strong class="author">{a.author}</strong> · {ago(a.createdAt)}</span>
+              {!a.anchor && <span class="chip">화면 전체</span>}
           {st === 'other' && <span class="chip chip-hint" title="다른 화면 상태에 있습니다. 누르면 그 상태로 이동합니다."><EyeOff {...ICON} size={12} /> 다른 상태</span>}
           {st === 'capture' && <span class="chip chip-capture" title="그린 영역을 찍어 둔 Comment 입니다. 실시간 화면에는 마커가 붙지 않습니다."><Camera {...ICON} size={12} /> 캡처</span>}
-          <span class="grow" />
+            </span>
+          </span>
           {a.shot && st !== 'capture' && <span class="badge-icon" title="달 때의 화면이 함께 저장되어 있습니다"><Camera {...ICON} size={14} /></span>}
           {(a.clips?.length ?? 0) > 0 && <span class="badge-icon"><Film {...ICON} size={14} /> {a.clips!.length}</span>}
           {a.replies.length > 0 && <span class="badge-icon"><MessageSquare {...ICON} size={14} /> {a.replies.length}</span>}
         </button>
       </div>
-      {!sel && a.body && (
+      {!sel && a.body && a.title && (
         <button type="button" class="card-preview" onClick={open}>
           <span class="clamp">{plainText(a.body)}</span>
         </button>

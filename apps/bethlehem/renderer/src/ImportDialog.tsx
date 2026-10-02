@@ -137,7 +137,7 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
                         <input type="checkbox" checked={on} disabled={isEntry || isNotes} onChange={() => toggle(f.path)} />
                         <span class="mono grow ellipsis">{f.path}</span>
                         {isEntry && <span class="chip chip-accent">시작 파일</span>}
-                        {isNotes && <span class="chip chip-ok">개요로 가져옴</span>}
+                        {isNotes && <span class="chip chip-ok">자유 노트로 가져옴</span>}
                         {!f.referenced && !isEntry && !isNotes && <span class="chip chip-hint" title="다른 파일에서 이 이름이 나오지 않아, 화면이 쓰지 않는 파일로 보입니다. 쓰는 파일이면 체크하세요.">참조 없음</span>}
                         {!on && !isNotes && <span class="chip">제외</span>}
                         <span class="muted small">{formatBytes(f.size)}</span>
@@ -148,7 +148,7 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
               </ul>
               {scan.files.some((f) => /\.md$/i.test(f.path)) && (
                 <label class="field">
-                  <span>개요로 가져올 마크다운 — 한 번 복사되고, 그 뒤로는 문서 안에서 고칩니다{existing?.notes.trim() ? ' (지금 개요를 덮어씁니다)' : ''}</span>
+                  <span>자유 노트(첫 탭)로 가져올 마크다운 — 한 번 복사되고, 그 뒤로는 문서 안에서 고칩니다{existing?.notes.trim() ? ' (지금 첫 탭을 덮어씁니다)' : ''}</span>
                   <select class="input" value={notesFrom} onChange={(e) => setNotesFrom(e.currentTarget.value)}>
                     <option value="">가져오지 않음</option>
                     {scan.files.filter((f) => /\.md$/i.test(f.path)).map((f) => <option key={f.path}>{f.path}</option>)}

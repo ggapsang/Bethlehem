@@ -12,7 +12,7 @@ import { canConnectFile, connectFile, save } from '../host';
 import { ago } from './labels';
 import {
   askName, canRedo, canUndo, dirty, doc, rev, saveState, draft, mode, mutate, panelOpen, recording, redo, screen,
-  setTheme, setTitleWidth, theme, titleWidth, togglePanel, undo, user,
+  markerLabels, setMarkerLabels, setTheme, setTitleWidth, theme, titleWidth, togglePanel, undo, user,
 } from '../store';
 import { Logo } from './Logo';
 
@@ -133,7 +133,7 @@ export function Toolbar({ host, start }: ToolbarProps) {
       </div>
 
       <div class="tb-group">
-        <button type="button" class={`btn-icon ${panelOpen.value ? 'is-on-soft' : ''}`} aria-pressed={panelOpen.value} aria-label="개요·Comment 패널" title="개요·Comment 패널 보이기/숨기기" onClick={() => togglePanel()}>
+        <button type="button" class={`btn-icon ${panelOpen.value ? 'is-on-soft' : ''}`} aria-pressed={panelOpen.value} aria-label="노트·Comment 패널" title="노트·Comment 패널 보이기/숨기기" onClick={() => togglePanel()}>
           <PanelRight {...ICON} />
         </button>
         <button type="button" class="btn-icon" aria-label="테마 전환" title={theme.value === 'light' ? '다크 테마' : '라이트 테마'} onClick={() => setTheme(theme.value === 'light' ? 'dark' : 'light')}>
@@ -236,6 +236,10 @@ export function MarkerColorPicker() {
               <span class={`swatch swatch-${c}`} /> {MARKER_LABEL[c]}
             </button>
           ))}
+          <div class="popover-sep" />
+          <button type="button" role="menuitemcheckbox" aria-checked={markerLabels.value} class="popover-item" onClick={() => setMarkerLabels(!markerLabels.value)}>
+            <span class={`checkmark ${markerLabels.value ? 'is-on' : ''}`}>{markerLabels.value ? '✓' : ''}</span> 번호 옆에 제목 · 이름 보이기
+          </button>
         </div>
       )}
     </div>

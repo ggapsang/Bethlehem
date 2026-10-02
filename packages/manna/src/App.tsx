@@ -23,11 +23,13 @@ export interface AppProps {
   screenActions?: ComponentChildren;
   /** 화면이 하나도 없을 때 */
   empty?: ComponentChildren;
+  /** 창 아래 (Bethlehem: 터미널) */
+  bottom?: ComponentChildren;
 }
 
 const MIN_PANEL = 300;
 
-export function App({ host, start, tabTools, versionTools, screenActions, empty }: AppProps) {
+export function App({ host, start, tabTools, versionTools, screenActions, empty, bottom }: AppProps) {
   rev.value; // 문서가 바뀌면 틀 전체를 다시 그린다 (제목·버전 등)
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme.value;
@@ -87,6 +89,7 @@ export function App({ host, start, tabTools, versionTools, screenActions, empty 
         {showPanel && <Splitter />}
         {showPanel && <Panel host={host} />}
       </div>
+      {!full && bottom}
       {askName.value && <NameDialog host={host} />}
       {toast.value && (
         <div class={`toast toast-${toast.value.tone}`} role={toast.value.tone === 'error' ? 'alert' : 'status'}>

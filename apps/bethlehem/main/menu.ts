@@ -2,15 +2,15 @@
  * 렌더러가 하는 일은 'menu' 메시지로 보낸다. 단축키는 렌더러가 이미 처리하므로 메뉴에는 표시만 한다(registerAccelerator: false).
  * 잘라내기·복사·붙여넣기·모두 선택은 Electron 기본 동작(role)을 쓴다.
  */
-import { app, dialog, Menu, shell, type BrowserWindow, type MenuItemConstructorOptions } from 'electron';
+import { app, dialog, Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron';
 
 export type MenuCommand =
-  | 'open-folder' | 'open-doc' | 'save' | 'save-as' | 'reveal-dist' | 'reveal-returned'
+  | 'open-folder' | 'open-doc' | 'open-url' | 'terminal' | 'reload' | 'save' | 'save-as' | 'reveal-dist' | 'reveal-returned'
   | 'undo' | 'redo'
   | 'add-folder' | 'add-url' | 'add-image' | 'add-files' | 'new-version' | 'picker' | 'pause'
-  | 'panel' | 'theme' | 'zoom-in' | 'zoom-out' | 'zoom-fit';
+  | 'panel' | 'theme' | 'guide' | 'zoom-in' | 'zoom-out' | 'zoom-fit';
 
-export function buildMenu(getWin: () => BrowserWindow | null, guide: string): Menu {
+export function buildMenu(getWin: () => BrowserWindow | null): Menu {
   const send = (cmd: MenuCommand) => getWin()?.webContents.send('menu', cmd);
   const item = (label: string, cmd: MenuCommand, accelerator?: string): MenuItemConstructorOptions => ({
     label,
@@ -24,6 +24,7 @@ export function buildMenu(getWin: () => BrowserWindow | null, guide: string): Me
       submenu: [
         item('폴더 열기…', 'open-folder'),
         item('문서 열기…', 'open-doc'),
+        item('URL 열기…', 'open-url'),
         { type: 'separator' },
         item('저장', 'save', 'Ctrl+S'),
         item('다른 이름으로 저장…', 'save-as', 'Ctrl+Shift+S'),
@@ -61,7 +62,8 @@ export function buildMenu(getWin: () => BrowserWindow | null, guide: string): Me
     {
       label: '보기(&V)',
       submenu: [
-        item('개요·Comment 패널', 'panel'),
+        item('노트·Comment 패널', 'panel'),
+        item('터미널', 'terminal', 'Ctrl+`'),
         item('테마 전환 (다크/라이트)', 'theme'),
         { type: 'separator' },
         item('화면 확대 (Ctrl+휠)', 'zoom-in', 'Ctrl+='),
@@ -82,13 +84,14 @@ export function buildMenu(getWin: () => BrowserWindow | null, guide: string): Me
           registerAccelerator: false,
           click: () => getWin()?.webContents.toggleDevTools(),
         },
-        { label: '다시 불러오기', accelerator: 'Ctrl+Shift+R', click: () => getWin()?.webContents.reload() },
+        item('작업 폴더 다시 불러오기', 'reload'),
+        { label: '프로그램 화면 새로 고침', accelerator: 'Ctrl+Shift+R', click: () => getWin()?.webContents.reload() },
       ],
     },
     {
       label: '도움말(&H)',
       submenu: [
-        { label: '사용자 가이드', click: () => shell.openPath(guide) },
+        { label: '사용자 가이드', accelerator: 'F1', click: () => send('guide') },
         { type: 'separator' },
         {
           label: 'Terrarium 정보',

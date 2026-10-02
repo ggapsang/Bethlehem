@@ -56,10 +56,20 @@ export interface ScreenVersion {
 export interface Screen {
   id: string;
   title: string;
-  /** 화면 설명 — 마크다운. README 를 가져오면 한 번 복사된 뒤로는 문서의 텍스트다 */
+  /** 자유 노트의 첫 탭 — 마크다운. README 를 가져오면 한 번 복사된 뒤로는 문서의 텍스트다 */
   notes: string;
+  /** 첫 탭의 제목 (없으면 "개요") */
+  notesTitle?: string;
+  /** 자유 노트의 나머지 탭 — 화면의 어느 자리에도 묶이지 않는 글 */
+  moreNotes?: NoteTab[];
   versions: ScreenVersion[];
   annotations: Annotation[];
+}
+
+export interface NoteTab {
+  id: string;
+  title: string;
+  body: string;
 }
 
 export interface Fingerprint {
@@ -144,6 +154,8 @@ export interface Annotation {
   anchor?: Anchor;
   /** 'capture' — 영역을 찍어 둔 Comment. 실시간 화면에는 마커를 붙이지 않고, 열면 찍어 둔 그림(과 클립)을 보인다 */
   kind?: 'capture';
+  /** 제목 — 없어도 된다. 카드와 화면의 마커 옆에 보인다 */
+  title?: string;
   /** 마크다운. 할 일은 - [ ] 체크박스로 */
   body: string;
   clips?: Clip[];

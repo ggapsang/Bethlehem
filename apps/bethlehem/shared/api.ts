@@ -26,9 +26,17 @@ export interface RecentItem {
   at: string;
 }
 
+export interface RecentUrl {
+  url: string;
+  dir: string;
+  at: string;
+}
+
 export interface BethlehemApi {
   runtime(): Promise<Runtime>;
-  recent(): Promise<{ files: RecentItem[]; folders: RecentItem[]; workspaces: RecentItem[] }>;
+  recent(): Promise<{ files: RecentItem[]; folders: RecentItem[]; workspaces: RecentItem[]; urls: RecentUrl[] }>;
+  /** URL 로 연 문서의 작업 폴더 (프로그램 안) */
+  wsForUrl(url: string): Promise<{ dir: string; exists: boolean }>;
   /* 단일 문서 */
   openFile(): Promise<OpenedFile | null>;
   openPath(path: string): Promise<OpenedFile>;
@@ -64,6 +72,16 @@ export interface BethlehemApi {
   /* 화면 */
   capture(rect: { x: number; y: number; width: number; height: number }): Promise<{ bytes: Uint8Array; w: number; h: number } | null>;
   siteSnapshot(guestId: number): Promise<SiteSnapshot>;
+  /* 터미널 */
+  termStart(o: { cols: number; rows: number }): Promise<{ pid: number; reused: boolean }>;
+  termWrite(data: string): void;
+  termResize(o: { cols: number; rows: number }): void;
+  termKill(): void;
+  onTermData(cb: (data: string) => void): void;
+  onTermExit(cb: (code: number) => void): void;
+  formatDoc(): Promise<string>;
+  /** 바깥에서 작업 폴더 파일을 고쳤다 */
+  onWorkspaceChanged(cb: (file: string) => void): void;
   /* 창 */
   toggleDevTools(): void;
   onMenu(cb: (cmd: MenuCommand) => void): void;

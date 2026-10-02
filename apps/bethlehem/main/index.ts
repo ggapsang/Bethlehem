@@ -6,7 +6,8 @@
  * 돌고 이 API 에 닿지 않는다.
  */
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from 'electron';
-import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, watch } from 'node:fs';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -14,9 +15,10 @@ import type { EncodedBlob, MannaDoc } from '@core';
 import { packFolder, scanFolder, type Fetcher, type PackOptions } from '@core/node/pack';
 import { IMAGE_EXT, packImage } from './image';
 import { buildMenu } from './menu';
+import { killTerminal, setupTerminal } from './terminal';
 import { SITE_PARTITION, snapshotSite, watchSite } from './site';
 import {
-  bakeDist, isWorkspace, listReturned, markMerged, readReturned, readWorkspace, watchDir, writeWorkspace, type SourceLink,
+  bakeDist, isWorkspace, ownWrites, listReturned, markMerged, readReturned, readWorkspace, watchDir, writeWorkspace, type SourceLink,
 } from './workspace';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -34,7 +36,6 @@ app.setName('Terrarium');
 /** 실행본(run/)에서는 main 옆에, 소스 트리(out/)에서는 저장소 안의 자리에 있다 */
 const beside = (rel: string, inRepo: string) => (existsSync(join(here, '..', rel)) ? join(here, '..', rel) : join(root, inRepo));
 const ICON = beside('resources/icon-256.png', 'apps/bethlehem/resources/icon-256.png');
-export const GUIDE = beside('docs/USER_GUIDE.md', 'docs/USER_GUIDE.md');
 const EXT = 'terr.html';
 
 function grant(p: string): string {
@@ -72,6 +73,8 @@ interface Settings {
   recentFiles: Recent[];
   recentFolders: Recent[];
   recentWorkspaces: Recent[];
+  /** URL 로 연 문서 — 작업 폴더는 프로그램 안(userData/sites/)에 둔다 */
+  recentUrls?: { url: string; dir: string; at: string }[];
 }
 const SETTINGS = () => join(app.getPath('userData'), 'settings.json');
 let settings: Settings = { recentFiles: [], recentFolders: [], recentWorkspaces: [] };
@@ -83,6 +86,8 @@ async function loadSettings(): Promise<void> {
     /* 처음 실행 */
   }
   settings.recentWorkspaces ??= [];
+  settings.recentUrls ??= [];
+  for (const r of settings.recentUrls) granted.add(resolve(r.dir));
   // 예전에 사용자가 고른 경로다 — 다시 열 수 있게 허용
   for (const r of [...settings.recentFiles, ...settings.recentFolders, ...settings.recentWorkspaces]) granted.add(resolve(r.path));
 }
@@ -121,11 +126,46 @@ let current: { dir: string; docId: string; links: Record<string, SourceLink> } |
 const WS_NAMES = new Set(['terrarium.json', 'screens', 'blobs', 'dist', 'returned']);
 let unwatch: (() => void)[] = [];
 
+/** 작업 폴더를 바깥에서 고쳤는가 (터미널의 Claude Code · 편집기) — 우리가 쓴 내용과 다르면 렌더러에 알린다 */
+function watchOwnFiles(dir: string): () => void {
+  const changed = new Set<string>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let w: ReturnType<typeof watch> | null = null;
+  const check = async () => {
+    const files = [...changed];
+    changed.clear();
+    for (const rel of files) {
+      const abs = resolve(dir, rel);
+      const text = await readFile(abs, 'utf8').catch(() => null);
+      const mine = ownWrites.get(abs);
+      if (text === mine || (text === null && mine === undefined)) continue;
+      win?.webContents.send('workspace-changed', rel);
+      return;
+    }
+  };
+  try {
+    w = watch(dir, { recursive: true }, (_ev, file) => {
+      const rel = String(file ?? '');
+      if (!(rel === 'terrarium.json' || /^screens[\\/][^\\/]+[\\/](screen\.json|comments\.json|notes(-[^\\/]+)?\.md)$/.test(rel))) return;
+      changed.add(rel);
+      clearTimeout(timer);
+      timer = setTimeout(check, 700);
+    });
+  } catch {
+    return () => {};
+  }
+  return () => {
+    clearTimeout(timer);
+    w?.close();
+  };
+}
+
 function watchWorkspace(): void {
   unwatch.forEach((u) => u());
   unwatch = [];
   if (!current) return;
   const { dir } = current;
+  unwatch.push(watchOwnFiles(dir));
   unwatch.push(watchDir(join(dir, 'returned'), () => win?.webContents.send('returned-changed'), { delay: 800 }));
   for (const [id, link] of Object.entries(current.links)) {
     if (!existsSync(link.dir)) continue;
@@ -225,11 +265,28 @@ ipcMain.handle('runtime', async () => {
   }
 });
 
+/** URL 로 연 문서의 작업 폴더 — 사용자가 고르지 않는다. 주소마다 하나, 다시 열면 같은 폴더 */
+const SITES = () => join(app.getPath('userData'), 'sites');
+const inSites = (p: string) => !relative(SITES(), resolve(p)).startsWith('..');
+
 ipcMain.handle('recent', () => ({
   files: settings.recentFiles.filter((r) => existsSync(r.path)),
   folders: settings.recentFolders.filter((r) => existsSync(r.path)),
-  workspaces: settings.recentWorkspaces.filter((r) => existsSync(join(r.path, 'terrarium.json'))),
+  workspaces: settings.recentWorkspaces.filter((r) => existsSync(join(r.path, 'terrarium.json')) && !inSites(r.path)),
+  urls: (settings.recentUrls ?? []).filter((r) => existsSync(join(r.dir, 'terrarium.json'))),
 }));
+
+ipcMain.handle('ws-for-url', async (_e, url: string) => {
+  const u = new URL(url);
+  const slug = `${u.host}${u.pathname}`.replace(/[^a-z0-9가-힣.-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'site';
+  const hash = createHash('sha1').update(u.href).digest('hex').slice(0, 6);
+  const dir = join(SITES(), `${slug}-${hash}`);
+  await mkdir(dir, { recursive: true });
+  grant(dir);
+  settings.recentUrls = [{ url: u.href, dir, at: new Date().toISOString() }, ...(settings.recentUrls ?? []).filter((r) => r.url !== u.href)].slice(0, 10);
+  saveSettings().catch(() => {});
+  return { dir, exists: isWorkspace(dir) };
+});
 
 /* 단일 문서 */
 ipcMain.handle('open-file', async () => {
@@ -329,6 +386,8 @@ ipcMain.handle('pick-screen-files', async () => {
 });
 ipcMain.handle('read-doc', async (_e, p: string) => readFile(guard(p), 'utf8'));
 ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools());
+/** 터미널에서 Claude Code 를 띄울 때 읽힐 작업 폴더 형식 문서 */
+ipcMain.handle('format-doc', () => beside('resources/WORKSPACE_FORMAT.md', 'docs/WORKSPACE_FORMAT.md'));
 ipcMain.handle('pack-image', async (_e, path: string) => packImage(guard(path)));
 
 /** 폴더 고르기 — 비어 있지 않아도 된다. 무엇이 들었는지는 ws-inspect 로 본다 */
@@ -440,13 +499,16 @@ ipcMain.on('close-now', () => {
 });
 
 app.whenReady().then(async () => {
-  Menu.setApplicationMenu(buildMenu(() => win, GUIDE));
+  Menu.setApplicationMenu(buildMenu(() => win));
   await loadSettings();
   // 녹화 — 화면 공유를 요청하면 묻지 않고 이 창(요청한 프레임)을 건넨다
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     callback({ video: request.frame ?? undefined });
   });
+  setupTerminal(() => win, () => current?.dir ?? null);
   createWindow();
 });
+
+app.on('before-quit', () => killTerminal());
 
 app.on('window-all-closed', () => app.quit());

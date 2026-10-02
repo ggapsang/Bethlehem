@@ -2,7 +2,10 @@
 import { save } from '@manna/host';
 import { mode, paused, redo, screen, setTheme, stageScale, theme, togglePanel, undo, zoom, zoomStep } from '@manna/store';
 import type { MenuCommand } from '../../shared/api';
-import { addImageScreen, addScreenFromFolder, addScreensFromFiles, askUrl, host, openDocument, openFolder } from './session';
+import { addImageScreen, addScreenFromFolder, addScreensFromFiles, askUrl, host, openDocument, openFolder, reloadWorkspace, urlAsk } from './session';
+
+import { guideOpen } from './Guide';
+import { termOpen } from './Terminal';
 
 const api = window.bethlehem;
 
@@ -11,6 +14,9 @@ export function runMenu(cmd: MenuCommand): void {
   switch (cmd) {
     case 'open-folder': return void openFolder();
     case 'open-doc': return void openDocument();
+    case 'open-url': return void (urlAsk.value = { open: true });
+    case 'terminal': return void (termOpen.value = !termOpen.peek());
+    case 'reload': return void reloadWorkspace(true);
     case 'save': return void save(host, false);
     case 'save-as': return void save(host, true);
     case 'reveal-dist': return void api.wsReveal('dist');
@@ -29,5 +35,6 @@ export function runMenu(cmd: MenuCommand): void {
     case 'zoom-in': return zoomStep(1, stageScale.peek());
     case 'zoom-out': return zoomStep(-1, stageScale.peek());
     case 'zoom-fit': return void (zoom.value = null);
+    case 'guide': return void (guideOpen.value = !guideOpen.peek());
   }
 }

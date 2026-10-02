@@ -9,23 +9,23 @@ import { isManna, latest, mergeDoc, newDoc, nextScreenId, now, parseManna, refer
 import type { Host } from '@manna/host';
 import { buildHtml, flushAutosave, save, suggestedName } from '@manna/host';
 import {
-  addBlobs, blobs, dirty, doc, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, user, versionNo,
+  addBlobs, blobs, dirty, doc, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, undo, user, versionNo,
 } from '@manna/store';
-import type { RecentItem, Returned, SourceLink } from '../../shared/api';
+import type { RecentItem, RecentUrl, Returned, SourceLink } from '../../shared/api';
 
 const api = window.bethlehem;
 
-export type Mode = { kind: 'none' } | { kind: 'workspace'; dir: string } | { kind: 'file'; path: string };
+export type Mode = { kind: 'none' } | { kind: 'workspace'; dir: string; url?: string } | { kind: 'file'; path: string };
 export const mode = signal<Mode>({ kind: 'none' });
 export const links = signal<Record<string, SourceLink>>({});
 export const returned = signal<Returned[]>([]);
-export const recent = signal<{ files: RecentItem[]; folders: RecentItem[]; workspaces: RecentItem[] }>({ files: [], folders: [], workspaces: [] });
+export const recent = signal<{ files: RecentItem[]; folders: RecentItem[]; workspaces: RecentItem[]; urls: RecentUrl[] }>({ files: [], folders: [], workspaces: [], urls: [] });
 
 /** 화면 등록 대화상자 — 새 화면이거나 기존 화면의 새 버전 */
 export type ImportTarget = { dir: string; screenId?: string; entry?: string };
 export const importing = signal<ImportTarget | null>(null);
-/** URL 화면 추가 대화상자 */
-export const urlAsk = signal<{ screenId?: string } | null>(null);
+/** URL 대화상자 — 화면 추가(새 버전) 또는 URL 을 문서로 열기(open) */
+export const urlAsk = signal<{ screenId?: string; open?: boolean } | null>(null);
 
 const basename = (p: string) => p.split(/[\\/]/).pop() ?? p;
 const clean = (m: string) => m.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
@@ -33,13 +33,26 @@ const clean = (m: string) => m.replace(/^Error invoking remote method '[^']+': (
 /** 작업 폴더에 이미 쓴 블롭 — 새로 생긴 것만 보낸다 */
 let saved = new Set<string>();
 
+/** 지금 작업 폴더가 URL 로 연 문서면 그 주소 */
+export function placeUrl(): string | null {
+  const m = mode.value;
+  if (m.kind !== 'workspace') return null;
+  if (m.url) return m.url;
+  return recent.value.urls.find((r) => r.dir.toLowerCase() === m.dir.toLowerCase())?.url ?? null;
+}
+
 export function placeName(): string {
   const m = mode.value;
+  const u = placeUrl();
+  if (u) {
+    const x = new URL(u);
+    return x.host + (x.pathname === '/' ? '' : x.pathname);
+  }
   return m.kind === 'workspace' ? basename(m.dir) : m.kind === 'file' ? basename(m.path) : '새 문서';
 }
 
 export async function refreshRecent(): Promise<void> {
-  recent.value = await api.recent().catch(() => ({ files: [], folders: [], workspaces: [] }));
+  recent.value = await api.recent().catch(() => ({ files: [], folders: [], workspaces: [], urls: [] }));
 }
 
 /* ── 저장 ─────────────────────────────────────────────────────────────── */
@@ -141,6 +154,37 @@ export async function openWorkspace(dir: string): Promise<boolean> {
   }
 }
 
+/** URL 을 문서로 연다 — 탭에 덧붙이지 않고 그 주소만의 문서. 작업 폴더는 프로그램 안에 두고, 같은 주소를 다시 열면 이어서 */
+export async function openUrl(url: string): Promise<boolean> {
+  try {
+    await flushAutosave(host).catch(() => {});
+    const { dir, exists } = await api.wsForUrl(url);
+    await refreshRecent();
+    const withUrl = (ok: boolean) => {
+      const m = mode.peek();
+      if (ok && m.kind === 'workspace') mode.value = { ...m, url };
+      return ok;
+    };
+    if (exists) return withUrl(await openWorkspace(dir));
+    const keep = { d: doc.peek(), b: blobs, m: mode.peek(), f: fileName.peek() };
+    const d = newDoc();
+    const u = new URL(url);
+    d.meta.title = u.host + (u.pathname === '/' ? '' : u.pathname.replace(/\/$/, ''));
+    loadDocument(d, new Map(), null);
+    links.value = {};
+    if (!(await createWorkspace(dir, true))) {
+      loadDocument(keep.d, keep.b, keep.f);
+      mode.value = keep.m;
+      return false;
+    }
+    addSiteScreen(url, d.meta.title);
+    return withUrl(true);
+  } catch (e) {
+    notify(clean((e as Error).message), 'error');
+    return false;
+  }
+}
+
 /** 여러 테라리움 문서가 든 폴더 — 어느 것을 풀지 고른다 */
 export const docAsk = signal<{ dir: string; docs: { path: string; name: string; at: string; title?: string }[] } | null>(null);
 
@@ -193,7 +237,7 @@ export async function unpackInto(dir: string, docPath: string): Promise<boolean>
 }
 
 /** 지금 문서를 작업 폴더에 풀어 두고 이어서 작업한다. 폴더는 비어 있지 않아도 된다 */
-export async function createWorkspace(dir?: string): Promise<boolean> {
+export async function createWorkspace(dir?: string, quiet = false): Promise<boolean> {
   try {
     const m = mode.peek();
     const target = dir ?? (await api.wsPick({
@@ -212,7 +256,7 @@ export async function createWorkspace(dir?: string): Promise<boolean> {
     await bake(target);
     dirty.value = false;
     afterLoad();
-    notify(`작업 폴더 — ${basename(target)}`);
+    if (!quiet) notify(`작업 폴더 — ${basename(target)}`);
     return true;
   } catch (e) {
     notify(clean((e as Error).message), 'error');
@@ -435,6 +479,34 @@ export async function mergeReturned(name: string): Promise<void> {
 /* ── 이벤트 ───────────────────────────────────────────────────────── */
 
 api.onReturnedChanged(() => refreshReturned());
+
+/** 바깥(터미널의 Claude Code · 편집기)에서 작업 폴더를 고쳤다 — 다시 불러온다. 되돌리기로 되돌릴 수 있다 */
+export async function reloadWorkspace(force = false): Promise<void> {
+  const m = mode.peek();
+  if (m.kind !== 'workspace') return;
+  if (dirty.peek() && !force) {
+    notify('바깥에서 작업 폴더가 바뀌었습니다. 아직 저장하지 않은 고침이 있어 바로 불러오지 않았습니다.', 'info', { label: '바깥 것으로 다시 불러오기', run: () => reloadWorkspace(true) });
+    return;
+  }
+  try {
+    const data = await api.wsOpen(m.dir);
+    addBlobs(data.blobs);
+    for (const [sha] of data.blobs) saved.add(sha);
+    links.value = data.links;
+    const same = JSON.stringify(data.doc) === JSON.stringify(doc.peek());
+    if (same) return;
+    mutate((d: MannaDoc) => {
+      for (const k of Object.keys(d)) delete (d as unknown as Record<string, unknown>)[k];
+      Object.assign(d, JSON.parse(JSON.stringify(data.doc)));
+    }, { label: '바깥에서 바뀐 작업 폴더' });
+    const sid = screenId.peek();
+    if (sid && !doc.peek().screens.some((s) => s.id === sid) && doc.peek().screens[0]) selectScreen(doc.peek().screens[0]!.id);
+    notify('바깥에서 바뀐 작업 폴더를 다시 불러왔습니다.', 'info', { label: '되돌리기', run: undo });
+  } catch (e) {
+    notify(`다시 불러오지 못했습니다: ${clean((e as Error).message)}`, 'error');
+  }
+}
+api.onWorkspaceChanged(() => reloadWorkspace());
 api.onSourceChanged(({ screenId: id }) => {
   const l = links.peek()[id];
   const s = doc.peek().screens.find((x) => x.id === id);

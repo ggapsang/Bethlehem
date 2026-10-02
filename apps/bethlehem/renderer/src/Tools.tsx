@@ -4,7 +4,7 @@ import type { ComponentChildren } from 'preact';
 import { ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Plus, Trash2 } from 'lucide-preact';
 import { rev, screen } from '@manna/store';
 import {
-  addImageScreen, addScreenFromFolder, addScreensFromFiles, askUrl, createWorkspace, mergeReturned, mode, openDocument, openFolder, placeName, recent, refreshRecent,
+  addImageScreen, addScreenFromFolder, addScreensFromFiles, openUrl, urlAsk, askUrl, createWorkspace, mergeReturned, mode, openDocument, openFolder, placeName, placeUrl, recent, refreshRecent,
   refreshReturned, removeScreen, returned,
 } from './session';
 
@@ -76,7 +76,7 @@ export function DocTools() {
     <>
       <Menu
         title="작업 폴더 · 문서"
-        icon={m.kind === 'file' ? <FileText {...ICON} /> : <FolderGit2 {...ICON} />}
+        icon={m.kind === 'file' ? <FileText {...ICON} /> : placeUrl() ? <Globe {...ICON} /> : <FolderGit2 {...ICON} />}
         label={placeName()}
         cls="tb-place"
         onOpen={refreshRecent}
@@ -88,6 +88,9 @@ export function DocTools() {
             </button>
             <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); openDocument(); }}>
               <FolderOpen {...ICON} size={16} /> 테라리움 문서 열기…
+            </button>
+            <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); urlAsk.value = { open: true }; }}>
+              <Globe {...ICON} size={16} /> URL 열기…
             </button>
             {m.kind === 'workspace' && (
               <>
@@ -106,6 +109,16 @@ export function DocTools() {
             <div class="popover-sep" />
             <span class="popover-label"><History {...ICON} size={14} /> 최근 작업 폴더</span>
             <RecentList items={recent.value.workspaces} empty="최근 작업 폴더가 없습니다." onPick={(p) => { close(); openFolder(p); }} />
+            {recent.value.urls.length > 0 && (
+              <>
+                <span class="popover-label"><History {...ICON} size={14} /> 최근 URL</span>
+                {recent.value.urls.map((r) => (
+                  <button key={r.url} type="button" role="menuitem" class="popover-item popover-recent" title={r.url} onClick={() => { close(); openUrl(r.url); }}>
+                    <span class="ellipsis">{r.url.replace(/^https?:\/\//, '')}</span>
+                  </button>
+                ))}
+              </>
+            )}
             <span class="popover-label"><History {...ICON} size={14} /> 최근 문서</span>
             <RecentList items={recent.value.files} empty="최근에 연 문서가 없습니다." onPick={(p) => { close(); openDocument(p); }} />
           </>

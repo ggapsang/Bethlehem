@@ -26,7 +26,7 @@ function blank(body: string): Annotation {
 }
 
 /** 지금 잡은 대상(draft)에 Comment 를 단다. 피커를 켤 때 찍어 둔 화면(still)은 이 Comment 의 shot 이 된다 */
-export async function addFromDraft(body: string): Promise<string | null> {
+export async function addFromDraft(body: string, title = ''): Promise<string | null> {
   const d = draft.peek();
   const s = screen.peek();
   const v = version.peek();
@@ -44,6 +44,7 @@ export async function addFromDraft(body: string): Promise<string | null> {
   const clip = draftClip.peek();
   const a: Annotation = {
     ...blank(body),
+    ...(title.trim() ? { title: title.trim() } : {}),
     anchor: { fp: p.fp, ...(p.region ? { region: p.region } : {}), trail: p.trail, props: p.props, path: p.path, ...(stagePage.peek() ? { page: stagePage.peek() } : {}) },
     ...(capture && shot ? { kind: 'capture' as const } : {}),
     ...(shot ? { shot } : {}),
@@ -113,6 +114,11 @@ export function addScreenComment(body = ''): string | null {
   return a.id;
 }
 
+export function editTitle(a: Annotation, title: string): void {
+  if (needName()) return;
+  mutate(() => setField(a, 'title', title.trim() || undefined, user.value!), { label: 'Comment 제목', merge: `title:${a.id}` });
+}
+
 export function editBody(a: Annotation, body: string): void {
   if (needName()) return;
   mutate(() => setField(a, 'body', body, user.value!), { label: 'Comment 수정', merge: `body:${a.id}` });
@@ -152,7 +158,55 @@ export function reorder(id: string, to: number): void {
 export function editNotes(text: string): void {
   const s = screen.peek();
   if (!s) return;
-  mutate(() => (s.notes = text), { label: '개요 수정', merge: `notes:${s.id}` });
+  mutate(() => (s.notes = text), { label: '노트 수정', merge: `notes:${s.id}` });
+}
+
+/* ── 자유 노트 탭 — 첫 탭은 notes(·notesTitle), 나머지는 moreNotes ─────────── */
+export const MAIN_NOTE = 'main';
+
+export function noteTabs(s: { notes: string; notesTitle?: string; moreNotes?: { id: string; title: string; body: string }[] }) {
+  return [{ id: MAIN_NOTE, title: s.notesTitle || '개요', body: s.notes }, ...(s.moreNotes ?? [])];
+}
+
+export function editNoteTab(id: string, body: string): void {
+  const s = screen.peek();
+  if (!s) return;
+  if (id === MAIN_NOTE) return editNotes(body);
+  const t = s.moreNotes?.find((x) => x.id === id);
+  if (t) mutate(() => (t.body = body), { label: '노트 수정', merge: `note:${s.id}:${id}` });
+}
+
+export function renameNoteTab(id: string, title: string): void {
+  const s = screen.peek();
+  const v = title.trim();
+  if (!s || !v) return;
+  mutate(() => {
+    if (id === MAIN_NOTE) s.notesTitle = v === '개요' ? undefined : v;
+    else {
+      const t = s.moreNotes?.find((x) => x.id === id);
+      if (t) t.title = v;
+    }
+  }, { label: '노트 이름' });
+}
+
+export function addNoteTab(): string | null {
+  const s = screen.peek();
+  if (!s) return null;
+  const id = uid().slice(0, 8);
+  mutate(() => {
+    const n = (s.moreNotes?.length ?? 0) + 2;
+    (s.moreNotes ??= []).push({ id, title: `노트 ${n}`, body: '' });
+  }, { label: '노트 탭 추가' });
+  return id;
+}
+
+export function removeNoteTab(id: string): void {
+  const s = screen.peek();
+  if (!s || id === MAIN_NOTE) return;
+  mutate(() => {
+    s.moreNotes = (s.moreNotes ?? []).filter((x) => x.id !== id);
+    if (!s.moreNotes.length) delete s.moreNotes;
+  }, { label: '노트 탭 삭제' });
 }
 
 /* ── 녹화 ─────────────────────────────────────────────────────────────── */

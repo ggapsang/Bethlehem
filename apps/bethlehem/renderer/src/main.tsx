@@ -13,6 +13,8 @@ import { runMenu } from './menu';
 import { AddScreenMenu, DeleteScreenButton, DocTools, NewVersionMenu } from './Tools';
 import { UrlDialog } from './UrlDialog';
 import { DocChoice, Welcome } from './Welcome';
+import { GuideWindow, guideOpen } from './Guide';
+import { TerminalPanel, termOpen } from './Terminal';
 
 function Bethlehem() {
   const [dropping, setDropping] = useState(false);
@@ -26,6 +28,14 @@ function Bethlehem() {
   useEffect(() => {
     if (!user.value) askName.value = true;
     start();
+    // Ctrl+` — 터미널 펴기/접기 (VS Code 와 같다)
+    const onTermKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && (e.key === '`' || e.code === 'Backquote')) {
+        e.preventDefault();
+        termOpen.value = !termOpen.peek();
+      }
+    };
+    window.addEventListener('keydown', onTermKey, true);
     window.bethlehem.onMenu(runMenu);
     const over = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes('Files')) return;
@@ -50,10 +60,11 @@ function Bethlehem() {
 
   return (
     <>
-      <App host={host} start={<DocTools />} tabTools={<AddScreenMenu />} versionTools={<NewVersionMenu />} screenActions={<DeleteScreenButton />} empty={<Welcome />} />
+      <App host={host} start={<DocTools />} tabTools={<AddScreenMenu />} versionTools={<NewVersionMenu />} screenActions={<DeleteScreenButton />} empty={<Welcome />} bottom={<TerminalPanel />} />
       {importing.value && <ImportDialog key={importing.value.dir + importing.value.screenId} target={importing.value} />}
-      {urlAsk.value && <UrlDialog screenId={urlAsk.value.screenId} />}
+      {urlAsk.value && <UrlDialog screenId={urlAsk.value.screenId} open={urlAsk.value.open} />}
       {docAsk.value && <DocChoice />}
+      {guideOpen.value && <GuideWindow />}
       {dropping && <div class="drop-veil">폴더 · 테라리움 문서 · 그림을 놓으세요</div>}
     </>
   );

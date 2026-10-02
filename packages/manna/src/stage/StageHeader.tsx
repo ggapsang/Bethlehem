@@ -107,7 +107,7 @@ export function StageHeader({ scr, v, page, onHome, scale, versionTools, screenA
         </button>
       )}
       {fullscreen.value && (
-        <button type="button" class={`btn-icon ${panelOpen.value ? 'is-on-soft' : ''}`} aria-label="개요·Comment 패널" onClick={() => togglePanel()}>
+        <button type="button" class={`btn-icon ${panelOpen.value ? 'is-on-soft' : ''}`} aria-label="노트·Comment 패널" onClick={() => togglePanel()}>
           <PanelRight {...ICON} />
         </button>
       )}
