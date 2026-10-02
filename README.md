@@ -32,10 +32,15 @@ npm run bake -- example/proto out/proto.terr.html --entry "index - old.html,inde
 
 ```sh
 npm run typecheck
-npm test               # 코어 단위 테스트
-npm run test:e2e       # 구운 문서를 설치된 Chrome 에서 file:// 로 열어 확인
-npm run test:e2e:app   # 작성 프로그램(Electron) — 작업 폴더 · Comment · URL 화면 · 병합 · 다시 켜기
+npm test                         # 코어 단위 테스트
+npm run test:smoke               # 바뀐 코드에 걸린 기능만 (평소에는 이것)
+npm run test:smoke -- --dry      # 무엇이 걸리는지만 보기
+npm run test:smoke -- doc-panel  # 이름으로 골라 돌리기 (--list 로 목록, --all 로 전부)
+npm run test:e2e                 # 회귀 — 구운 문서를 처음부터 끝까지 (내보내기 전에)
+npm run test:e2e:app             # 회귀 — 작성 프로그램을 처음부터 끝까지 (내보내기 전에)
 ```
+
+**스모크**(`tests/smoke/`)는 기능마다 따로 도는 짧은 확인이다. 하나하나가 새 브라우저 맥락 · 새 작업 폴더에서 시작하므로 앞의 것에 기대지 않는다. 각 스모크는 자기에게 걸린 파일 목록을 들고 있고, `test:smoke` 는 git 에서 바뀐 파일(커밋 안 한 것, 없으면 마지막 커밋)을 보고 그것에 걸린 스모크만 고른다. 필요한 빌드만 한다(문서 스모크만이면 런타임 빌드 + 굽기). 새 기능을 넣으면 그 기능의 스모크와 파일 목록도 같이 넣는다.
 
 E2E 는 설치된 Chrome(없으면 Edge)을 쓴다. URL 화면 테스트는 `http://semicon-xms.xdt.com/monitor` 에 접속할 수 있어야 한다. 다른 위치라면 `CHROME_PATH` 로 지정한다. 스크린샷은 `out/e2e/` 에 남는다.
 

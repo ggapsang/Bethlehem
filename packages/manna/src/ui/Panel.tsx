@@ -7,7 +7,7 @@ import { displayNo } from '@core';
 import { MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, reorder } from '../actions';
 import type { Host } from '../host';
 import {
-  annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible,
+  version, annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible,
 } from '../store';
 import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
 import { ago, markState } from './labels';
@@ -237,7 +237,7 @@ function Comments({ scr }: { scr: Screen }) {
 function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip: (e: PointerEvent, id: string) => void; dragging?: boolean }) {
   rev.value;
   const sel = selected.value === a.id;
-  const st = markState(a, visible.value);
+  const st = markState(a, visible.value, version.value?.source?.mode === 'site');
   const shown = st !== 'other';
   const ref = useRef<HTMLLIElement>(null);
   useEffect(() => {

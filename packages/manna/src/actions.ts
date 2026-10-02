@@ -10,6 +10,7 @@ import {
 
 /** 영역 Comment 를 캡처로 다는가 — 찍을 그림이 있고(작성 프로그램), 그림 화면이 아니고, 영역을 그렸을 때 */
 export function captureMode(): boolean {
+  if (version.peek()?.source?.mode === 'site') return snipAvailable(); // URL 화면은 늘 캡처
   return snipAvailable() && snipMode.peek() === 'capture';
 }
 

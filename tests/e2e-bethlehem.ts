@@ -292,20 +292,33 @@ async function main() {
     .executeJavaScript('(() => { const e = [...document.querySelectorAll("body *")].find((x) => { const r = x.getBoundingClientRect(); return r.width > 80 && r.width < 600 && r.height > 20 && r.height < 120 && r.top < 300 && !x.shadowRoot; }); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()'));
   if (hdr) {
     await ctrlPick(page, await stagePoint(page, hdr.x, hdr.y));
+    if (!(await until(() => page.$('.popover-card .composer'), 5000))) {
+      console.log('  ! 사이트 위 첫 피커가 잡히지 않아 다시 시도합니다');
+      await ctrlPick(page, await stagePoint(page, hdr.x, hdr.y));
+    }
     await page.waitForSelector('.popover-card .composer');
-    check('URL 화면은 요소를 골라도 캡처가 기본', (await page.getAttribute('.snip-btn:has-text("캡처")', 'aria-pressed').catch(() => null)) === 'true');
+    check('URL 화면은 요소를 골라도 캡처', (await page.getAttribute('.snip-btn:has-text("캡처")', 'aria-pressed').catch(() => null)) === 'true');
+    check('URL 화면에는 "화면에 붙이기" 가 없다', !(await page.$('.snip-btn:has-text("화면에 붙이기")')));
     await page.keyboard.press('Escape');
     await page.click('.popover-card button[aria-label="취소"]').catch(() => {});
   }
   // 지도 위 영역에 Comment
   await ctrlPick(page, await stagePoint(page, 800, 450), await stagePoint(page, 1100, 650));
   await page.waitForSelector('.popover-card .composer');
-  await page.click('.snip-btn:has-text("화면에 붙이기")'); // 받는 사람 문서에서도 지도 위에 마커가 붙게
   await page.click('.popover-card .composer .cm-content');
   await page.keyboard.type('지도 — 이 구역 차량 아이콘이 겹칩니다');
   await page.keyboard.press('Control+Enter');
   const c2 = await until(() => comments('SCR-002')[0], 8000);
-  check('URL 화면 Comment 에도 달 때 화면이 붙는다', !!c2?.shot?.sha);
+  check('URL 화면 Comment 는 화면 전체를 찍은 캡처', !!c2?.shot?.sha && c2?.kind === 'capture' && !!c2?.shot?.box, JSON.stringify({ kind: c2?.kind, box: !!c2?.shot?.box }));
+  const liveMarks = await page.$$eval('.marker', (ms) => ms.filter((m) => (m as HTMLElement).style.display === 'flex').length);
+  check('URL 화면에는 실시간 마커가 붙지 않는다', liveMarks === 0, `${liveMarks}개`);
+  await page.keyboard.press('Escape');
+  await page.click('.sc-bar .seg-btn:has-text("캡처 모음")');
+  check('프로그램에서도 URL 화면을 캡처 모음으로 본다', !!(await until(() => page.$('.gallery .gal-item .gal-shot img'), 5000)) && !(await page.$('webview.stage-webview')));
+  await page.screenshot({ path: resolve(OUT, 'b5-site-gallery.png') });
+  await page.click('.sc-bar .seg-btn:has-text("실시간")');
+  check('실시간으로 돌아오면 사이트가 다시 돈다', !!(await until(() => page.$('webview.stage-webview'), 5000)));
+  await until(async () => !(await page.$('.stage-note')), 30000);
   check('지도 위 드래그는 지도 요소 안의 영역으로 잡힌다', !!c2?.anchor?.region && /xms-fe-map-monitor/i.test(c2?.anchor?.fp?.tag ?? ''), c2?.anchor?.fp?.tag);
   const snap = await until(() => {
     const sj = existsSync(join(WS, 'screens', 'SCR-002', 'screen.json')) ? readJson(join(WS, 'screens', 'SCR-002', 'screen.json')) : null;
@@ -421,7 +434,7 @@ async function main() {
   });
   check('지도 자리에 사본 그림이 들어 있다 (빈칸이 아니다)', map.startsWith('url("blob:'), map);
   const marks = await rp.$$eval('.marker', (ms) => ms.filter((m) => (m as HTMLElement).style.display === 'flex').length);
-  check('받은 문서에서도 지도 Comment 마커가 붙는다', marks >= 1, `${marks}개`);
+  check('사본에도 캡처는 마커로 붙지 않는다 (캡처는 모음에서 본다)', marks === 0, `${marks}개`);
   await rp.screenshot({ path: resolve(OUT, 'b7-recipient-site.png') });
   await browser.close();
 

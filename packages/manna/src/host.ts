@@ -2,7 +2,7 @@
  * 저장은 둘 다 "라이브 문서"다 — 고치면 잠시 뒤 자동으로 저장된다. 저장 버튼은 지금 바로, 다른 이름으로는 사본.
  */
 import type { EncodedBlob, ExternalEntry, MannaDoc, Runtime } from '@core';
-import { referencedShas, serializeManna } from '@core';
+import { referencedShas, serializeManna, mergeDoc } from '@core';
 import { idbGet, idbPut } from './idb';
 import { blobs, dirty, doc, fileName, notify, rev, saveState, user } from './store';
 
@@ -135,16 +135,37 @@ interface Draft {
   doc: MannaDoc;
   blobs: [string, EncodedBlob][];
   savedAt: string;
+  /** 이 초안을 시작한 파일의 판(meta.updatedAt) — 작성자가 새 판을 보내면 다르다 */
+  base?: string;
 }
+
+/** 지금 연 파일의 판 */
+let fileBase = '';
 
 /** 문서를 열 때 — 이 브라우저에 더 새 초안이 있으면 이어서, 기억한 파일 핸들이 있으면 다시 쓴다 */
 export async function browserResume(apply: (d: MannaDoc, extra: [string, EncodedBlob][]) => void): Promise<void> {
   baseShas = new Set(blobs.keys());
   const d = doc.peek();
+  fileBase = d.meta.updatedAt;
   const draft = await idbGet<Draft>('drafts', d.id);
-  if (draft && draft.doc.meta.updatedAt > d.meta.updatedAt) {
-    apply(draft.doc, draft.blobs);
-    notify(`이 브라우저에 남아 있던 변경(${new Date(draft.savedAt).toLocaleString('ko-KR')})을 이어서 엽니다.`);
+  if (draft && draft.base === d.meta.updatedAt) {
+    // 같은 파일을 다시 열었다 — 이 브라우저에서 하던 것을 이어서
+    if (draft.doc.meta.updatedAt > d.meta.updatedAt) {
+      apply(draft.doc, draft.blobs);
+      notify(`이 브라우저에 남아 있던 변경(${new Date(draft.savedAt).toLocaleString('ko-KR')})을 이어서 엽니다.`);
+    }
+  } else if (draft) {
+    // 다른 판의 파일이다(작성자가 새로 보냈다) — 파일을 그대로 열고, 이 브라우저에서 단 것만 그 위에 합친다.
+    // 예전 초안이 새 판을 덮으면 새 화면 · 새 Comment 가 사라진다
+    const merged: MannaDoc = JSON.parse(JSON.stringify(d));
+    const mine: MannaDoc = JSON.parse(JSON.stringify(draft.doc));
+    mine.origin = { by: user.peek() ?? mine.origin?.by ?? '수신자', at: draft.savedAt, baseUpdatedAt: draft.base ?? draft.savedAt };
+    const r = mergeDoc(merged, mine, blobs, new Map(draft.blobs));
+    const n = r.added + r.updated + r.replies + r.clips;
+    if (n > 0) {
+      apply(merged, draft.blobs);
+      notify(`새 판을 열고, 이 브라우저에서 예전 판에 단 것(Comment ${r.added} · 고침 ${r.updated} · 답글 ${r.replies})을 합쳤습니다.`);
+    }
   }
   const h = await idbGet<FileHandle>('handles', d.id);
   if (h) {
@@ -192,7 +213,7 @@ export const browserHost: Host = {
     const d = doc.peek();
     const used = referencedShas(d);
     const extra = [...blobs].filter(([sha]) => !baseShas.has(sha) && used.has(sha));
-    await idbPut('drafts', d.id, { doc: JSON.parse(JSON.stringify(d)), blobs: extra, savedAt: new Date().toISOString() } satisfies Draft);
+    await idbPut('drafts', d.id, { doc: JSON.parse(JSON.stringify(d)), blobs: extra, savedAt: new Date().toISOString(), base: fileBase } satisfies Draft);
     if (handle) {
       await writeHandle(handle, await buildHtml(browserHost));
       saveState.value = { kind: 'saved', where: handle.name, at: Date.now() };

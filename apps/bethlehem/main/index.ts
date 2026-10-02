@@ -510,5 +510,13 @@ app.whenReady().then(async () => {
 });
 
 app.on('before-quit', () => killTerminal());
+// 터미널(conpty)이 남아 있으면 프로세스가 끝나지 않는다 — 셸을 끊고, 그래도 남으면 잠깐 뒤 끝낸다
+app.on('will-quit', () => {
+  killTerminal();
+  setTimeout(() => process.exit(0), 1500).unref();
+});
 
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => {
+  killTerminal();
+  app.quit();
+});

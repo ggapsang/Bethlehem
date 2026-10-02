@@ -4,7 +4,7 @@
 import { Camera } from 'lucide-preact';
 import type { Annotation } from '@core';
 import { displayNo } from '@core';
-import { annotations, hovered, popHidden, requestReveal, rev, screen, selected, shotView, visible } from '../store';
+import { annotations, hovered, popHidden, requestReveal, rev, screen, selected, shotView, version, visible } from '../store';
 import { MARK_LABEL, markState, type MarkState } from '../ui/labels';
 import { plainText } from '../ui/editor/MarkdownEditor';
 
@@ -12,7 +12,7 @@ const ORDER: MarkState[] = ['live', 'other', 'capture', 'screen'];
 
 /** 패널 카드와 마커 줄이 같이 쓰는 "Comment 열기" */
 export function openComment(a: Annotation): void {
-  const st = markState(a, visible.peek());
+  const st = markState(a, visible.peek(), version.peek()?.source?.mode === 'site');
   selected.value = a.id;
   popHidden.value = false;
   shotView.value = true;
@@ -25,7 +25,8 @@ export function MarkerStrip() {
   const list = annotations.value;
   const vis = visible.value;
   if (!scr || !list.length) return null;
-  const states = list.map((a) => markState(a, vis));
+  const site = version.value?.source?.mode === 'site';
+  const states = list.map((a) => markState(a, vis, site));
   const used = ORDER.filter((k) => states.includes(k));
   return (
     <div class="mk-strip" role="toolbar" aria-label="Comment 번호">

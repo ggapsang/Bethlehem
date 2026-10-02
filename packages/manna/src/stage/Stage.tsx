@@ -112,7 +112,10 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
   const isImage = v?.source?.mode === 'image';
   /* 받는 사람 쪽 URL 화면 — 사이트를 띄울 수 없으니 캡처 · 클립 모음으로. 사본이 있으면 바꿔 볼 수 있다 */
   const [copyView, setCopyView] = useState(false);
-  const gallery = !host.site && v?.source?.mode === 'site' && !copyView;
+  /* 작성 프로그램도 같은 캡처 모음을 볼 수 있다 — URL 화면의 [실시간 | 캡처 모음] */
+  const [galleryView, setGalleryView] = useState(false);
+  const isSite = v?.source?.mode === 'site';
+  const gallery = isSite && (host.site ? galleryView : !copyView);
   const hasCopy = !!v && v.source?.mode === 'site' && v.external.length > 0; // 사본은 그 페이지와 리소스를 external 로 담는다
   /* 지금 보고 있는 페이지 — 폴더 화면은 패키지 안의 다른 HTML 로 옮겨 갈 수 있고, URL 화면은 사이트 안에서 이동한다 */
   const [page, setPage] = useState<string | null>(null);
@@ -574,12 +577,13 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
       <ScreenTabs tools={tabTools} canRename={host.author} />
       <div class="full-hot" aria-hidden="true" />
       <div class="stage-top">
-      <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} onReload={reloadScreen} scale={fit.s} versionTools={versionTools} screenActions={screenActions} />
+      <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} onReload={reloadScreen}
+        siteView={host.site && isSite ? { gallery: galleryView, set: setGalleryView } : undefined} scale={fit.s} versionTools={versionTools} screenActions={screenActions} />
       <MarkerStrip />
       </div>
     {gallery ? (
       <div class="stage stage-gallery">
-        <SiteGallery host={host} scr={scr} v={v} hasCopy={hasCopy} onCopy={() => setCopyView(true)} />
+        <SiteGallery host={host} scr={scr} v={v} hasCopy={host.site ? true : hasCopy} copyLabel={host.site ? '실시간 사이트 보기' : '마지막 사본 보기'} onCopy={() => (host.site ? setGalleryView(false) : setCopyView(true))} />
       </div>
     ) : (
     <div class={`stage ${scrolls ? 'stage-scroll' : ''}`} ref={area} onWheel={onStageWheel}>
@@ -638,19 +642,19 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
         <div class="hl-box hl-pick" ref={pickBox} />
         <div class="hl-box hl-drag" ref={dragBox} />
         <div class="marker-layer" ref={markers} data-color={markerColor} data-labels={markerLabels.value ? 'on' : 'off'}>
-          {list.filter((a) => a.anchor && a.kind !== 'capture').map((a) => <Marker key={a.id} a={a} scr={scr} />)}
+          {list.filter((a) => a.anchor && a.kind !== 'capture' && v.source?.mode !== 'site').map((a) => <Marker key={a.id} a={a} scr={scr} />)}
         </div>
         {(loading || revealing.value) && !error && <div class="stage-note" aria-label="불러오는 중"><span class="spinner" /></div>}
         {showShot && (
           <div class="stage-badge stage-badge-shot">
-            <span title="이 Comment 를 달 때 찍어 둔 화면입니다. 지금 화면과 다를 수 있습니다.">{sel?.kind === 'capture' ? '캡처' : 'Comment 를 달 때 찍은 화면'}{sel?.createdAt ? ` · ${ago(sel.createdAt)}` : ''}</span>
+            <span title="이 Comment 를 달 때 찍어 둔 화면입니다. 지금 화면과 다를 수 있습니다.">{sel?.kind === 'capture' || v.source?.mode === 'site' ? '캡처' : 'Comment 를 달 때 찍은 화면'}{sel?.createdAt ? ` · ${ago(sel.createdAt)}` : ''}</span>
             <button
               type="button"
               class="badge-btn"
               onClick={() => {
                 shotView.value = false;
                 // 캡처는 마커가 없다 — 지금 화면에서 그 자리를 찾아가 박스로 보인다
-                if (sel?.kind === 'capture' && !rects.current[sel.id]?.[4]) requestReveal(sel.id);
+                if ((sel?.kind === 'capture' || v.source?.mode === 'site') && !rects.current[sel!.id]?.[4]) requestReveal(sel!.id);
               }}
             >
               지금 화면 보기

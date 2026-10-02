@@ -13,6 +13,7 @@
     "bake": "npm run build:manna && tsx scripts/bake.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "test:smoke": "tsx tests/smoke/run.ts",
     "test:e2e": "npm run bake -- example/proto out/e2e/proto.terr.html --entry \"index - old.html,index.html\" && tsx tests/e2e.ts",
     "test:e2e:app": "npm run build --silent && tsx tests/e2e-bethlehem.ts",
     "build:agent": "vite build -c packages/manna/vite.agent.config.ts --logLevel warn"

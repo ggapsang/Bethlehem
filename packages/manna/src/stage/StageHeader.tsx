@@ -16,13 +16,15 @@ export interface StageHeaderProps {
   page: string | null;
   onHome: () => void;
   onReload: () => void;
+  /** URL 화면 (작성 프로그램) — 실시간 사이트와 캡처 모음 사이 */
+  siteView?: { gallery: boolean; set: (g: boolean) => void };
   /** 지금 실제 배율 (맞춤일 때도) */
   scale: number;
   versionTools?: ComponentChildren;
   screenActions?: ComponentChildren;
 }
 
-export function StageHeader({ scr, v, page, onHome, onReload, scale, versionTools, screenActions }: StageHeaderProps) {
+export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, versionTools, screenActions }: StageHeaderProps) {
   rev.value;
   const image = v.source?.mode === 'image';
   const site = v.source?.mode === 'site';
@@ -59,6 +61,12 @@ export function StageHeader({ scr, v, page, onHome, onReload, scale, versionTool
         <button type="button" class="sc-page" title="시작 페이지로" onClick={onHome}>
           <span class="mono">{v.entry}</span> › <span class="mono">{page}</span>
         </button>
+      )}
+      {siteView && (
+        <div class="seg seg-sm" role="radiogroup" aria-label="URL 화면 보기">
+          <button type="button" role="radio" aria-checked={!siteView.gallery} class="seg-btn" onClick={() => siteView.set(false)}>실시간</button>
+          <button type="button" role="radio" aria-checked={siteView.gallery} class="seg-btn" title="받는 사람이 보는 것과 같은 캡처 · 클립 모음" onClick={() => siteView.set(true)}>캡처 모음</button>
+        </div>
       )}
       <span class="grow" />
       <span class={`sc-state sc-${state.tone}`}><span class="sc-dot" aria-hidden="true" />{state.text}</span>

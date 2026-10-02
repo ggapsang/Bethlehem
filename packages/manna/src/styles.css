@@ -574,7 +574,7 @@ body.is-resizing-v iframe, body.is-resizing-v webview { pointer-events: none; }
 .badge-btn { border: 0; border-radius: var(--unit-2); padding: var(--unit-0-5) var(--unit-2); background: var(--white); color: var(--neutral-900); font-size: var(--text-xs); font-weight: 600; }
 .badge-btn:hover { background: var(--primary-50); }
 .popover-card {
-  position: absolute; z-index: 30; max-height: calc(100% - var(--unit-4)); overflow: auto;
+  position: fixed; z-index: 90; max-height: calc(100vh - 16px); overflow: auto;
   background: var(--bg-panel); border: 1px solid var(--border-strong); border-radius: var(--unit-3);
   box-shadow: var(--shadow-pop);
 }
@@ -610,7 +610,12 @@ body.is-resizing-v iframe, body.is-resizing-v webview { pointer-events: none; }
 .card-meta .author, .detail .author { font-weight: 600; color: var(--text-primary); }
 .checkmark { width: 16px; display: inline-grid; place-items: center; color: var(--accent-text); font-weight: 700; }
 /* 팝업 · 대화상자 — 오른쪽 아래 모서리를 끌어 크기를 바꾼다 */
-.popover-card { resize: both; min-width: 300px; min-height: 160px; max-width: calc(100% - 16px); }
+.popover-card { resize: both; min-width: 300px; min-height: 160px; max-width: calc(100vw - 16px); }
+/* 머리줄 — 끌어서 옮긴다 */
+.popover-card .pop-drag { cursor: move; user-select: none; }
+.popover-card .pop-drag button { cursor: pointer; }
+body.is-moving { cursor: move; user-select: none; }
+body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .popover-card .clip video { width: 100%; max-height: none; }
 .modal { resize: both; overflow: auto; min-width: 320px; }
 

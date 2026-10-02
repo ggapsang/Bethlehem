@@ -210,6 +210,22 @@ async function main() {
   await page.waitForSelector('.composer');
   check('작성 창에 대상 설명 같은 각주가 없다', !(await page.$('.composer .mono')) && !(await page.$('.composer label')));
   check('작성 창이 대상 옆 팝업으로 뜬다', !!(await page.$('.popover-card .composer')) && !(await page.$('.panel .composer')));
+  const onTop = (sel: string) => page.evaluate((q) => {
+    const el = document.querySelector(q) as HTMLElement | null;
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return r.bottom <= innerHeight && !!top && el.contains(top);
+  }, sel);
+  check('작성 창이 화면 영역에 갇히지 않고 "추가" 단추까지 보인다', await onTop('.popover-card .composer .btn-primary'));
+  const pb0 = (await (await page.$('.popover-card'))!.boundingBox())!;
+  const head = (await (await page.$('.popover-card .composer .pop-drag strong'))!.boundingBox())!;
+  await page.mouse.move(head.x + head.width / 2, head.y + head.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(head.x - 150, head.y + 60, { steps: 6 });
+  await page.mouse.up();
+  const pb1 = (await (await page.$('.popover-card'))!.boundingBox())!;
+  check('머리줄을 끌어 팝업을 옮긴다', Math.abs(pb1.x - (pb0.x - 150 - head.width / 2)) < 40 && pb1.y > pb0.y + 30, `${Math.round(pb0.x)},${Math.round(pb0.y)} → ${Math.round(pb1.x)},${Math.round(pb1.y)}`);
   await typeComposer(page, 'BAY-4 구역 — **경고 색** 대비가 약함');
   await page.click('.composer .btn-primary');
   await page.waitForTimeout(400);
@@ -376,6 +392,10 @@ async function main() {
   check('녹화한 클립이 선택한 Comment 에 붙고 재생된다', dur > 0, `폭 ${dur}px`);
 
   console.log('\n[9] 패널 폭 · 전체화면');
+  // 팝업은 이제 창 위에 떠 있어 손잡이를 가릴 수 있다 — 닫고 끈다
+  await page.mouse.click(5, 300);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
   const panelW = async () => (await (await page.$('.panel'))!.boundingBox())!.width;
   const w0 = await panelW();
   const sp = (await (await page.$('.splitter'))!.boundingBox())!;

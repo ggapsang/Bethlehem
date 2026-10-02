@@ -4,6 +4,7 @@
 import { ipcMain, type BrowserWindow } from 'electron';
 import { homedir } from 'node:os';
 import { existsSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import type { IPty } from '@lydell/node-pty';
 
 let pty: IPty | null = null;
@@ -13,22 +14,26 @@ function shell(): { file: string; args: string[] } {
   return { file: process.env.SHELL || '/bin/bash', args: ['-l'] };
 }
 
+/** 셸을 끝낸다. Windows 의 conpty 는 kill() 이 메인 스레드를 붙잡고 놓지 않는 일이 있어, 바깥에서 프로세스 트리째 끝낸다 */
 export function killTerminal(): void {
+  const p = pty;
+  pty = null;
+  if (!p) return;
   try {
-    pty?.kill();
+    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(p.pid), '/T', '/F'], { stdio: 'ignore', detached: true, windowsHide: true }).unref();
+    else p.kill();
   } catch {
     /* 이미 끝났다 */
   }
-  pty = null;
 }
 
 export function setupTerminal(getWin: () => BrowserWindow | null, getCwd: () => string | null): void {
   ipcMain.handle('term-start', async (_e, o: { cols: number; rows: number }) => {
     if (pty) return { pid: pty.pid, reused: true };
-    const { spawn } = await import('@lydell/node-pty');
+    const { spawn: spawnPty } = await import('@lydell/node-pty');
     const cwd = getCwd();
     const { file, args } = shell();
-    const p = spawn(file, args, {
+    const p = spawnPty(file, args, {
       name: 'xterm-256color',
       cols: Math.max(20, o.cols | 0),
       rows: Math.max(4, o.rows | 0),

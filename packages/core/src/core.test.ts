@@ -207,6 +207,7 @@ describe('merge', () => {
     const inc: MannaDoc = JSON.parse(JSON.stringify(base));
     inc.origin = { by: '수신자', at: '2026-10-02T00:00:00.000Z', baseUpdatedAt: base.meta.updatedAt };
     inc.screens[0].annotations[0].body = '수신자 본문';
+    inc.screens[0].annotations[0].updatedAt = new Date(Date.parse(base.meta.updatedAt) + 1000).toISOString();
     base.screens[0].annotations[0].body = '작성자가 다시 고침';
     base.screens[0].annotations[0].updatedAt = '2026-10-03T00:00:00.000Z';
     base.meta.updatedAt = '2026-10-03T00:00:00.000Z';
@@ -214,6 +215,23 @@ describe('merge', () => {
     expect(r.conflicts).toHaveLength(1);
     expect(base.screens[0].annotations[0].body).toBe('작성자가 다시 고침');
     expect(base.screens[0].annotations[0].replies.at(-1)!.body).toContain('수신자 본문');
+  });
+
+  it('예전 판의 초안은 고치지 않은 Comment 로 새 판을 덮지 않는다 — 새 Comment · 답글만 더한다', async () => {
+    const { mergeDoc } = await import('./merge');
+    const base = mk();
+    const old: MannaDoc = JSON.parse(JSON.stringify(base));
+    old.origin = { by: '수신자', at: base.meta.updatedAt, baseUpdatedAt: base.meta.updatedAt };
+    old.screens[0].annotations[0].replies.push({ id: 'r-new', author: '수신자', at: base.meta.updatedAt, body: '확인했습니다' });
+    // 작성자가 그 뒤로 본문을 고치고 화면을 하나 더 넣은 새 판
+    base.screens[0].annotations[0].body = '작성자의 새 본문';
+    base.screens[0].annotations[0].updatedAt = new Date(Date.parse(base.meta.updatedAt) + 5000).toISOString();
+    base.screens.push({ id: 'SCR-009', title: '새 화면', notes: '', versions: base.screens[0].versions, annotations: [] });
+    const r = mergeDoc(base, old, new Map(), new Map());
+    expect(base.screens[0].annotations[0].body).toBe('작성자의 새 본문');
+    expect(base.screens.some((s) => s.id === 'SCR-009')).toBe(true);
+    expect(r.replies).toBe(1);
+    expect(r.conflicts).toHaveLength(0);
   });
 
   it('다른 문서는 합치지 않는다', async () => {

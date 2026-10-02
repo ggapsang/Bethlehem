@@ -189,7 +189,8 @@ export async function bakeDist(dir: string, title: string, html: string): Promis
   await writeFile(out + '.tmp', html, 'utf8');
   await rename(out + '.tmp', out);
   if (ws && ws.dist && ws.dist !== name) await rm(join(dir, 'dist', ws.dist), { force: true });
-  if (ws && ws.dist !== name) await writeFile(join(dir, WS_FILE), pretty({ ...ws, dist: name }), 'utf8');
+  // 우리가 쓴 것으로 기억해야 바깥 변경으로 잘못 알아채지 않는다
+  if (ws && ws.dist !== name) await writeIfChanged(join(dir, WS_FILE), pretty({ ...ws, dist: name }));
   return out;
 }
 

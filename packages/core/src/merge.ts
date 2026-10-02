@@ -74,11 +74,13 @@ export function mergeDoc(base: MannaDoc, incoming: MannaDoc, baseBlobs: BlobStor
         continue;
       }
       // 제목 — 작성 프로그램 쪽이 그대로면 회신본 것으로 (충돌이면 이쪽 것을 둔다)
-      if ((ia.title ?? '') !== (a.title ?? '') && !(since && a.updatedAt > since)) {
+      // 회신본이 보낸 뒤로 이 Comment 를 고치지 않았다면 다른 것은 작성자 쪽이 새로운 것이다 — 그대로 둔다
+      const theyEdited = !since || ia.updatedAt > since;
+      if (theyEdited && (ia.title ?? '') !== (a.title ?? '') && !(since && a.updatedAt > since)) {
         a.history.push({ at: now(), by, field: 'title', from: a.title ?? '', to: ia.title ?? '' });
         a.title = ia.title;
       }
-      if (ia.body !== a.body) {
+      if (theyEdited && ia.body !== a.body) {
         const baseChanged = !!since && a.updatedAt > since;
         if (!baseChanged) {
           a.history.push({ at: now(), by, field: 'body', from: a.body, to: ia.body });

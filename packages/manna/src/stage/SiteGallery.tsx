@@ -31,7 +31,7 @@ function ClipVideo({ sha, type }: { sha: string; type: string }) {
   return src ? <video class="gal-clip" src={src} controls loop muted playsInline autoPlay /> : null;
 }
 
-export function SiteGallery({ host, scr, v, hasCopy, onCopy }: { host: Host; scr: Screen; v: ScreenVersion; hasCopy: boolean; onCopy: () => void }) {
+export function SiteGallery({ host, scr, v, hasCopy, copyLabel = '마지막 사본 보기', onCopy }: { host: Host; scr: Screen; v: ScreenVersion; hasCopy: boolean; copyLabel?: string; onCopy: () => void }) {
   rev.value;
   const list = annotations.value.filter((a) => a.shot || (a.clips?.length ?? 0) > 0);
   const rest = annotations.value.length - list.length;
@@ -46,7 +46,7 @@ export function SiteGallery({ host, scr, v, hasCopy, onCopy }: { host: Host; scr
         <a class="gal-url mono" href={url} target="_blank" rel="noreferrer" title="사이트를 브라우저로 열기">{url} <ExternalLink {...ICON} size={13} /></a>
         <span class="grow" />
         <span class="muted small"><ImageIcon {...ICON} size={13} /> 캡처 {list.length}{rest > 0 ? ` · 그 밖의 Comment ${rest}` : ''}</span>
-        {hasCopy && <button type="button" class="btn btn-ghost btn-bar" onClick={onCopy}>마지막 사본 보기</button>}
+        {hasCopy && <button type="button" class="btn btn-ghost btn-bar" onClick={onCopy}>{copyLabel}</button>}
       </div>
       {list.length === 0 ? (
         <p class="gal-empty muted">캡처가 없습니다.</p>

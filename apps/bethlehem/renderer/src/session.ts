@@ -9,7 +9,7 @@ import { isManna, latest, mergeDoc, newDoc, nextScreenId, now, parseManna, refer
 import type { Host } from '@manna/host';
 import { buildHtml, flushAutosave, save, suggestedName } from '@manna/host';
 import {
-  addBlobs, blobs, dirty, doc, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, undo, user, versionNo,
+  addBlobs, blobs, dirty, doc, draft, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, undo, user, versionNo,
 } from '@manna/store';
 import type { RecentItem, RecentUrl, Returned, SourceLink } from '../../shared/api';
 
@@ -484,7 +484,8 @@ api.onReturnedChanged(() => refreshReturned());
 export async function reloadWorkspace(force = false): Promise<void> {
   const m = mode.peek();
   if (m.kind !== 'workspace') return;
-  if (dirty.peek() && !force) {
+  // 쓰는 중(새 Comment 작성 · 아직 저장 안 한 고침)에는 덮어쓰지 않고 묻는다
+  if ((dirty.peek() || draft.peek()) && !force) {
     notify('바깥에서 작업 폴더가 바뀌었습니다. 아직 저장하지 않은 고침이 있어 바로 불러오지 않았습니다.', 'info', { label: '바깥 것으로 다시 불러오기', run: () => reloadWorkspace(true) });
     return;
   }
