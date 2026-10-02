@@ -7,7 +7,7 @@ import { displayNo } from '@core';
 import { addScreenComment, editBody, editNotes, reorder } from '../actions';
 import type { Host } from '../host';
 import {
-  annotations, hovered, notesOpen, requestReveal, rev, screen, selected, toggleNotes, visible,
+  annotations, hovered, notesOpen, popHidden, requestReveal, rev, screen, selected, toggleNotes, visible,
 } from '../store';
 import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
 import { ago } from './labels';
@@ -127,6 +127,7 @@ function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip
 
   const open = () => {
     selected.value = a.id;
+    popHidden.value = false;
     if (!shown && a.anchor) requestReveal(a.id);
   };
 
@@ -142,7 +143,7 @@ function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip
         <span class="grip" title="끌어서 순서 바꾸기" aria-label="끌어서 순서 바꾸기" onPointerDown={(e) => onGrip(e, a.id)}>
           <GripVertical {...ICON} />
         </span>
-        <button type="button" class="card-title" aria-expanded={sel} onClick={() => (sel && shown ? (selected.value = null) : open())}>
+        <button type="button" class="card-title" aria-expanded={sel} onClick={() => (sel && shown && !popHidden.value ? (selected.value = null) : open())}>
           <span class={`no ${a.anchor ? '' : 'no-screen'}`}>{displayNo(scr, a)}</span>
           <span class="card-meta">{a.author} · {ago(a.createdAt)}</span>
           {!a.anchor && <span class="chip">화면 전체</span>}

@@ -62,6 +62,16 @@ const nextSave = (app: ElectronApplication, p: string) =>
     dialog.showSaveDialog = (async () => ({ canceled: false, filePath: d })) as typeof dialog.showSaveDialog;
   }, p);
 
+/** 화면을 연다 — 탭이 있으면 그 탭, 없으면 화면 목록에서 */
+async function openScreen(p: Page, id: string) {
+  if (await p.$(`.tab[data-id="${id}"]`)) await p.click(`.tab[data-id="${id}"] .tab-main`);
+  else {
+    await p.click('button[aria-label="화면 목록"]');
+    await p.click(`.popover-item[data-id="${id}"]`);
+  }
+  await p.waitForTimeout(300);
+}
+
 async function screenFrame(page: Page): Promise<Frame> {
   for (let i = 0; i < 300; i++) {
     const h = await page.$('iframe.stage-iframe');
@@ -121,6 +131,11 @@ async function main() {
   check('terrarium.json 이 생긴다', !!(await until(() => existsSync(join(WS, 'terrarium.json')))));
   check('원래 있던 파일은 그대로 둔다', existsSync(join(WS, '메모.txt')));
   check('다크 테마가 기본이다', (await page.getAttribute('html', 'data-theme')) === 'dark');
+  await page.click('button[aria-label="작업 폴더 · 문서"]');
+  await page.click('.popover-item:has-text("개발자 도구")');
+  const devOpen = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.webContents.isDevToolsOpened()));
+  check('메뉴에서 개발자 도구를 연다', !!(await until(devOpen, 5000)));
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.closeDevTools()));
   check('툴바에 작업 폴더 이름이 보인다', ((await page.textContent('.tb-place')) ?? '').includes(WS.split(/[\\/]/).pop()!));
 
   console.log('\n[2] 폴더 화면 · 자동 저장 · 보낼 파일');
@@ -137,7 +152,6 @@ async function main() {
   check('원본 폴더 연결이 작업 폴더에만 남는다', link?.dir === SRC && !readFileSync(join(WS, 'dist', distFile()!), 'utf8').includes(SRC.replace(/\\/g, '\\\\')));
 
   console.log('\n[3] Ctrl 피커 → 멈춤 그림 → 팝업 Comment → 달 때 화면');
-  await page.click('.notes .section-head').catch(() => {});
   const tab = await f.evaluate(() => { const b = document.querySelector('#tabB')!.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
   const tp = await stagePoint(page, tab.x, tab.y);
   await page.mouse.move(tp.x, tp.y);
@@ -162,8 +176,8 @@ async function main() {
   await page.click('.cards > .card:first-child .card-title');
   check('Comment 를 열면 달 때 화면과 박스가 보인다', !!(await until(() => page.$('.shot-view .shot-box'), 3000)));
   await page.screenshot({ path: resolve(OUT, 'b3-shot.png') });
-  await page.click('.badge-btn:has-text("실시간 화면 보기")');
-  check('"실시간 화면 보기" 로 돌아간다', !(await page.$('.shot-view')));
+  await page.click('.badge-btn:has-text("지금 화면 보기")');
+  check('"지금 화면 보기" 로 돌아간다', !(await page.$('.shot-view')));
 
   console.log('\n[3b] FAB 조망 → BAY-4 상세 맵 Comment — 누르면 그 화면으로');
   await page.keyboard.press('Escape');
@@ -295,9 +309,9 @@ async function main() {
   await nextOpen(app, IMG);
   await page.click('button[aria-label="화면 추가"]');
   await page.click('.popover-item:has-text("그림")');
-  await until(async () => ((await page.textContent('.sc-head .sc-id').catch(() => '')) ?? '') === 'SCR-004', 10000);
-  check('그림이 화면(SCR-004)으로 들어온다', ((await page.textContent('.sc-head .sc-id')) ?? '') === 'SCR-004');
-  check('실행 상태가 "그림" — 일시정지·녹화가 없다', ((await page.textContent('.sc-state')) ?? '').includes('그림') && !(await page.$('.sc-head button[aria-label="화면 일시정지"]')));
+  await until(async () => (await page.getAttribute('.tab.is-on', 'data-id').catch(() => '')) === 'SCR-004', 10000);
+  check('그림이 화면(SCR-004)으로 들어와 새 탭으로 열린다', (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-004');
+  check('실행 상태가 "그림" — 일시정지·녹화가 없다', ((await page.textContent('.sc-state')) ?? '').includes('그림') && !(await page.$('.sc-bar button[aria-label="화면 일시정지"]')));
   const ib = (await (await page.$('.stage-frame'))!.boundingBox())!;
   await ctrlPick(page, { x: ib.x + ib.width * 0.5, y: ib.y + ib.height * 0.5 });
   await page.waitForSelector('.popover-card .composer');
@@ -308,6 +322,15 @@ async function main() {
   check('그림 위 클릭은 박스(영역) Comment 가 된다', !!ci?.anchor?.region, JSON.stringify(ci?.anchor?.region));
   await page.keyboard.press('Escape');
   await page.screenshot({ path: resolve(OUT, 'b5c-image.png') });
+
+  console.log('\n[5d] 탭');
+  check('등록한 화면마다 탭이 열려 있다', (await page.$$('.tabs .tab')).length === 4, `${(await page.$$('.tabs .tab')).length}개`);
+  await page.click('.tab[data-id="SCR-004"] .tab-x');
+  check('× 로 탭을 닫으면 옆 탭으로', (await page.$$('.tabs .tab')).length === 3 && (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-003');
+  await page.click('.tab[data-id="SCR-001"] .tab-main');
+  check('탭을 눌러 화면을 바꾼다', !!(await until(async () => (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-001' && !!(await page.$('iframe.stage-iframe')), 5000)));
+  await openScreen(page, 'SCR-004');
+  check('화면 목록에서 고르면 탭으로 다시 열린다', (await page.$$('.tabs .tab')).length === 4 && (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-004');
 
   console.log('\n[6] 다른 이름으로 저장');
   await nextSave(app, EXPORT);
@@ -323,7 +346,7 @@ async function main() {
   await rp.goto(pathToFileURL(dist).href);
   await rp.fill('.modal input', '수신자');
   await rp.click('.modal button[type=submit]');
-  await rp.selectOption('select[aria-label="화면"]', 'SCR-002');
+  await openScreen(rp, 'SCR-002');
   const rf = await screenFrame(rp);
   await rp.waitForTimeout(1500);
   const map = await rf.evaluate(() => {
@@ -350,7 +373,7 @@ async function main() {
   if (badge) {
     await badge.click();
     await page.click('.popover-returned button:has-text("병합")');
-    await page.selectOption('select[aria-label="화면"]', 'SCR-001');
+    await openScreen(page, 'SCR-001');
     const merged = await until(() => comments('SCR-001').length === 3 && comments('SCR-001')[0].replies.length === 1, 8000);
     check('병합 — Comment 추가와 답글이 들어온다', !!merged);
     check('병합한 회신본은 returned/merged/ 로', existsSync(join(WS, 'returned', 'merged', 'proto_수신자.terr.html')));
@@ -359,12 +382,12 @@ async function main() {
   check('렌더러 오류가 없다', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   console.log('\n[9] 다시 켜면 이어서');
-  await page.selectOption('select[aria-label="화면"]', 'SCR-002');
+  await openScreen(page, 'SCR-002');
   await page.waitForTimeout(1500);
   await app.close();
   ({ app, page } = await launch());
   check('마지막 작업 폴더가 그대로 열린다', !!(await until(async () => ((await page.textContent('.tb-place').catch(() => '')) ?? '').includes(WS.split(/[\\/]/).pop()!), 15000)));
-  check('마지막으로 보던 화면(SCR-002)으로', !!(await until(async () => (await page.$eval('select[aria-label="화면"]', (el) => (el as HTMLSelectElement).value).catch(() => '')) === 'SCR-002', 10000)));
+  check('마지막으로 보던 화면(SCR-002)으로', !!(await until(async () => (await page.getAttribute('.tab.is-on', 'data-id').catch(() => '')) === 'SCR-002', 10000)));
   check('Comment 가 그대로 있다', (await page.$$('.cards > .card')).length === 1);
 
   console.log('\n[10] 테라리움 문서가 든 폴더 열기 — 풀어서 작업 폴더로');

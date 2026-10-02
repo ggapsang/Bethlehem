@@ -135,6 +135,9 @@ function watchWorkspace(): void {
 
 /* ── 창 ──────────────────────────────────────────────────────────────── */
 
+/** npm start — electron-vite 개발 서버로 띄웠다 */
+const DEV = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL;
+
 function rendererUrl(): string {
   return process.env.ELECTRON_RENDERER_URL || pathToFileURL(join(here, '../renderer/index.html')).href;
 }
@@ -157,7 +160,11 @@ function createWindow(): void {
       webviewTag: true,
     },
   });
-  win.once('ready-to-show', () => win?.show());
+  win.once('ready-to-show', () => {
+    win?.show();
+    // 개발 모드(npm start)에서는 개발자 도구를 따로 띄운다. BETHLEHEM_DEVTOOLS=0 이면 띄우지 않는다
+    if (DEV && process.env.BETHLEHEM_DEVTOOLS !== '0') win?.webContents.openDevTools({ mode: 'detach' });
+  });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) shell.openExternal(url);
@@ -179,7 +186,13 @@ function createWindow(): void {
     prefs.sandbox = true;
     prefs.nodeIntegration = false;
   });
-  win.webContents.on('did-attach-webview', (_e, guest) => watchSite(guest));
+  win.webContents.on('did-attach-webview', (_e, guest) => {
+    watchSite(guest);
+    // URL 화면 안에 포커스가 있을 때 F12 — 그 사이트의 개발자 도구
+    guest.on('before-input-event', (_ev, input) => {
+      if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) guest.toggleDevTools();
+    });
+  });
   // 자동 저장이 남아 있으면 마저 저장하고 닫는다
   win.on('close', (e) => {
     if (!dirty || closing) return;
@@ -302,6 +315,7 @@ ipcMain.handle('pick-image', async () => {
   if (r.canceled || !r.filePaths.length) return [];
   return r.filePaths.map((f) => grant(f));
 });
+ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools());
 ipcMain.handle('pack-image', async (_e, path: string) => packImage(guard(path)));
 
 /** 폴더 고르기 — 비어 있지 않아도 된다. 무엇이 들었는지는 ws-inspect 로 본다 */

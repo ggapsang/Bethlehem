@@ -1,14 +1,27 @@
-/* 화면 컨테이너의 머리 — 지금 화면·버전(시간적 상태)·실행 상태와 화면에 대한 조작 (Terrarium UI/UX 가이드 §10·§16)
- * 툴바에는 문서 수준의 것만 남기고, 화면에 붙은 조작(일시정지·녹화·마커 색·전체화면)은 여기에 둔다.
+/* 화면 막대 — 탭 아래. 지금 화면의 버전(시간적 상태)·페이지·실행 상태와 화면에 대한 조작 (Terrarium UI/UX 가이드 §10·§16)
+ * 툴바에는 문서 수준의 것만 남기고, 화면에 붙은 조작(일시정지·녹화·마커 색·배율·전체화면)은 여기에 둔다.
+ * versionTools 는 버전 칩 옆(Bethlehem: 새 버전), screenActions 는 끝(Bethlehem: 화면 지우기).
  */
-import { Crosshair, Maximize2, Minimize2, PanelRight, Pause, Play } from 'lucide-preact';
+import type { ComponentChildren } from 'preact';
+import { Crosshair, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus } from 'lucide-preact';
 import type { Screen, ScreenVersion } from '@core';
-import { draft, fullscreen, mode, panelOpen, paused, picking, recording, rev, selectScreen, togglePanel } from '../store';
+import { draft, fullscreen, mode, panelOpen, paused, picking, recording, rev, selectScreen, togglePanel, zoom, zoomStep } from '../store';
 import { MarkerColorPicker, RecordButton, enterFullscreen } from '../ui/Toolbar';
 
 const ICON = { size: 18, strokeWidth: 1.5 };
 
-export function StageHeader({ scr, v, page, onHome }: { scr: Screen; v: ScreenVersion; page: string | null; onHome: () => void }) {
+export interface StageHeaderProps {
+  scr: Screen;
+  v: ScreenVersion;
+  page: string | null;
+  onHome: () => void;
+  /** 지금 실제 배율 (맞춤일 때도) */
+  scale: number;
+  versionTools?: ComponentChildren;
+  screenActions?: ComponentChildren;
+}
+
+export function StageHeader({ scr, v, page, onHome, scale, versionTools, screenActions }: StageHeaderProps) {
   rev.value;
   const image = v.source?.mode === 'image';
   const site = v.source?.mode === 'site';
@@ -21,10 +34,9 @@ export function StageHeader({ scr, v, page, onHome }: { scr: Screen; v: ScreenVe
         : paused.value
           ? { tone: 'hold', text: '일시정지' }
           : { tone: 'live', text: site ? '실시간 사이트' : '실행 중' };
+  const pct = `${Math.round(scale * 100)}%`;
   return (
-    <header class="sc-head">
-      <span class="sc-id mono">{scr.id}</span>
-      <span class="sc-title ellipsis" title={scr.title}>{scr.title}</span>
+    <div class="sc-bar">
       <div class="ver-chips" role="radiogroup" aria-label="화면 버전">
         {scr.versions.map((x) => (
           <button
@@ -41,6 +53,7 @@ export function StageHeader({ scr, v, page, onHome }: { scr: Screen; v: ScreenVe
           </button>
         ))}
       </div>
+      {versionTools}
       {page && page !== v.entry && (
         <button type="button" class="sc-page" title="시작 페이지로" onClick={onHome}>
           <span class="mono">{v.entry}</span> › <span class="mono">{page}</span>
@@ -48,6 +61,7 @@ export function StageHeader({ scr, v, page, onHome }: { scr: Screen; v: ScreenVe
       )}
       <span class="grow" />
       <span class={`sc-state sc-${state.tone}`}><span class="sc-dot" aria-hidden="true" />{state.text}</span>
+      <span class="sc-sep" />
       {!image && (
         <button
           type="button"
@@ -62,6 +76,20 @@ export function StageHeader({ scr, v, page, onHome }: { scr: Screen; v: ScreenVe
       )}
       {!image && <RecordButton />}
       <MarkerColorPicker />
+      <span class="sc-sep" />
+      <div class="zoom" role="group" aria-label="배율">
+        <button type="button" class="btn-icon" aria-label="축소" title="축소 (Ctrl+휠)" onClick={() => zoomStep(-1, scale)}><Minus {...ICON} /></button>
+        <button
+          type="button"
+          class={`zoom-val ${zoom.value == null ? 'is-fit' : ''}`}
+          aria-label="배율"
+          title={zoom.value == null ? '맞춤 — 누르면 100%' : '누르면 맞춤'}
+          onClick={() => (zoom.value = zoom.value == null ? 1 : null)}
+        >
+          {zoom.value == null ? `맞춤 ${pct}` : pct}
+        </button>
+        <button type="button" class="btn-icon" aria-label="확대" title="확대 (Ctrl+휠)" onClick={() => zoomStep(1, scale)}><Plus {...ICON} /></button>
+      </div>
       {fullscreen.value && (
         <button
           type="button"
@@ -84,6 +112,7 @@ export function StageHeader({ scr, v, page, onHome }: { scr: Screen; v: ScreenVe
       ) : (
         <button type="button" class="btn-icon" aria-label="전체화면" title="전체화면 (Esc 로 나가기)" onClick={enterFullscreen}><Maximize2 {...ICON} /></button>
       )}
-    </header>
+      {screenActions}
+    </div>
   );
 }

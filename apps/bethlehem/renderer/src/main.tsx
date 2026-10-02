@@ -9,7 +9,7 @@ import icon from '@manna/assets/favicon.png';
 import { askName, dirty, screenId, user, versionNo } from '@manna/store';
 import { ImportDialog } from './ImportDialog';
 import { docAsk, handleDrop, host, importing, mode, placeName, rememberScreen, start, urlAsk } from './session';
-import { DocTools, ScreenTools } from './Tools';
+import { AddScreenMenu, DeleteScreenButton, DocTools, NewVersionMenu } from './Tools';
 import { UrlDialog } from './UrlDialog';
 import { DocChoice, Welcome } from './Welcome';
 
@@ -48,7 +48,7 @@ function Bethlehem() {
 
   return (
     <>
-      <App host={host} start={<DocTools />} screenTools={<ScreenTools />} empty={<Welcome />} />
+      <App host={host} start={<DocTools />} tabTools={<AddScreenMenu />} versionTools={<NewVersionMenu />} screenActions={<DeleteScreenButton />} empty={<Welcome />} />
       {importing.value && <ImportDialog key={importing.value.dir + importing.value.screenId} target={importing.value} />}
       {urlAsk.value && <UrlDialog screenId={urlAsk.value.screenId} />}
       {docAsk.value && <DocChoice />}

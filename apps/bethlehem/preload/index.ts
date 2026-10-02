@@ -40,6 +40,7 @@ const api: BethlehemApi = {
   onSourceChanged: (cb) => on('source-changed', cb as never),
   capture: (rect) => ipcRenderer.invoke('capture-rect', rect),
   siteSnapshot: (guestId) => ipcRenderer.invoke('site-snapshot', guestId),
+  toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
   setState: (s) => ipcRenderer.send('set-state', s),
   onRequestSave: (cb) => on('request-save', cb),
   closeNow: () => ipcRenderer.send('close-now'),

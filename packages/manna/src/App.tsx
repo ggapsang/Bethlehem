@@ -15,14 +15,19 @@ import { Toolbar, type ToolbarProps } from './ui/Toolbar';
 export interface AppProps {
   host: Host;
   start?: ToolbarProps['start'];
-  screenTools?: ToolbarProps['screenTools'];
+  /** 탭 줄 끝 (Bethlehem: 화면 추가) */
+  tabTools?: ComponentChildren;
+  /** 버전 칩 옆 (Bethlehem: 새 버전) */
+  versionTools?: ComponentChildren;
+  /** 화면 막대 끝 (Bethlehem: 화면 지우기) */
+  screenActions?: ComponentChildren;
   /** 화면이 하나도 없을 때 */
   empty?: ComponentChildren;
 }
 
 const MIN_PANEL = 300;
 
-export function App({ host, start, screenTools, empty }: AppProps) {
+export function App({ host, start, tabTools, versionTools, screenActions, empty }: AppProps) {
   rev.value; // 문서가 바뀌면 틀 전체를 다시 그린다 (제목·버전 등)
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme.value;
@@ -74,10 +79,10 @@ export function App({ host, start, screenTools, empty }: AppProps) {
 
   return (
     <div class={`app ${full ? 'is-full' : ''} ${holdPick.value || mode.value === 'annotate' ? 'is-picking' : ''}`}>
-      {!full && <Toolbar host={host} start={start} screenTools={screenTools} />}
+      {!full && <Toolbar host={host} start={start} />}
       <div class="workspace" style={{ gridTemplateColumns: showPanel ? `1fr auto ${width}px` : '1fr' }}>
         <main class="main">
-          <Stage host={host} empty={empty ?? <p class="muted">이 문서에는 아직 화면이 없습니다.</p>} />
+          <Stage host={host} empty={empty ?? <p class="muted">이 문서에는 아직 화면이 없습니다.</p>} tabTools={tabTools} versionTools={versionTools} screenActions={screenActions} />
         </main>
         {showPanel && <Splitter />}
         {showPanel && <Panel host={host} />}

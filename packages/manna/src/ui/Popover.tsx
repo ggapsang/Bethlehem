@@ -6,7 +6,7 @@ import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
 import { addFromDraft, addReply, editBody, editReply, removeClip, removeComment } from '../actions';
 import type { Host } from '../host';
-import { annotations, draft, rev, screen, selected, user, version } from '../store';
+import { annotations, draft, popHidden, rev, screen, selected, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
 import { MarkdownEditor } from './editor/MarkdownEditor';
 import { ago } from './labels';
@@ -30,7 +30,7 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number; side: string } | null>(null);
   const d = draft.value;
-  const sel = !d ? annotations.value.find((a) => a.id === selected.value) ?? null : null;
+  const sel = !d && !popHidden.value ? annotations.value.find((a) => a.id === selected.value) ?? null : null;
   const v = version.value;
   const open = !!d || !!sel;
 
@@ -38,6 +38,9 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
     const area = areaRef.current;
     const el = ref.current;
     if (!open || !area || !el || !v) return setPos(null);
+    // 확대해 스크롤했으면 보이는 자리 안에 둔다
+    const sl = area.scrollLeft;
+    const st = area.scrollTop;
     const aw = area.clientWidth;
     const ah = area.clientHeight;
     const ph = el.offsetHeight;
@@ -50,12 +53,12 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
       const ty = oy + target.y * s;
       const tw = target.w * s;
       const th = target.h * s;
-      if (tx + tw + GAP + W <= aw - 8) left = tx + tw + GAP;
-      else if (tx - GAP - W >= 8) {
+      if (tx + tw + GAP + W <= sl + aw - 8) left = tx + tw + GAP;
+      else if (tx - GAP - W >= sl + 8) {
         left = tx - GAP - W;
         side = 'left';
       } else {
-        left = Math.min(Math.max(8, tx), aw - W - 8);
+        left = Math.min(Math.max(sl + 8, tx), sl + aw - W - 8);
         side = 'below';
       }
       top = side === 'below' ? ty + th + GAP : ty;
@@ -64,8 +67,8 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
       top = oy + GAP;
       side = 'corner';
     }
-    top = Math.min(Math.max(8, top), Math.max(8, ah - ph - 8));
-    left = Math.min(Math.max(8, left), aw - W - 8);
+    top = Math.min(Math.max(st + 8, top), Math.max(st + 8, st + ah - ph - 8));
+    left = Math.min(Math.max(sl + 8, left), sl + aw - W - 8);
     setPos((old) => (old && Math.abs(old.left - left) < 1 && Math.abs(old.top - top) < 1 && old.side === side ? old : { left, top, side }));
   });
 
@@ -135,7 +138,7 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
         <span class={`no ${a.anchor ? '' : 'no-screen'}`}>{displayNo(scr, a)}</span>
         <span class="card-meta">{a.author} · {ago(a.createdAt)}</span>
         <span class="grow" />
-        <button type="button" class="btn-icon btn-xs" aria-label="닫기" onClick={() => (selected.value = null)}><X {...ICON} /></button>
+        <button type="button" class="btn-icon btn-xs" aria-label="닫기" title="팝업 닫기 (선택은 그대로)" onClick={() => (popHidden.value = true)}><X {...ICON} /></button>
       </div>
       <MarkdownEditor
         key={a.id}

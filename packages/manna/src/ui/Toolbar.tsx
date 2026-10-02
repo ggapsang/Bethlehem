@@ -11,8 +11,8 @@ import type { Host } from '../host';
 import { canConnectFile, connectFile, save } from '../host';
 import { ago } from './labels';
 import {
-  askName, canRedo, canUndo, dirty, doc, rev, saveState, draft, mode, mutate, panelOpen, recording, redo, screen, selectScreen,
-  setTheme, theme, togglePanel, undo, user,
+  askName, canRedo, canUndo, dirty, doc, rev, saveState, draft, mode, mutate, panelOpen, recording, redo, screen,
+  setTheme, setTitleWidth, theme, titleWidth, togglePanel, undo, user,
 } from '../store';
 import { Logo } from './Logo';
 
@@ -30,11 +30,50 @@ export interface ToolbarProps {
   host: Host;
   /** 로고 옆 (Bethlehem: 새 문서·열기) */
   start?: ComponentChildren;
-  /** 화면 선택 옆 (Bethlehem: 화면 추가·URL·새 버전·삭제) */
-  screenTools?: ComponentChildren;
 }
 
-export function Toolbar({ host, start, screenTools }: ToolbarProps) {
+/** 문서 제목 칸 — 휠로(위로 굴리면 넓게) 또는 오른쪽 끝 손잡이를 끌어 폭을 바꾼다 */
+function TitleBox({ children }: { children: ComponentChildren }) {
+  const onWheel = (e: WheelEvent) => {
+    if (e.ctrlKey) return;
+    e.preventDefault();
+    setTitleWidth(titleWidth.peek() + (e.deltaY < 0 ? 24 : -24));
+  };
+  const onGrip = (e: PointerEvent) => {
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    const x0 = e.clientX;
+    const w0 = titleWidth.peek();
+    const move = (ev: PointerEvent) => setTitleWidth(w0 + ev.clientX - x0);
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  };
+  return (
+    <div class="tb-titlebox" style={{ width: `${titleWidth.value}px` }} onWheel={onWheel} title="휠이나 오른쪽 끝을 끌어 폭을 바꿉니다">
+      {children}
+      <span
+        class="tb-title-grip"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="제목 칸 폭 조절"
+        tabIndex={0}
+        onPointerDown={onGrip}
+        onDblClick={() => setTitleWidth(320)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowRight') setTitleWidth(titleWidth.peek() + 24);
+          if (e.key === 'ArrowLeft') setTitleWidth(titleWidth.peek() - 24);
+        }}
+      />
+    </div>
+  );
+}
+
+export function Toolbar({ host, start }: ToolbarProps) {
   rev.value; // 문서는 제자리에서 고치므로 props 가 같아도 다시 그려야 한다 (signals 의 얕은 비교를 피한다)
   const d = doc.value;
   const scr = screen.value;
@@ -45,16 +84,19 @@ export function Toolbar({ host, start, screenTools }: ToolbarProps) {
       <div class="tb-group tb-brand">
         <Logo />
         {start}
-        {host.author ? (
-          <input
-            class="tb-title input-bare"
-            aria-label="문서 제목"
-            value={d.meta.title}
-            onChange={(e) => mutate((x) => (x.meta.title = e.currentTarget.value || '제목 없음'), { label: '제목 변경' })}
-          />
-        ) : (
-          <h1 class="tb-title" title={d.meta.title}>{d.meta.title}</h1>
-        )}
+        <TitleBox>
+          {host.author ? (
+            <input
+              class="tb-title input-bare"
+              aria-label="문서 제목"
+              title={d.meta.title}
+              value={d.meta.title}
+              onChange={(e) => mutate((x) => (x.meta.title = e.currentTarget.value || '제목 없음'), { label: '제목 변경' })}
+            />
+          ) : (
+            <h1 class="tb-title" title={d.meta.title}>{d.meta.title}</h1>
+          )}
+        </TitleBox>
         {host.author ? (
           <label class="tb-ver">
             v
@@ -68,15 +110,6 @@ export function Toolbar({ host, start, screenTools }: ToolbarProps) {
         ) : (
           <span class="tb-ver">v{d.meta.version}</span>
         )}
-      </div>
-
-      <div class="tb-group tb-screen">
-        {scr && (
-          <select class="input input-sm" aria-label="화면" value={scr.id} onChange={(e) => selectScreen(e.currentTarget.value)}>
-            {d.screens.map((s) => <option key={s.id} value={s.id}>{s.id} {s.title}</option>)}
-          </select>
-        )}
-        {screenTools}
       </div>
 
       <span class="grow" />

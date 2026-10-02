@@ -1,7 +1,7 @@
-/* 툴바에 끼우는 작성 도구 — 작업 폴더·문서 열기, 화면 추가·새 버전·삭제, 돌아온 문서 */
+/* 작성 도구 — 툴바(작업 폴더·문서 열기, 돌아온 문서), 탭 줄(화면 추가), 화면 막대(새 버전·화면 지우기) */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Trash2 } from 'lucide-preact';
+import { Bug, ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Plus, Trash2 } from 'lucide-preact';
 import { rev, screen } from '@manna/store';
 import {
   addImageScreen, addScreenFromFolder, askUrl, createWorkspace, mergeReturned, mode, openDocument, openFolder, placeName, recent, refreshRecent,
@@ -11,7 +11,19 @@ import {
 const ICON = { size: 18, strokeWidth: 1.5 };
 const api = window.bethlehem;
 
-function Menu({ label, title, icon, children, onOpen, cls }: { label?: ComponentChildren; title: string; icon: ComponentChildren; children: (close: () => void) => ComponentChildren; onOpen?: () => void; cls?: string }) {
+interface MenuProps {
+  label?: ComponentChildren;
+  title: string;
+  icon: ComponentChildren;
+  children: (close: () => void) => ComponentChildren;
+  onOpen?: () => void;
+  cls?: string;
+  /** 단추 모양 — 툴바(ghost) · 탭 줄(tab-tool) · 화면 막대(bar) */
+  kind?: 'ghost' | 'tab' | 'bar';
+  align?: 'left' | 'right';
+}
+
+function Menu({ label, title, icon, children, onOpen, cls, kind = 'ghost', align = 'left' }: MenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -24,7 +36,7 @@ function Menu({ label, title, icon, children, onOpen, cls }: { label?: Component
     <div class="popover-wrap" ref={ref}>
       <button
         type="button"
-        class={label ? `btn btn-ghost btn-menu ${cls ?? ''}` : `btn-icon ${cls ?? ''}`}
+        class={kind === 'tab' ? `tab-tool ${cls ?? ''}` : kind === 'bar' ? `btn btn-ghost btn-bar ${cls ?? ''}` : label ? `btn btn-ghost btn-menu ${cls ?? ''}` : `btn-icon ${cls ?? ''}`}
         aria-haspopup="true"
         aria-expanded={open}
         aria-label={title}
@@ -36,9 +48,9 @@ function Menu({ label, title, icon, children, onOpen, cls }: { label?: Component
       >
         {icon}
         {label && <span class="ellipsis">{label}</span>}
-        <ChevronDown {...ICON} size={14} />
+        {kind !== 'tab' && <ChevronDown {...ICON} size={14} />}
       </button>
-      {open && <div class="popover popover-left" role="menu">{children(() => setOpen(false))}</div>}
+      {open && <div class={`popover ${align === 'left' ? 'popover-left' : ''}`} role="menu">{children(() => setOpen(false))}</div>}
     </div>
   );
 }
@@ -84,6 +96,10 @@ export function DocTools() {
                 <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); api.wsReveal('returned'); }}>돌아온 문서 폴더(returned) 열기</button>
               </>
             )}
+            <div class="popover-sep" />
+            <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); api.toggleDevTools(); }}>
+              <Bug {...ICON} size={16} /> 개발자 도구 <span class="grow" /><span class="muted small">F12</span>
+            </button>
             {m.kind === 'file' && (
               <>
                 <div class="popover-sep" />
@@ -128,9 +144,9 @@ function ReturnedBadge() {
   );
 }
 
-function SourceMenu({ title, icon, label, screenId }: { title: string; icon: ComponentChildren; label?: string; screenId?: string }) {
+function SourceMenu({ title, icon, label, screenId, kind, align }: { title: string; icon: ComponentChildren; label?: string; screenId?: string; kind?: MenuProps['kind']; align?: MenuProps['align'] }) {
   return (
-    <Menu title={title} icon={icon} label={label} onOpen={refreshRecent}>
+    <Menu title={title} icon={icon} label={label} onOpen={refreshRecent} kind={kind} align={align}>
       {(close) => (
         <>
           <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); addScreenFromFolder(screenId); }}>
@@ -151,15 +167,27 @@ function SourceMenu({ title, icon, label, screenId }: { title: string; icon: Com
   );
 }
 
-/** 화면 선택 옆 — 화면 추가 · 새 버전 · 화면 삭제 */
-export function ScreenTools() {
+/** 탭 줄 끝 ＋ — 새 화면 (폴더 · URL · 그림) */
+export function AddScreenMenu() {
+  return <SourceMenu title="화면 추가" icon={<Plus {...ICON} />} kind="tab" />;
+}
+
+/** 버전 칩 옆 — 지금 화면의 새 버전 */
+export function NewVersionMenu() {
   rev.value;
   const scr = screen.value;
+  if (!scr) return null;
+  return <SourceMenu title={`${scr.id} 새 버전`} icon={<Layers {...ICON} size={16} />} label="새 버전" screenId={scr.id} kind="bar" />;
+}
+
+/** 화면 막대 끝 — 화면 지우기 */
+export function DeleteScreenButton() {
+  rev.value;
+  const scr = screen.value;
+  if (!scr) return null;
   return (
-    <>
-      <SourceMenu title="화면 추가" icon={<FolderPlus {...ICON} />} label={scr ? undefined : '화면 추가'} />
-      {scr && <SourceMenu title={`${scr.id} 새 버전`} icon={<Layers {...ICON} />} screenId={scr.id} />}
-      {scr && <button type="button" class="btn-icon" aria-label={`${scr.id} 지우기`} title={`${scr.id} 화면 지우기`} onClick={() => removeScreen(scr.id)}><Trash2 {...ICON} /></button>}
-    </>
+    <button type="button" class="btn-icon" aria-label={`${scr.id} 지우기`} title={`${scr.id} 화면 지우기`} onClick={() => removeScreen(scr.id)}>
+      <Trash2 {...ICON} />
+    </button>
   );
 }

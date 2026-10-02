@@ -25,6 +25,16 @@ function check(name: string, ok: boolean, detail = ''): void {
   if (!ok) failed++;
 }
 
+async function until<T>(fn: () => T | Promise<T>, ms = 15000): Promise<T | null> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const v = await fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return null;
+}
+
 async function screenFrame(page: Page): Promise<Frame> {
   for (let i = 0; i < 150; i++) {
     const h = await page.$('iframe.stage-iframe');
@@ -137,6 +147,8 @@ async function main() {
   check('data/*.js 6개를 모두 불러온다', loaded === 6, `${loaded}개`);
   check('찾지 못한 파일이 없다', (await f.evaluate(() => (window as unknown as { __manna: { misses: unknown[] } }).__manna.misses.length)) === 0);
   check('Pretendard 가 문서 안의 파일로 적용된다', await f.evaluate(() => document.fonts.check('16px "Pretendard Variable"')));
+  check('개요는 기본으로 접혀 있다', !(await page.$('.notes .cm-content')));
+  await page.click('.notes .section-head'); // 펼친다
   check('개요에 README 가 마크다운으로 보인다', ((await page.textContent('.notes .cm-content')) ?? '').includes('데이터 매핑'));
   check('개요의 # 기호는 숨고 제목 서식만 보인다', !!(await page.$('.notes .cm-h1')) && !((await page.textContent('.notes .cm-h1')) ?? '').startsWith('#'));
   await page.click('.notes .section-head'); // 개요 접기 — Comment 를 위로
@@ -158,7 +170,7 @@ async function main() {
   check('Comment 가 생긴다', (await cardCount(page)) === 1);
   check('다크 테마가 기본이다', (await page.getAttribute('html', 'data-theme')) === 'dark');
   check('화면 머리에 화면 ID · 버전 · 실행 상태가 보인다',
-    !!(await page.$('.screen-container .sc-head .sc-id')) && (await page.$$('.sc-head .ver-chip')).length === 2 && !!(await page.$('.sc-head .sc-state')));
+    !!(await page.$('.tabs .tab.is-on .tab-id')) && (await page.$$('.sc-bar .ver-chip')).length === 2 && !!(await page.$('.sc-bar .sc-state')));
   check('목록 이어 쓰기와 체크박스가 렌더링된다', !!(await page.$('.card .cm-task')));
   // 캔버스 위 영역 — Ctrl 누른 채 드래그
   const a = await pagePoint(page, f, '#fabCv', 0.3, 0.3);
@@ -222,8 +234,14 @@ async function main() {
   check('팝업의 체크박스를 누르면 [x] 로 바뀐다', await page.$eval('.popover-card .detail .cm-task', (el) => (el as HTMLInputElement).checked));
   check('패널 카드에도 반영된다', await page.$eval('.cards > .card:nth-child(2) .card-body .cm-task', (el) => (el as HTMLInputElement).checked));
 
-  console.log('\n[6b] Delete 키');
+  console.log('\n[6b] 팝업 닫기 · Delete 키');
   await selectCard(page, 2);
+  await page.waitForSelector('.popover-card');
+  await page.click('.popover-card button[aria-label="닫기"]');
+  await page.waitForTimeout(150);
+  check('팝업 × 는 팝업만 닫고 선택은 남긴다', !(await page.$('.popover-card')) && !!(await page.$('.cards > .card:nth-child(2).is-sel')));
+  await page.click('.cards > .card:nth-child(2) .card-title');
+  check('같은 카드를 다시 누르면 팝업이 다시 뜬다', !!(await until(() => page.$('.popover-card'), 2000)));
   await page.keyboard.press('Delete');
   await page.waitForTimeout(300);
   check('고른 Comment 를 Delete 로 지운다', (await cardCount(page)) === 1, `${await cardCount(page)}개`);
@@ -339,10 +357,21 @@ async function main() {
   await page.click('button[aria-label="전체화면"]');
   await page.waitForTimeout(400);
   const full = await page.evaluate(() => !!document.fullscreenElement);
-  check('전체화면 — 툴바가 숨고 화면 머리에 조작이 남는다', full && !(await page.$('.toolbar')) && !!(await page.$('.sc-head button[aria-label="피커"]')));
+  check('전체화면 — 툴바가 숨고 화면 막대에 조작이 남는다', full && !(await page.$('.toolbar')) && !!(await page.$('.sc-bar button[aria-label="피커"]')));
   await page.screenshot({ path: resolve(OUT, '3-fullscreen.png') });
   await page.click('button[aria-label="전체화면 나가기"]');
   await page.waitForTimeout(300);
+  const frameW = async () => (await (await page.$('.stage-frame'))!.boundingBox())!.width;
+  const fw0 = await frameW();
+  await page.click('button[aria-label="확대"]');
+  await page.click('button[aria-label="확대"]');
+  await page.waitForTimeout(200);
+  const fw1 = await frameW();
+  check('확대하면 화면이 커지고 스크롤된다', fw1 > fw0 * 1.1 && !!(await page.$('.stage.stage-scroll')), `${Math.round(fw0)} → ${Math.round(fw1)}px`);
+  await page.click('.zoom-val');
+  await page.waitForTimeout(200);
+  check('배율 칸을 누르면 맞춤으로 돌아간다', Math.abs((await frameW()) - fw0) < 2 && ((await page.textContent('.zoom-val')) ?? '').startsWith('맞춤'));
+  check('탭 줄과 화면 목록이 있다', (await page.$$('.tabs .tab')).length === 1 && !!(await page.$('.tabs button[aria-label="화면 목록"]')));
 
   console.log('\n[10] 개요 편집 · 저장 → 다시 열기');
   await page.click('.notes .section-head');

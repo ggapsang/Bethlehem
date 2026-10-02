@@ -9,13 +9,16 @@ import type { Host } from '../host';
 import { onKeyDown, onKeyUp } from '../keys';
 import {
   annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, reveal, revealing, rev,
-  screen, selected, shotView, stagePage, stageRef, still, version, versionKey, visible,
+  popHidden, screen, selected, shotView, stagePage, stageRef, still, version, versionKey, visible, zoom, zoomStep,
 } from '../store';
+import type { ComponentChildren } from 'preact';
+import { ago } from '../ui/labels';
 import { applySiteSnapshot } from '../actions';
 import { StagePopover } from '../ui/Popover';
 import { iframeBridge, webviewBridge, type Bridge, type WebviewLike } from './bridge';
 import { prepareScreen } from './loader';
 import { StageHeader } from './StageHeader';
+import { ScreenTabs } from './ScreenTabs';
 import { useBlobUrl } from './media';
 
 interface Fit {
@@ -25,9 +28,7 @@ interface Fit {
 }
 
 const MARK = 24; // 마커 지름 (unit-6)
-const PAD = 32; // 화면 컨테이너 바깥 여백 — 장식이 아니라 숨 쉴 자리 (가이드 §9)
-const HEAD = 40; // 컨테이너 머리 (unit-10)
-const CPAD = 8; // 컨테이너 안쪽 여백 (unit-2)
+const PAD = 24; // 화면 프레임 바깥 여백 — 장식이 아니라 숨 쉴 자리 (가이드 §9)
 /** 그림 화면에서 클릭하면 만드는 박스 크기 (화면 좌표) */
 const POINT_BOX = 64;
 
@@ -57,7 +58,18 @@ const tupleBox = (t: [number, number, number, number] | RectTuple): Box => ({ x:
 /** 다음 페인트까지 기다린다 (마커를 숨긴 뒤 캡처할 때) */
 const nextPaint = () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
-export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChildren }) {
+export interface StageProps {
+  host: Host;
+  empty?: ComponentChildren;
+  /** 탭 줄 끝 (Bethlehem: 화면 추가) */
+  tabTools?: ComponentChildren;
+  /** 버전 칩 옆 (Bethlehem: 새 버전) */
+  versionTools?: ComponentChildren;
+  /** 화면 막대 끝 (Bethlehem: 화면 지우기) */
+  screenActions?: ComponentChildren;
+}
+
+export function Stage({ host, empty, tabTools, versionTools, screenActions }: StageProps) {
   const area = useRef<HTMLDivElement>(null);
   const frameBox = useRef<HTMLDivElement>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
@@ -111,25 +123,33 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
   const vw = v?.viewport.w ?? 0;
   const vh = v?.viewport.h ?? 0;
   const vfit = v?.viewport.fit ?? 'contain';
+  const z = zoom.value;
   useLayoutEffect(() => {
     const el = area.current;
     if (!el || !vw) return;
     const update = () => {
-      const aw = el.clientWidth - PAD * 2 - CPAD * 2;
-      const ah = el.clientHeight - PAD * 2 - HEAD - CPAD;
-      const s = Math.max(0.1, Math.min(1, vfit === 'width' ? aw / vw : Math.min(aw / vw, ah / vh)));
-      const boxH = vh * s + HEAD + CPAD;
+      const aw = el.clientWidth - PAD * 2;
+      const ah = el.clientHeight - PAD * 2;
+      const fitS = Math.max(0.1, Math.min(1, vfit === 'width' ? aw / vw : Math.min(aw / vw, ah / vh)));
+      const s = z ?? fitS;
       setFit({
         s,
-        ox: Math.max(PAD + CPAD, (el.clientWidth - vw * s) / 2),
-        oy: (vfit === 'width' ? PAD : Math.max(PAD, (el.clientHeight - boxH) / 2)) + HEAD,
+        ox: Math.max(PAD, (el.clientWidth - vw * s) / 2),
+        oy: vfit === 'width' ? PAD : Math.max(PAD, (el.clientHeight - vh * s) / 2),
       });
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [vw, vh, vfit, !!scr]);
+  }, [vw, vh, vfit, !!scr, z]);
+
+  /* Ctrl+휠 — 화면 배율 (프레임 밖 여백에서. 화면 안의 휠은 화면이 쓴다) */
+  const onStageWheel = (e: WheelEvent) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    zoomStep(e.deltaY < 0 ? 1 : -1, fitRef.current.s);
+  };
 
   useEffect(() => {
     stageRef.frame = frameBox.current;
@@ -465,19 +485,20 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
 
 
   if (!v || !scr) return <div class="stage stage-empty">{empty}</div>;
+  const scrolls = vfit === 'width' || z != null;
 
   const frameStyle = { left: `${fit.ox}px`, top: `${fit.oy}px`, width: `${vw * fit.s}px`, height: `${vh * fit.s}px` };
   const innerStyle = { width: `${vw}px`, height: `${vh}px`, transform: `scale(${fit.s})` };
   const shotBox = sel?.shot?.box;
 
-  const boxStyle = { left: `${fit.ox - CPAD}px`, top: `${fit.oy - HEAD}px`, width: `${vw * fit.s + CPAD * 2}px`, height: `${vh * fit.s + HEAD + CPAD}px` };
+  const spacer = { left: `${fit.ox + vw * fit.s + PAD - 1}px`, top: `${fit.oy + vh * fit.s + PAD - 1}px` };
 
   return (
-    <div class={`stage ${vfit === 'width' ? 'stage-scroll' : ''}`} ref={area}>
-      {/* 화면 컨테이너 — 이 화면이 테라리움 안에 담겨 있다 (가이드 §10) */}
-      <div class="screen-container" style={boxStyle}>
-        <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} />
-      </div>
+    <div class="stage-col">
+      <ScreenTabs tools={tabTools} />
+      <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} scale={fit.s} versionTools={versionTools} screenActions={screenActions} />
+    <div class={`stage ${scrolls ? 'stage-scroll' : ''}`} ref={area} onWheel={onStageWheel}>
+      {scrolls && <div class="stage-spacer" style={spacer} />}
       <div class={`stage-frame ${recording.value || capturing ? 'is-recording' : ''}`} style={frameStyle} ref={frameBox}>
         {live ? (
           <webview
@@ -531,8 +552,8 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
         {(loading || revealing.value) && !error && <div class="stage-note" aria-label="불러오는 중"><span class="spinner" /></div>}
         {showShot && (
           <div class="stage-badge stage-badge-shot">
-            <span>달 때 화면</span>
-            <button type="button" class="badge-btn" onClick={() => (shotView.value = false)}>실시간 화면 보기</button>
+            <span title="이 Comment 를 달 때 찍어 둔 화면입니다. 지금 화면과 다를 수 있습니다.">Comment 를 달 때 찍은 화면{sel?.createdAt ? ` · ${ago(sel.createdAt)}` : ''}</span>
+            <button type="button" class="badge-btn" onClick={() => (shotView.value = false)}>지금 화면 보기</button>
           </div>
         )}
 
@@ -552,6 +573,7 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
       )}
       {(misses.value.length > 0 || warnings.length > 0) && <Diagnostics warnings={warnings} />}
     </div>
+    </div>
   );
 }
 
@@ -566,7 +588,8 @@ function Marker({ a, scr }: { a: Annotation; scr: Screen }) {
       title={`${displayNo(scr, a)} · ${a.author}`}
       onClick={(e) => {
         e.stopPropagation();
-        selected.value = sel ? null : a.id;
+        if (sel && popHidden.peek()) popHidden.value = false;
+        else selected.value = sel ? null : a.id;
       }}
       onPointerEnter={() => (hovered.value = a.id)}
       onPointerLeave={() => (hovered.value = null)}

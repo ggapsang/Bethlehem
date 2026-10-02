@@ -6,7 +6,7 @@
 import type { Host } from './host';
 import { save } from './host';
 import { removeComment } from './actions';
-import { annotations, draft, fullscreen, holdPick, mode, notify, redo, selected, undo, user } from './store';
+import { annotations, draft, fullscreen, holdPick, mode, notify, popHidden, redo, selected, undo, user } from './store';
 
 let host: Host | null = null;
 export function setKeyHost(h: Host): void {
@@ -56,6 +56,7 @@ export function onKeyDown(e: KeyboardEvent, inScreen = false): void {
   }
   if (e.key === 'Escape' && !isTyping(e)) {
     if (draft.peek()) draft.value = null;
+    else if (selected.peek() && !popHidden.peek()) popHidden.value = true;
     else if (selected.peek()) selected.value = null;
     else if (mode.peek() === 'annotate') mode.value = 'view';
     else if (fullscreen.peek() && !inScreen) document.exitFullscreen?.().catch(() => {});

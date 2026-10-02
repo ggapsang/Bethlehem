@@ -61,6 +61,7 @@ export interface BethlehemApi {
   capture(rect: { x: number; y: number; width: number; height: number }): Promise<{ bytes: Uint8Array; w: number; h: number } | null>;
   siteSnapshot(guestId: number): Promise<SiteSnapshot>;
   /* 창 */
+  toggleDevTools(): void;
   setState(s: { title: string; dirty: boolean }): void;
   onRequestSave(cb: () => void): void;
   closeNow(): void;

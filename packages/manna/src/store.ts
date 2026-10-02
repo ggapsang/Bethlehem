@@ -2,7 +2,7 @@
  * 문서는 제자리에서 고치고 rev 를 올려 다시 그린다. 문서 객체가 그대로 저장 대상이기 때문이다.
  * 되돌리기는 고치기 직전 문서의 JSON 스냅숏을 쌓는다 (블롭은 덧붙기만 하므로 함께 되돌릴 필요가 없다).
  */
-import { computed, signal } from '@preact/signals';
+import { computed, effect, signal } from '@preact/signals';
 import type { BlobStore, EncodedBlob, MannaDoc } from '@core';
 import type { Picked } from './agent/protocol';
 import { latest, newDoc, now } from '@core';
@@ -27,7 +27,11 @@ export interface Miss {
   url: string;
 }
 
-const LS = { theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'manna.notesOpen' };
+/* notes 는 키를 바꿨다 — 개요는 이제 기본으로 접혀 있다 (전에 펼쳐 둔 기록을 따르지 않는다) */
+const LS = {
+  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', titleW: 'terr.titleW',
+  tabs: (docId: string) => `terr.tabs.${docId}`,
+};
 
 function lsGet(k: string): string | null {
   try {
@@ -61,6 +65,12 @@ export const recording = signal<{ startedAt: number } | null>(null);
 export const selected = signal<string | null>(null);
 export const hovered = signal<string | null>(null);
 export const draft = signal<Draft | null>(null);
+/** Comment 팝업만 닫았다 — 선택(카드·마커 강조)은 그대로 둔다. 다른 Comment 를 고르면 다시 뜬다 */
+export const popHidden = signal(false);
+effect(() => {
+  selected.value;
+  popHidden.value = false;
+});
 export const still = signal<Still | null>(null);
 /** 선택한 Comment 의 '달 때 화면'을 스테이지에 덮어 보일지 */
 export const shotView = signal(true);
@@ -82,7 +92,13 @@ export const saveState = signal<{ kind: SaveKind; where?: string; at?: number; m
 export const fullscreen = signal(false);
 export const panelOpen = signal(lsGet(LS.panel) !== '0');
 export const panelWidth = signal(Number(lsGet(LS.panelW)) || 400);
-export const notesOpen = signal(lsGet(LS.notes) !== '0');
+export const notesOpen = signal(lsGet(LS.notes) === '1');
+/** 툴바의 문서 제목 칸 폭 — 휠이나 손잡이로 늘이고 줄인다 */
+export const titleWidth = signal(Math.min(720, Math.max(120, Number(lsGet(LS.titleW)) || 320)));
+/** 열린 화면 탭 — 브라우저 탭처럼 여러 화면을 띄워 두고 오간다 */
+export const openTabs = signal<string[]>([]);
+/** 화면 배율 — null 이면 남는 자리에 맞춘다 */
+export const zoom = signal<number | null>(null);
 export const canUndo = signal(false);
 export const canRedo = signal(false);
 
@@ -203,9 +219,18 @@ export function loadDocument(d: MannaDoc, b: BlobStore, name: string | null = nu
   blobs = b;
   doc.value = d;
   fileName.value = name;
-  const first = d.screens[0];
+  lastVer.clear();
+  let tabs: string[] = [];
+  try {
+    tabs = (JSON.parse(lsGet(LS.tabs(d.id)) ?? '[]') as string[]).filter((id) => d.screens.some((s) => s.id === id));
+  } catch {
+    /* 기록이 깨졌다 — 첫 화면만 */
+  }
+  const first = d.screens.find((s) => s.id === tabs[0]) ?? d.screens[0];
+  openTabs.value = tabs.length ? tabs : first ? [first.id] : [];
   screenId.value = first?.id ?? null;
   versionNo.value = first ? latest(first).v : null;
+  zoom.value = null;
   selected.value = null;
   draft.value = null;
   misses.value = [];
@@ -220,14 +245,64 @@ export function addBlobs(entries: Iterable<[string, EncodedBlob]>): void {
   for (const [sha, b] of entries) blobs.set(sha, b);
 }
 
+/** 탭마다 마지막으로 보던 버전 */
+const lastVer = new Map<string, number>();
+
+function saveTabs(): void {
+  lsSet(LS.tabs(doc.peek().id), JSON.stringify(openTabs.peek()));
+}
+
 export function selectScreen(id: string, v?: number): void {
   const s = doc.value.screens.find((x) => x.id === id);
   if (!s) return;
+  const remembered = lastVer.get(id);
+  const ver = v ?? (remembered != null && s.versions.some((x) => x.v === remembered) ? remembered : latest(s).v);
+  if (screenId.peek() !== id) zoom.value = null;
+  if (!openTabs.peek().includes(id)) {
+    // 지금 탭 바로 뒤에 연다 (브라우저처럼)
+    const tabs = [...openTabs.peek()];
+    const at = tabs.indexOf(screenId.peek() ?? '');
+    tabs.splice(at < 0 ? tabs.length : at + 1, 0, id);
+    openTabs.value = tabs;
+    saveTabs();
+  }
+  lastVer.set(id, ver);
   screenId.value = id;
-  versionNo.value = v ?? latest(s).v;
+  versionNo.value = ver;
   selected.value = null;
   draft.value = null;
   misses.value = [];
+}
+
+/** 탭 닫기 — 지금 탭이면 옆 탭으로. 마지막 하나는 닫지 않는다 */
+export function closeTab(id: string): void {
+  const tabs = openTabs.peek().filter((x) => doc.peek().screens.some((s) => s.id === x));
+  if (tabs.length <= 1 || !tabs.includes(id)) return;
+  const at = tabs.indexOf(id);
+  const rest = tabs.filter((x) => x !== id);
+  openTabs.value = rest;
+  saveTabs();
+  if (screenId.peek() === id) selectScreen(rest[Math.min(at, rest.length - 1)]!);
+}
+
+/** 탭 순서 바꾸기 */
+export function moveTab(id: string, to: number): void {
+  const tabs = openTabs.peek().filter((x) => x !== id);
+  tabs.splice(Math.max(0, Math.min(to, tabs.length)), 0, id);
+  openTabs.value = tabs;
+  saveTabs();
+}
+
+const ZOOMS = [0.1, 0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 3];
+/** 한 단계 키우기/줄이기 — cur 는 지금 실제 배율(맞춤일 때도) */
+export function zoomStep(dir: 1 | -1, cur: number): void {
+  const next = dir > 0 ? ZOOMS.find((z) => z > cur + 0.001) : [...ZOOMS].reverse().find((z) => z < cur - 0.001);
+  zoom.value = next ?? (dir > 0 ? ZOOMS[ZOOMS.length - 1]! : ZOOMS[0]!);
+}
+
+export function setTitleWidth(w: number): void {
+  titleWidth.value = Math.min(720, Math.max(120, Math.round(w)));
+  lsSet(LS.titleW, String(titleWidth.value));
 }
 
 /* ── 보기 설정 (이 브라우저에만 기억) ─────────────────────────────────── */

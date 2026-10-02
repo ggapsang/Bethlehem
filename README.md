@@ -6,7 +6,7 @@
 
 사용자에게 보이는 이름은 **테라리움** 하나다. 코드 안에서는 작성 프로그램을 **Bethlehem**, 내보낸 문서를 **Manna** 라고 부른다.
 
-컨셉은 [docs/CONCEPT.md](docs/CONCEPT.md), 구조와 결정 사항은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**쓰는 법과 컨셉은 [docs/USER_GUIDE.md](docs/USER_GUIDE.md)** 에 있다. 처음 구상은 [docs/CONCEPT.md](docs/CONCEPT.md), 구조와 결정 사항은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## 실행
 
