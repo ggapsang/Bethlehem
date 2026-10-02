@@ -54,7 +54,7 @@ export async function addFromDraft(body: string, title = '', assignee = ''): Pro
     ...blank(body),
     ...(title.trim() ? { title: title.trim() } : {}),
     ...(assignee.trim() ? { assignee: assignee.trim() } : {}),
-    anchor: { fp: p.fp, ...(p.region ? { region: p.region } : {}), trail: p.trail, props: p.props, path: p.path, ...(stagePage.peek() ? { page: stagePage.peek() } : {}) },
+    anchor: { fp: p.fp, ...(p.region ? { region: p.region } : {}), trail: p.trail, props: p.props, path: p.path, ...(stagePage.peek() ? { page: stagePage.peek() } : {}), ...(p.html ? { html: p.html } : {}) },
     ...(capture && shot ? { kind: 'capture' as const } : {}),
     ...(shot ? { shot } : {}),
     ...(clip ? { clips: [clip] } : {}),

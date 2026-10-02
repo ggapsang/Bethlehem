@@ -122,6 +122,34 @@ describe('manna-file', () => {
     expect(new Set(referencedShas(doc))).toEqual(new Set([sha, clipSha]));
   });
 
+  it('맨 앞에 AI 가 읽는 법이 있고, 그 순서대로 따라가면 Comment 의 자리를 원본에서 찾는다', async () => {
+    const doc = newDoc('가이드 --> 문서');
+    const src = enc.encode('<!doctype html>\n<body>\n<div id="tabB">설비 정보</div>\n</body>');
+    const sha = await sha256(src);
+    const blobs: BlobStore = new Map([[sha, await encodeBlob(src, 'gz64')]]);
+    const a = annotation({ title: '탭 이름', anchor: { fp: { id: 'tabB', selector: '#tabB', tag: 'div', classes: [], attrs: {}, ancestry: [] }, trail: [], html: '<div id="tabB">설비 정보</div>' } });
+    doc.screens.push({ id: 'SCR-001', title: '화면', notes: '', annotations: [a], versions: [V1(sha, src.length)] });
+    const out = serializeManna(doc, blobs, { js: '', css: '' });
+    // 1) 문서 맨 앞(doctype 바로 다음)에 주석으로 — 주석은 도중에 끝나지 않는다
+    const head = out.slice(0, out.indexOf('<html'));
+    expect(head.startsWith('<!doctype html>\n<!--')).toBe(true);
+    expect(head).toContain('TERRARIUM-AI-GUIDE');
+    const inner = head.slice(head.indexOf('<!--') + 4, head.lastIndexOf('-->'));
+    expect(inner).not.toContain('--');
+    expect(inner).not.toMatch(/<\/script/i); // 제목에 든 </script> 도 다른 글자로 바뀐다
+    expect(head).toContain('SCR-001 "화면"');
+    // 2) 가이드가 말하는 대로: manna-doc JSON → annotations → anchor → files[entry].sha 블롭(gz64) → id 를 찾는다
+    const json = JSON.parse(/<script type="application\/json" id="manna-doc">([\s\S]*?)<\/script>/.exec(out)![1]!.replace(/\\u003c/g, '<'));
+    const c = json.screens[0].annotations[0];
+    const v = json.screens[0].versions.find((x: { v: number }) => x.v === c.version);
+    const m = new RegExp(`id="manna-blob-${v.files[c.anchor.page ?? v.entry].sha}" data-enc="(gz64|b64)">([^<]*)`).exec(out)!;
+    const { gunzipSync } = await import('node:zlib');
+    const raw = Buffer.from(m[2]!, 'base64');
+    const lines = (m[1] === 'gz64' ? gunzipSync(raw) : raw).toString('utf8').split('\n');
+    expect(lines.findIndex((l) => l.includes(`id="${c.anchor.fp.id}"`)) + 1).toBe(3);
+    expect(c.anchor.html).toContain('설비 정보');
+  });
+
   it('없는 블롭을 참조하면 저장을 멈춘다', () => {
     const doc = newDoc();
     doc.screens.push({ id: 'S', title: 's', notes: '', annotations: [], versions: [V1('nope')] });

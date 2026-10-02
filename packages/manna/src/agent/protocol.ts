@@ -23,6 +23,7 @@ export interface Picked {
   trail: string[];
   props: Record<string, string>;
   path: Step[];
+  html: string;
 }
 
 export type HostMsg =

@@ -50,6 +50,7 @@ export const docSpecs: Spec[] = [
       // Delete · 되돌리기 — 방금 단 Comment 가 골라져 있다
       check('방금 단 Comment 가 골라져 있다', !!(await page.$('.cards > .card:nth-child(2).is-sel')));
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.waitForTimeout(200); // 작성 창이 닫히며 포커스가 정리될 시간
       await page.keyboard.press('Delete');
       check('Delete 로 지운다', !!(await until(async () => (await cardCount(page)) === 1, 3000)));
       await page.keyboard.press('Control+z');

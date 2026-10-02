@@ -2,6 +2,7 @@
  * 정규식만 쓰므로 DOMParser 가 없는 Node 에서도 돈다.
  */
 import type { BlobStore, EncodedBlob, MannaDoc } from './types';
+import { aiGuide } from './ai-guide';
 import { FORMAT } from './types';
 
 export interface Runtime {
@@ -52,6 +53,8 @@ export function referencedShas(doc: MannaDoc): Set<string> {
 export function serializeManna(doc: MannaDoc, blobs: BlobStore, runtime: Runtime): string {
   const parts: string[] = [
     '<!doctype html>',
+    // 맨 앞 — AI · 도구가 읽는 법 (화면에는 보이지 않는다)
+    aiGuide(doc),
     '<html lang="ko">',
     '<head>',
     '<meta charset="utf-8">',

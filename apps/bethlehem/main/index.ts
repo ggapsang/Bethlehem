@@ -408,8 +408,9 @@ ipcMain.handle('ws-inspect', async (_e, dir: string) => {
   const docs: { path: string; name: string; at: string; title?: string }[] = [];
   for (const n of names.filter((x) => /\.html?$/i.test(x))) {
     const fp = join(abs, n);
-    const head = (await readFile(fp, 'utf8').catch(() => '')).slice(0, 4000);
-    if (!head.includes('id="manna-doc"') && !head.includes('Terrarium Manna')) continue;
+    // 맨 앞의 AI 가이드 주석 뒤에 문서 데이터가 온다 — 앞부분을 넉넉히 본다
+    const head = (await readFile(fp, 'utf8').catch(() => '')).slice(0, 20000);
+    if (!head.includes('TERRARIUM-AI-GUIDE') && !head.includes('id="manna-doc"') && !head.includes('Terrarium Manna')) continue;
     const title = /<title>([^<]*)<\/title>/i.exec(head)?.[1];
     docs.push({ path: fp, name: n, at: (await stat(fp)).mtime.toISOString(), ...(title ? { title } : {}) });
   }

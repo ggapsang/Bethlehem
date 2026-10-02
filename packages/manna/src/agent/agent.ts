@@ -179,7 +179,16 @@ declare global {
     const r = target(el, region);
     return [r.left, r.top, r.width, r.height];
   };
+  /** 대상의 HTML 조각 — 작으면 그대로, 크면 여는 태그 + 글자 일부 + 닫는 태그 */
+  const snippetOf = (el: Element): string => {
+    const full = el.outerHTML;
+    if (full.length <= 700) return full;
+    const open = full.slice(0, full.indexOf('>') + 1).slice(0, 400);
+    const txt = (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    return `${open} … (자식 ${el.children.length}개${txt ? `, 글자: ${txt}` : ''}) … </${el.tagName.toLowerCase()}>`;
+  };
   const pickedOf = (el: Element, region?: Region): Picked => ({
+    html: snippetOf(el),
     fp: fingerprint(el),
     ...(region ? { region } : {}),
     rect: rectOf(el, region),
