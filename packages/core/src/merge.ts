@@ -80,6 +80,13 @@ export function mergeDoc(base: MannaDoc, incoming: MannaDoc, baseBlobs: BlobStor
         a.history.push({ at: now(), by, field: 'title', from: a.title ?? '', to: ia.title ?? '' });
         a.title = ia.title;
       }
+      // 완료 — 회신본에서 체크하거나 풀었으면 따른다 (원본도 그 뒤로 고쳤으면 원본)
+      if (theyEdited && JSON.stringify(ia.done ?? null) !== JSON.stringify(a.done ?? null) && !(since && a.updatedAt > since)) {
+        a.history.push({ at: now(), by, field: 'done', from: a.done ?? null, to: ia.done ?? null });
+        if (ia.done) a.done = { ...ia.done };
+        else delete a.done;
+        r.updated++;
+      }
       if (theyEdited && ia.body !== a.body) {
         const baseChanged = !!since && a.updatedAt > since;
         if (!baseChanged) {

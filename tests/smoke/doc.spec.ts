@@ -49,6 +49,16 @@ export const docSpecs: Spec[] = [
       check('Delete 로 지운다', !!(await until(async () => (await cardCount(page)) === 1, 3000)));
       await page.keyboard.press('Control+z');
       check('Ctrl+Z 로 되살린다', !!(await until(async () => (await cardCount(page)) === 2, 3000)));
+      // 완료 — 지우지 않고 숨긴다. 번호는 다시 매기지 않는다
+      await page.click('.cards > .card:first-child .done-check');
+      check('완료를 체크하면 카드가 숨는다', !!(await until(async () => (await cardCount(page)) === 1, 3000)));
+      check('남은 Comment 의 번호는 그대로 (2번)', ((await page.textContent('.cards > .card:first-child .no')) ?? '') === '2');
+      check('완료한 것은 화면 마커 · 마커 줄에서도 숨는다', !(await visibleMarkers(page)).includes('1') && !(await page.$('.mk-list .mk:has-text("1")')));
+      check('"완료 1 보기" 가 뜬다', ((await page.textContent('.done-toggle')) ?? '').includes('완료 1'));
+      await page.click('.done-toggle');
+      check('완료 보기 — 다시 보이고 완료로 표시된다', !!(await until(async () => (await cardCount(page)) === 2, 2000)) && !!(await page.$('.cards > .card:first-child.is-done .done-check:checked')));
+      await page.click('.cards > .card:first-child .done-check');
+      check('체크를 풀면 완료가 풀린다', !(await page.$('.card.is-done')) && !(await page.$('.done-toggle')));
     },
   },
   {

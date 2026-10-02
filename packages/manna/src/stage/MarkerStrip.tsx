@@ -4,7 +4,7 @@
 import { Camera } from 'lucide-preact';
 import type { Annotation } from '@core';
 import { displayNo } from '@core';
-import { annotations, hovered, popHidden, requestReveal, rev, screen, selected, shotView, version, visible } from '../store';
+import { shownAnnotations, hovered, popHidden, requestReveal, rev, screen, selected, shotView, version, visible } from '../store';
 import { MARK_LABEL, markState, type MarkState } from '../ui/labels';
 import { plainText } from '../ui/editor/MarkdownEditor';
 
@@ -22,7 +22,7 @@ export function openComment(a: Annotation): void {
 export function MarkerStrip() {
   rev.value;
   const scr = screen.value;
-  const list = annotations.value;
+  const list = shownAnnotations.value;
   const vis = visible.value;
   if (!scr || !list.length) return null;
   const site = version.value?.source?.mode === 'site';
@@ -39,11 +39,11 @@ export function MarkerStrip() {
             <button
               key={a.id}
               type="button"
-              class={`mk mk-${st} ${on ? 'is-sel' : ''}`}
+              class={`mk mk-${st} ${on ? 'is-sel' : ''} ${a.done ? 'is-done' : ''}`}
               data-id={a.id}
               data-state={st}
               aria-pressed={on}
-              title={`${displayNo(scr, a)} · ${MARK_LABEL[st]}${first ? ` — ${first.slice(0, 60)}` : ''}`}
+              title={`${displayNo(scr, a)} · ${a.done ? '완료 · ' : ''}${MARK_LABEL[st]}${first ? ` — ${first.slice(0, 60)}` : ''}`}
               onClick={() => (on && !popHidden.peek() ? (selected.value = null) : openComment(a))}
               onPointerEnter={() => (hovered.value = a.id)}
               onPointerLeave={() => (hovered.value = null)}

@@ -1,13 +1,13 @@
 /* 오른쪽 패널 — 위에 화면 개요(마크다운), 아래에 Comment 목록. 한 스크롤로 이어진다 */
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Camera, ChevronDown, ChevronRight, EyeOff, Film, GripVertical, MessageSquare, Plus, X } from 'lucide-preact';
+import { CheckSquare, Camera, ChevronDown, ChevronRight, EyeOff, Film, GripVertical, MessageSquare, Plus, X } from 'lucide-preact';
 import type { Annotation, Screen } from '@core';
 import { displayNo } from '@core';
-import { MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, reorder } from '../actions';
+import { toggleDone, MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, reorder } from '../actions';
 import type { Host } from '../host';
 import {
-  version, annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible,
+  setShowDone, showDone, shownAnnotations, version, annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible,
 } from '../store';
 import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
 import { ago, markState } from './labels';
@@ -165,7 +165,9 @@ function Notes({ scr }: { scr: Screen }) {
 }
 
 function Comments({ scr }: { scr: Screen }) {
-  const list = annotations.value;
+  const list = shownAnnotations.value;
+  const doneN = annotations.value.filter((a) => a.done).length;
+  const openN = annotations.value.length - doneN;
   const listRef = useRef<HTMLOListElement>(null);
   const [drag, setDrag] = useState<{ id: string; to: number; y: number } | null>(null);
 
@@ -205,8 +207,19 @@ function Comments({ scr }: { scr: Screen }) {
         <button type="button" class="section-head" aria-expanded={commentsOpen.value} onClick={() => toggleComments()}>
           {commentsOpen.value ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
           <span>Comment</span>
-          <span class="count">{list.length}</span>
+          <span class="count">{openN}</span>
         </button>
+        {doneN > 0 && (
+          <button
+            type="button"
+            class={`done-toggle ${showDone.value ? 'is-on' : ''}`}
+            aria-pressed={showDone.value}
+            title={showDone.value ? '완료한 Comment 숨기기' : '완료한 Comment 도 보기'}
+            onClick={() => setShowDone(!showDone.value)}
+          >
+            <CheckSquare {...ICON} size={14} /> 완료 {doneN} {showDone.value ? '숨기기' : '보기'}
+          </button>
+        )}
         <button type="button" class="btn-icon btn-xs" title="화면 전체에 Comment 달기" aria-label="화면 전체에 Comment 달기" onClick={() => addScreenComment()}>
           <Plus {...ICON} />
         </button>
@@ -249,7 +262,7 @@ function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip
     <li
       ref={ref}
       data-id={a.id}
-      class={`card ${sel ? 'is-sel' : ''} ${shown ? '' : 'is-dim'} ${dragging ? 'is-dragging' : ''}`}
+      class={`card ${sel ? 'is-sel' : ''} ${shown ? '' : 'is-dim'} ${dragging ? 'is-dragging' : ''} ${a.done ? 'is-done' : ''}`}
       onPointerEnter={() => (hovered.value = a.id)}
       onPointerLeave={() => (hovered.value = null)}
     >
@@ -257,6 +270,17 @@ function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip
         <span class="grip" title="끌어서 순서 바꾸기" aria-label="끌어서 순서 바꾸기" onPointerDown={(e) => onGrip(e, a.id)}>
           <GripVertical {...ICON} />
         </span>
+        <input
+          type="checkbox"
+          class="done-check"
+          checked={!!a.done}
+          aria-label={`${displayNo(scr, a)}번 완료`}
+          title={a.done ? `완료 — ${a.done.by} · ${ago(a.done.at)} (누르면 풀기)` : '완료 — 지우지 않고 숨긴다'}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleDone(a);
+          }}
+        />
         <button type="button" class="card-title" aria-expanded={sel} onClick={() => (sel && shown && !popHidden.value ? (selected.value = null) : open())}>
           <span class={`no ${a.anchor ? '' : 'no-screen'}`}>{displayNo(scr, a)}</span>
           <span class="card-lines">

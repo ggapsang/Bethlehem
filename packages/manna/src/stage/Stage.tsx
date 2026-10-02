@@ -9,7 +9,7 @@ import type { Host } from '../host';
 import { onKeyDown, onKeyUp } from '../keys';
 import {
   annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, requestReveal, reveal, revealing, rev,
-  draftClip, fitMode, markerLabels, popHidden, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
+  draftClip, fitMode, markerLabels, popHidden, showDone, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
   visible, zoom, zoomStep,
 } from '../store';
 import type { ComponentChildren } from 'preact';
@@ -642,7 +642,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
         <div class="hl-box hl-pick" ref={pickBox} />
         <div class="hl-box hl-drag" ref={dragBox} />
         <div class="marker-layer" ref={markers} data-color={markerColor} data-labels={markerLabels.value ? 'on' : 'off'}>
-          {list.filter((a) => a.anchor && a.kind !== 'capture' && v.source?.mode !== 'site').map((a) => <Marker key={a.id} a={a} scr={scr} />)}
+          {list.filter((a) => a.anchor && a.kind !== 'capture' && v.source?.mode !== 'site' && (!a.done || showDone.value)).map((a) => <Marker key={a.id} a={a} scr={scr} />)}
         </div>
         {(loading || revealing.value) && !error && <div class="stage-note" aria-label="불러오는 중"><span class="spinner" /></div>}
         {showShot && (

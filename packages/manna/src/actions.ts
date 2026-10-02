@@ -4,7 +4,7 @@ import { moveAnnotation, now, setField, sha256, toBase64, touchParticipant, uid 
 import type { SiteSnap } from './host';
 import { startRecording, type Recorder } from './stage/record';
 import {
-  dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
+  annotations, shownAnnotations, showDone, undo, dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
   stageViewport, still, user, version,
 } from './store';
 
@@ -122,6 +122,17 @@ export function addScreenComment(body = ''): string | null {
   return a.id;
 }
 
+/** 완료 체크 · 풀기 — 지우지 않고 숨긴다. 번호는 그대로 */
+export function toggleDone(a: Annotation): void {
+  if (needName()) return;
+  const done = !a.done;
+  mutate(() => setField(a, 'done', done ? { by: user.value!, at: now() } : undefined, user.value!), { label: done ? 'Comment 완료' : 'Comment 완료 풀기' });
+  if (done && !showDone.peek()) {
+    if (selected.peek() === a.id) selected.value = null;
+    notify('완료 — 숨겼습니다 (완료 보기로 다시 봅니다)', 'info', { label: '되돌리기', run: undo });
+  }
+}
+
 export function editTitle(a: Annotation, title: string): void {
   if (needName()) return;
   mutate(() => setField(a, 'title', title.trim() || undefined, user.value!), { label: 'Comment 제목', merge: `title:${a.id}` });
@@ -157,10 +168,15 @@ export function removeComment(a: Annotation): void {
   if (selected.peek() === a.id) selected.value = null;
 }
 
+/** 순서 바꾸기 — to 는 보이는 카드들 사이의 자리. 숨긴(완료) Comment 사이에서도 제자리를 찾는다 */
 export function reorder(id: string, to: number): void {
   const s = screen.peek();
   if (!s) return;
-  mutate(() => moveAnnotation(s, id, to), { label: '순서 변경' });
+  const all = annotations.peek().filter((a) => a.id !== id);
+  const shown = shownAnnotations.peek().filter((a) => a.id !== id);
+  const before = shown[to];
+  const idx = before ? all.indexOf(before) : shown.length ? all.indexOf(shown[shown.length - 1]!) + 1 : 0;
+  mutate(() => moveAnnotation(s, id, idx), { label: '순서 변경' });
 }
 
 export function editNotes(text: string): void {

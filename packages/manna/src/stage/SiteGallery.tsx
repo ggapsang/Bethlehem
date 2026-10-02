@@ -6,7 +6,7 @@ import { ExternalLink, Film, Image as ImageIcon } from 'lucide-preact';
 import type { Annotation, Screen, ScreenVersion } from '@core';
 import { displayNo } from '@core';
 import type { Host } from '../host';
-import { annotations, popHidden, rev, selected } from '../store';
+import { popHidden, rev, selected, shownAnnotations } from '../store';
 import { Detail } from '../ui/Popover';
 import { ago } from '../ui/labels';
 import { useBlobUrl } from './media';
@@ -33,8 +33,8 @@ function ClipVideo({ sha, type }: { sha: string; type: string }) {
 
 export function SiteGallery({ host, scr, v, hasCopy, copyLabel = '마지막 사본 보기', onCopy }: { host: Host; scr: Screen; v: ScreenVersion; hasCopy: boolean; copyLabel?: string; onCopy: () => void }) {
   rev.value;
-  const list = annotations.value.filter((a) => a.shot || (a.clips?.length ?? 0) > 0);
-  const rest = annotations.value.length - list.length;
+  const list = shownAnnotations.value.filter((a) => a.shot || (a.clips?.length ?? 0) > 0);
+  const rest = shownAnnotations.value.length - list.length;
   const selRef = useRef<HTMLElement>(null);
   useEffect(() => {
     selRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });

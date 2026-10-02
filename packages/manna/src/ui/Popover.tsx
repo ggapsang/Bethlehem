@@ -5,7 +5,7 @@ import { createPortal } from 'preact/compat';
 import { Camera, Circle, Film, Pin, Square, Trash2, X } from 'lucide-preact';
 import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
-import { snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleSnipRecording } from '../actions';
+import { toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleSnipRecording } from '../actions';
 import type { Host } from '../host';
 import { annotations, draft, draftClip, popHidden, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
@@ -265,6 +265,9 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
         <span class={`no ${a.anchor ? '' : 'no-screen'}`}>{displayNo(scr, a)}</span>
         <span class="card-meta"><strong class="author">{a.author}</strong> · {ago(a.createdAt)}</span>
         <span class="grow" />
+        <label class={`done-label ${a.done ? 'is-on' : ''}`} title={a.done ? `${a.done.by} · ${ago(a.done.at)}` : '완료 — 지우지 않고 숨긴다'}>
+          <input type="checkbox" checked={!!a.done} onChange={() => toggleDone(a)} /> 완료
+        </label>
         <button type="button" class="btn-icon btn-xs" aria-label="닫기" title="팝업 닫기 (선택은 그대로)" onClick={() => (popHidden.value = true)}><X {...ICON} /></button>
       </div>
       {mine ? (

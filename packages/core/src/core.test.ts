@@ -234,6 +234,18 @@ describe('merge', () => {
     expect(r.conflicts).toHaveLength(0);
   });
 
+  it('회신본에서 완료한 Comment 는 완료로 합친다', async () => {
+    const { mergeDoc } = await import('./merge');
+    const base = mk();
+    const inc: MannaDoc = JSON.parse(JSON.stringify(base));
+    inc.origin = { by: '수신자', at: base.meta.updatedAt, baseUpdatedAt: base.meta.updatedAt };
+    const t = new Date(Date.parse(base.meta.updatedAt) + 1000).toISOString();
+    inc.screens[0].annotations[0].done = { by: '수신자', at: t };
+    inc.screens[0].annotations[0].updatedAt = t;
+    mergeDoc(base, inc, new Map(), new Map());
+    expect(base.screens[0].annotations[0].done?.by).toBe('수신자');
+  });
+
   it('다른 문서는 합치지 않는다', async () => {
     const { mergeDoc } = await import('./merge');
     expect(() => mergeDoc(mk(), mk(), new Map(), new Map())).toThrow(/다른 문서/);

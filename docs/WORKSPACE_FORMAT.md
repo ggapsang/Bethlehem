@@ -23,7 +23,7 @@
 |---|---|
 | `screens/<ID>/notes.md`, `notes-<id>.md` | 자유 노트 본문. 마크다운 그대로 |
 | `screens/<ID>/screen.json` | `title`(화면 이름), `notesTitle`(첫 탭 이름), `moreNotes`(탭 목록 `[{ "id", "title" }]` — 탭을 더하면 `notes-<id>.md` 도 만든다) |
-| `screens/<ID>/comments.json` | Comment 의 `title`, `body`, `replies`. 순서를 바꾸면 번호가 바뀐다 |
+| `screens/<ID>/comments.json` | Comment 의 `title`, `body`, `replies`, `done`(완료). 순서를 바꾸면 번호가 바뀐다 |
 | `terrarium.json` | `doc.meta.title`(문서 제목), `doc.meta.version` |
 
 `versions`, `anchor`, `shot`, `clips`, `id`, `blobs/` 는 화면 · 위치 · 그림과 묶여 있으니 고치지 않는다.
@@ -40,6 +40,7 @@
   "createdAt": "2026-10-02T03:00:00.000Z",
   "updatedAt": "2026-10-02T03:10:00.000Z",
   "kind": "capture",              // 있으면 캡처 Comment (그림만, 실시간 화면에 마커 없음)
+  "done": { "by": "이상현", "at": "…" }, // 있으면 완료 — 지우지 않고 숨긴다. 풀려면 이 칸을 뺀다
   "anchor": { … },                // 화면 위 대상 — 고치지 않는다. 없으면 화면 전체 Comment
   "replies": [ { "id": "…", "author": "이상현", "at": "…", "body": "마크다운" } ],
   "history": [ … ]

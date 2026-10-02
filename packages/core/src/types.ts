@@ -156,6 +156,8 @@ export interface Annotation {
   kind?: 'capture';
   /** 제목 — 없어도 된다. 카드와 화면의 마커 옆에 보인다 */
   title?: string;
+  /** 완료 — 지우지 않고 숨긴다. "완료 보기" 로 다시 본다. 번호는 그대로 */
+  done?: { by: string; at: string };
   /** 마크다운. 할 일은 - [ ] 체크박스로 */
   body: string;
   clips?: Clip[];
