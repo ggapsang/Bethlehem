@@ -7,10 +7,11 @@ import { displayNo } from '@core';
 import { addScreenComment, editBody, editNotes, reorder } from '../actions';
 import type { Host } from '../host';
 import {
-  annotations, commentsOpen, hovered, notesOpen, popHidden, requestReveal, rev, screen, selected, toggleComments, toggleNotes, visible,
+  annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible,
 } from '../store';
 import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
-import { ago } from './labels';
+import { ago, markState } from './labels';
+import { openComment } from '../stage/MarkerStrip';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
@@ -20,49 +21,52 @@ export function Panel(_props: { host: Host }) {
   return (
     <aside class="panel" aria-label="개요와 Comment">
       <Notes scr={scr} />
+      {notesOpen.value && <NotesSplitter />}
       <Comments scr={scr} />
     </aside>
   );
 }
 
-/* 개요 높이 — 펼치면 패널의 절반. 쓰다가 내용이 늘면 늘어난 만큼 같이 늘어나고(Enter 한 번에 한 줄),
-   Comment 제목이 밀려나기 직전(HARD)에서 멈춘다. 그 뒤로는 상자 안에서 스크롤한다. 화면을 바꾸거나 다시 펼치면 절반부터 */
-const HALF_GAP = 72; // 패널 위 여백 + 개요 제목 + 아래 여백
-const HARD_GAP = 124; // 위 + 개요 제목·여백 + Comment 제목 + 아래
+/** 개요와 Comment 사이 — 끌어서 개요 높이를 바꾼다 (더블클릭하면 절반) */
+function NotesSplitter() {
+  const onDown = (e: PointerEvent) => {
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    const panel = el.closest('.panel') as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    document.body.classList.add('is-resizing-v');
+    const top = panel.getBoundingClientRect().top;
+    const move = (ev: PointerEvent) => setNotesRatio((ev.clientY - top) / panel.clientHeight);
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      document.body.classList.remove('is-resizing-v');
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  };
+  return (
+    <div
+      class="notes-splitter"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="개요 높이 조절"
+      tabIndex={0}
+      onPointerDown={onDown}
+      onDblClick={() => setNotesRatio(0.5)}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowUp') setNotesRatio(notesRatio.peek() - 0.05);
+        if (e.key === 'ArrowDown') setNotesRatio(notesRatio.peek() + 0.05);
+      }}
+    />
+  );
+}
 
 function Notes({ scr }: { scr: Screen }) {
   rev.value; // 문서는 제자리에서 고치므로 props 가 같아도 다시 그려야 한다 (signals 의 얕은 비교를 피한다)
   const open = notesOpen.value;
-  const box = useRef<HTMLElement>(null);
-  const capRef = useRef<number | null>(null);
-  const prevH = useRef(0);
-  // 내용 높이를 지켜보다가, 쓰는 중에(포커스가 개요 안에) 늘어난 만큼 상자도 늘린다.
-  // 다시 그리지 않고 스타일만 바꾼다 — 쓰는 도중에 다시 그리면 아직 반영 전인 개요로 편집기가 되돌아간다
-  useEffect(() => {
-    capRef.current = null;
-    prevH.current = 0;
-    const sec = box.current;
-    sec?.style.removeProperty('--notes-max');
-    const content = sec?.querySelector('.cm-content') as HTMLElement | null;
-    if (!open || !sec || !content) return;
-    const ro = new ResizeObserver(() => {
-      const h = content.offsetHeight;
-      const grew = prevH.current ? h - prevH.current : 0;
-      prevH.current = h;
-      const panel = sec.closest('.panel') as HTMLElement | null;
-      if (!panel || grew <= 0 || !sec.contains(document.activeElement)) return;
-      const ph = panel.clientHeight;
-      const next = Math.min(ph - HARD_GAP, (capRef.current ?? ph * 0.5 - HALF_GAP) + grew);
-      if (next !== capRef.current) {
-        capRef.current = next;
-        sec.style.setProperty('--notes-max', `${next}px`);
-      }
-    });
-    ro.observe(content);
-    return () => ro.disconnect();
-  }, [scr.id, open]);
   return (
-    <section ref={box} class={`notes ${open ? 'is-open' : ''}`}>
+    <section class={`notes ${open ? 'is-open' : ''}`} style={open ? { height: `${notesRatio.value * 100}%` } : undefined}>
       <button type="button" class="section-head" aria-expanded={open} onClick={() => toggleNotes()}>
         {open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
         <span>개요</span>
@@ -156,17 +160,14 @@ function Comments({ scr }: { scr: Screen }) {
 function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip: (e: PointerEvent, id: string) => void; dragging?: boolean }) {
   rev.value;
   const sel = selected.value === a.id;
-  const shown = !a.anchor || visible.value.has(a.id);
+  const st = markState(a, visible.value);
+  const shown = st !== 'other';
   const ref = useRef<HTMLLIElement>(null);
   useEffect(() => {
     if (sel) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [sel]);
 
-  const open = () => {
-    selected.value = a.id;
-    popHidden.value = false;
-    if (!shown && a.anchor) requestReveal(a.id);
-  };
+  const open = () => openComment(a);
 
   return (
     <li
@@ -184,9 +185,10 @@ function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip
           <span class={`no ${a.anchor ? '' : 'no-screen'}`}>{displayNo(scr, a)}</span>
           <span class="card-meta">{a.author} · {ago(a.createdAt)}</span>
           {!a.anchor && <span class="chip">화면 전체</span>}
-          {!shown && <span class="chip chip-hint" title="다른 화면 상태에 있습니다. 누르면 그 상태로 이동합니다."><EyeOff {...ICON} size={12} /> 다른 상태</span>}
+          {st === 'other' && <span class="chip chip-hint" title="다른 화면 상태에 있습니다. 누르면 그 상태로 이동합니다."><EyeOff {...ICON} size={12} /> 다른 상태</span>}
+          {st === 'capture' && <span class="chip chip-capture" title="그린 영역을 찍어 둔 Comment 입니다. 실시간 화면에는 마커가 붙지 않습니다."><Camera {...ICON} size={12} /> 캡처</span>}
           <span class="grow" />
-          {a.shot && <span class="badge-icon" title="달 때의 화면이 함께 저장되어 있습니다"><Camera {...ICON} size={14} /></span>}
+          {a.shot && st !== 'capture' && <span class="badge-icon" title="달 때의 화면이 함께 저장되어 있습니다"><Camera {...ICON} size={14} /></span>}
           {(a.clips?.length ?? 0) > 0 && <span class="badge-icon"><Film {...ICON} size={14} /> {a.clips!.length}</span>}
           {a.replies.length > 0 && <span class="badge-icon"><MessageSquare {...ICON} size={14} /> {a.replies.length}</span>}
         </button>

@@ -2,7 +2,7 @@
 import { save } from '@manna/host';
 import { mode, paused, redo, screen, setTheme, stageScale, theme, togglePanel, undo, zoom, zoomStep } from '@manna/store';
 import type { MenuCommand } from '../../shared/api';
-import { addImageScreen, addScreenFromFolder, askUrl, host, openDocument, openFolder } from './session';
+import { addImageScreen, addScreenFromFolder, addScreensFromFiles, askUrl, host, openDocument, openFolder } from './session';
 
 const api = window.bethlehem;
 
@@ -20,6 +20,7 @@ export function runMenu(cmd: MenuCommand): void {
     case 'add-folder': return void addScreenFromFolder();
     case 'add-url': return void askUrl();
     case 'add-image': return void addImageScreen();
+    case 'add-files': return void addScreensFromFiles();
     case 'new-version': return void (scr && addScreenFromFolder(scr.id));
     case 'picker': return void (mode.value = mode.peek() === 'annotate' ? 'view' : 'annotate');
     case 'pause': return void (paused.value = !paused.peek());

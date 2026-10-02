@@ -71,6 +71,23 @@ async function ctrlClick(page: Page, p: { x: number; y: number }) {
   await page.keyboard.up('Control');
 }
 
+/** 펼침 메뉴가 잘리지 않고 실제로 보이는가 — 메뉴의 첫 항목 자리에서 맨 위 요소가 그 항목인가 */
+async function menuVisible(page: Page, label: string): Promise<boolean> {
+  await page.click(`button[aria-label="${label}"]`);
+  await page.waitForTimeout(100);
+  const ok = await page.evaluate((l) => {
+    const btn = document.querySelector(`button[aria-label="${l}"]`)!;
+    const item = btn.closest('.popover-wrap')?.querySelector('.popover .popover-item') as HTMLElement | null;
+    if (!item) return false;
+    const r = item.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !!top && item.contains(top);
+  }, label);
+  await page.click(`button[aria-label="${label}"]`); // 다시 눌러 닫는다
+  await page.waitForTimeout(50);
+  return ok;
+}
+
 /** Comment 를 눌러 화면 상태를 찾아가는 동안 — 불러오는 표시가 떴다 사라질 때까지 */
 async function revealDone(page: Page) {
   await page.waitForSelector('.stage-note', { timeout: 1500 }).catch(() => {});
@@ -173,6 +190,7 @@ async function main() {
   await page.waitForTimeout(300);
   check('Comment 가 생긴다', (await cardCount(page)) === 1);
   check('다크 테마가 기본이다', (await page.getAttribute('html', 'data-theme')) === 'dark');
+  check('마커 줄에 번호가 늘어선다', (await page.$$('.mk-strip .mk-list .mk')).length === 1 && !!(await page.$('.mk-list .mk-live')));
   check('화면 머리에 화면 ID · 버전 · 실행 상태가 보인다',
     !!(await page.$('.tabs .tab.is-on .tab-id')) && (await page.$$('.sc-bar .ver-chip')).length === 2 && !!(await page.$('.sc-bar .sc-state')));
   check('목록 이어 쓰기와 체크박스가 렌더링된다', !!(await page.$('.card .cm-task')));
@@ -193,6 +211,7 @@ async function main() {
   await page.click('.composer .btn-primary');
   await page.waitForTimeout(400);
   check('Comment 2개 · 마커 2개', (await cardCount(page)) === 2 && (await visibleMarkers(page)).length === 2, JSON.stringify(await visibleMarkers(page)));
+  check('브라우저에서는 영역도 화면에 붙는다 (찍을 그림이 없어 캡처 없음)', !(await page.$('.snip-bar')) && !!(await until(async () => (await page.$$('.mk-list .mk-live')).length === 2, 3000)), JSON.stringify(await page.$$eval('.mk-strip .mk-list .mk', (m) => m.map((x) => (x as HTMLElement).dataset.state))));
   check('유형·상태·담당 입력이 없다', !(await page.$('.detail select')) && !(await page.$('.detail input:not([type=checkbox])')));
   await page.screenshot({ path: resolve(OUT, '2-comments.png') });
 
@@ -202,6 +221,7 @@ async function main() {
   await page.click('button[aria-label="마커 색"]');
   await page.click('.popover-item:has-text("빨강")');
   check('마커 색을 바꿀 수 있다', (await page.getAttribute('.marker-layer', 'data-color')) === 'red');
+  check('마커 색 메뉴가 잘리지 않고 보인다', await menuVisible(page, '마커 색'));
 
   console.log('\n[4] 되돌리기');
   await page.click('.toolbar .tb-title');
@@ -259,6 +279,7 @@ async function main() {
   await page.waitForTimeout(600);
   check('설비정보 탭에서는 FAB 캔버스 마커가 숨는다', (await visibleMarkers(page)).length === 1);
   check('숨은 Comment 에 "다른 상태" 표시', !!(await page.$('.card .chip-hint')));
+  check('마커 줄에서도 다른 상태로 구분된다', (await page.$$('.mk-list .mk-other')).length >= 1);
   // 설비정보 탭 안의 캔버스에 하나 더 단다 — 경로에 #tabB 클릭이 남는다
   await ctrlClick(page, await pagePoint(page, f, '#eqFleetRadar'));
   await typeComposer(page, '설비정보 탭에서 단 Comment');
@@ -376,18 +397,30 @@ async function main() {
   await page.waitForTimeout(200);
   check('배율 칸을 누르면 맞춤으로 돌아간다', Math.abs((await frameW()) - fw0) < 2 && ((await page.textContent('.zoom-val')) ?? '').startsWith('맞춤'));
   check('탭 줄과 화면 목록이 있다', (await page.$$('.tabs .tab')).length === 1 && !!(await page.$('.tabs button[aria-label="화면 목록"]')));
+  check('화면 목록(▾)을 누르면 목록이 보인다', await menuVisible(page, '화면 목록'));
+  const stageW = async () => (await (await page.$('.stage'))!.boundingBox())!;
+  await page.click('.seg-btn:has-text("꽉 채움")');
+  await page.waitForTimeout(300);
+  const sb = await stageW();
+  const fb = (await (await page.$('.stage-frame'))!.boundingBox())!;
+  check('꽉 채움 — 화면이 탭을 가득 채운다', Math.abs(fb.width - sb.width) < 3 && Math.abs(fb.height - sb.height) < 3, `${Math.round(fb.width)}×${Math.round(fb.height)} / ${Math.round(sb.width)}×${Math.round(sb.height)}`);
+  f = await screenFrame(page);
+  check('꽉 채움에서도 마커가 붙는다', (await visibleMarkers(page)).length >= 1);
+  await page.click('.seg-btn:has-text("여백")');
+  await page.waitForTimeout(300);
 
   console.log('\n[10] 개요 편집 · 저장 → 다시 열기');
   await page.click('.notes .section-head');
   await page.click('.notes .cm-content');
   await page.keyboard.press('Control+Home');
+  await page.waitForTimeout(300); // 맨 위로 스크롤하는 순간에 글자를 쏟아 넣으면 편집기가 순서를 놓친다 — 사람 속도로
   await page.keyboard.type('검증 메모\n');
   const notesH = () => page.evaluate(() => document.querySelector('.notes')!.getBoundingClientRect().height);
   const nh0 = await notesH();
   for (let i = 0; i < 5; i++) await page.keyboard.press('Enter');
   await page.waitForTimeout(150);
   const nh1 = await notesH();
-  check('Enter 를 치면 개요 상자가 늘어난다', nh1 > nh0 + 40, `${Math.round(nh0)} → ${Math.round(nh1)}px`);
+  check('개요 높이는 절반 그대로 — Enter 를 쳐도 늘어나지 않는다', Math.abs(nh1 - nh0) < 2, `${Math.round(nh0)} → ${Math.round(nh1)}px`);
   for (let i = 0; i < 70; i++) await page.keyboard.press('Enter');
   await page.waitForTimeout(200);
   const lay = await page.evaluate(() => {
@@ -396,7 +429,17 @@ async function main() {
     const sc = document.querySelector('.notes .cm-scroller') as HTMLElement;
     return { headIn: head.bottom <= panel.bottom + 1, scrolls: sc.scrollHeight > sc.clientHeight + 4 };
   });
-  check('개요가 늘어나도 Comment 제목은 화면 안에 남고, 그 뒤로는 개요 상자가 스크롤된다', lay.headIn && lay.scrolls, JSON.stringify(lay));
+  check('개요가 길어지면 개요 상자 안에서 스크롤되고 Comment 제목은 그대로', lay.headIn && lay.scrolls, JSON.stringify(lay));
+  // 개요와 Comment 사이 손잡이
+  const spl = (await (await page.$('.notes-splitter'))!.boundingBox())!;
+  await page.mouse.move(spl.x + spl.width / 2, spl.y + spl.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(spl.x + spl.width / 2, spl.y - 150, { steps: 5 });
+  await page.mouse.up();
+  const nh2 = await notesH();
+  check('개요와 Comment 사이를 끌어 개요 높이를 바꾼다', nh2 < nh1 - 100, `${Math.round(nh1)} → ${Math.round(nh2)}px`);
+  await page.dblclick('.notes-splitter');
+  check('손잡이를 더블클릭하면 절반으로', Math.abs((await notesH()) - nh1) < 4);
   await page.click('.comments .section-head');
   check('Comment 도 접힌다', !(await page.$('.cards')));
   await page.click('.comments .section-head');

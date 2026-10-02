@@ -7,7 +7,7 @@ import { app, dialog, Menu, shell, type BrowserWindow, type MenuItemConstructorO
 export type MenuCommand =
   | 'open-folder' | 'open-doc' | 'save' | 'save-as' | 'reveal-dist' | 'reveal-returned'
   | 'undo' | 'redo'
-  | 'add-folder' | 'add-url' | 'add-image' | 'new-version' | 'picker' | 'pause'
+  | 'add-folder' | 'add-url' | 'add-image' | 'add-files' | 'new-version' | 'picker' | 'pause'
   | 'panel' | 'theme' | 'zoom-in' | 'zoom-out' | 'zoom-fit';
 
 export function buildMenu(getWin: () => BrowserWindow | null, guide: string): Menu {
@@ -51,7 +51,7 @@ export function buildMenu(getWin: () => BrowserWindow | null, guide: string): Me
       submenu: [
         item('화면 폴더 추가…', 'add-folder'),
         item('URL 추가…', 'add-url'),
-        item('그림 추가 (png · jpg)…', 'add-image'),
+        item('파일에서 가져오기 — 테라리움 문서 · 그림…', 'add-files'),
         item('지금 화면의 새 버전…', 'new-version'),
         { type: 'separator' },
         item('피커 켜기/끄기', 'picker'),
@@ -64,9 +64,9 @@ export function buildMenu(getWin: () => BrowserWindow | null, guide: string): Me
         item('개요·Comment 패널', 'panel'),
         item('테마 전환 (다크/라이트)', 'theme'),
         { type: 'separator' },
-        item('화면 확대', 'zoom-in', 'Ctrl+휠 위'),
-        item('화면 축소', 'zoom-out', 'Ctrl+휠 아래'),
-        item('화면 맞춤', 'zoom-fit'),
+        item('화면 확대 (Ctrl+휠)', 'zoom-in', 'Ctrl+='),
+        item('화면 축소 (Ctrl+휠)', 'zoom-out', 'Ctrl+-'),
+        item('화면 맞춤', 'zoom-fit', 'Ctrl+0'),
         { type: 'separator' },
         {
           label: '전체화면',

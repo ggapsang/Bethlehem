@@ -3,9 +3,9 @@
  * versionTools 는 버전 칩 옆(Bethlehem: 새 버전), screenActions 는 끝(Bethlehem: 화면 지우기).
  */
 import type { ComponentChildren } from 'preact';
-import { Crosshair, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus } from 'lucide-preact';
+import { Pipette, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus } from 'lucide-preact';
 import type { Screen, ScreenVersion } from '@core';
-import { draft, fullscreen, mode, panelOpen, paused, picking, recording, rev, selectScreen, togglePanel, zoom, zoomStep } from '../store';
+import { draft, fitMode, fullscreen, mode, setFitMode, panelOpen, paused, picking, recording, rev, selectScreen, togglePanel, zoom, zoomStep } from '../store';
 import { MarkerColorPicker, RecordButton, enterFullscreen } from '../ui/Toolbar';
 
 const ICON = { size: 18, strokeWidth: 1.5 };
@@ -77,6 +77,10 @@ export function StageHeader({ scr, v, page, onHome, scale, versionTools, screenA
       {!image && <RecordButton />}
       <MarkerColorPicker />
       <span class="sc-sep" />
+      <div class="seg seg-sm" role="radiogroup" aria-label="화면 맞춤">
+        <button type="button" role="radio" aria-checked={fitMode.value === 'fit'} class="seg-btn" title="여백을 두고 화면 비율 그대로" onClick={() => setFitMode('fit')}>여백</button>
+        <button type="button" role="radio" aria-checked={fitMode.value === 'fill'} class="seg-btn" title="탭을 꽉 채운다 — 화면 높이를 탭에 맞춰 다시 배치한다" onClick={() => setFitMode('fill')}>꽉 채움</button>
+      </div>
       <div class="zoom" role="group" aria-label="배율">
         <button type="button" class="btn-icon" aria-label="축소" title="축소 (Ctrl+휠)" onClick={() => zoomStep(-1, scale)}><Minus {...ICON} /></button>
         <button
@@ -99,7 +103,7 @@ export function StageHeader({ scr, v, page, onHome, scale, versionTools, screenA
           title="피커 (Ctrl 을 누르고 있어도 됩니다)"
           onClick={() => (mode.value = mode.value === 'annotate' ? 'view' : 'annotate')}
         >
-          <Crosshair {...ICON} />
+          <Pipette {...ICON} />
         </button>
       )}
       {fullscreen.value && (

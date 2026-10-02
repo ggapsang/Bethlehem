@@ -8,27 +8,31 @@ import type { Picked, RectTuple } from '../agent/protocol';
 import type { Host } from '../host';
 import { onKeyDown, onKeyUp } from '../keys';
 import {
-  annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, reveal, revealing, rev,
-  popHidden, screen, selected, shotView, stagePage, stageRef, stageScale, still, version, versionKey, visible, zoom, zoomStep,
+  annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, requestReveal, reveal, revealing, rev,
+  draftClip, fitMode, popHidden, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
+  visible, zoom, zoomStep,
 } from '../store';
 import type { ComponentChildren } from 'preact';
 import { ago } from '../ui/labels';
-import { applySiteSnapshot } from '../actions';
+import { applySiteSnapshot, stopSnipRecording } from '../actions';
 import { StagePopover } from '../ui/Popover';
 import { iframeBridge, webviewBridge, type Bridge, type WebviewLike } from './bridge';
 import { prepareScreen } from './loader';
 import { StageHeader } from './StageHeader';
 import { ScreenTabs } from './ScreenTabs';
+import { MarkerStrip } from './MarkerStrip';
 import { useBlobUrl } from './media';
 
 interface Fit {
   s: number;
   ox: number;
   oy: number;
+  /** 화면 뷰포트 높이 — 꽉 채우기면 탭 높이에 맞춘 값 */
+  h: number;
 }
 
 const MARK = 24; // 마커 지름 (unit-6)
-const PAD = 24; // 화면 프레임 바깥 여백 — 장식이 아니라 숨 쉴 자리 (가이드 §9)
+const PAD = 16; // 화면 프레임 바깥 여백 — 장식이 아니라 숨 쉴 자리 (가이드 §9). 꽉 채우기면 0
 /** 그림 화면에서 클릭하면 만드는 박스 크기 (화면 좌표) */
 const POINT_BOX = 64;
 
@@ -81,7 +85,8 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
   const bridge = useRef<Bridge | null>(null);
   const rects = useRef<Record<string, RectTuple>>({});
   const readyWaiters = useRef<(() => void)[]>([]);
-  const [fit, setFit] = useState<Fit>({ s: 1, ox: 0, oy: 0 });
+  const [fit, setFit] = useState<Fit>({ s: 1, ox: 0, oy: 0, h: 0 });
+  const snipBox = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const [reloadNo, setReloadNo] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -121,31 +126,46 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
   const sel = list.find((a) => a.id === selected.value) ?? null;
   const showShot = !!sel?.shot && shotView.value && !draft.value;
   const shotSrc = useBlobUrl(sel?.shot?.sha, 'image/jpeg');
+  const shotViewRef = useRef(showShot);
+  shotViewRef.current = showShot;
 
   /* ── 크기 맞춤 ─────────────────────────────────────────────────────── */
   const vw = v?.viewport.w ?? 0;
-  const vh = v?.viewport.h ?? 0;
+  const baseH = v?.viewport.h ?? 0;
   const vfit = v?.viewport.fit ?? 'contain';
   const z = zoom.value;
+  const fillMode = fitMode.value === 'fill';
+  /* 꽉 채우기 — 여백 없이. 그림이 아닌 화면은 높이를 탭에 맞춰(폭은 기준 그대로) 화면이 그 크기로 다시 배치된다 */
+  const stretch = fillMode && !isImage && vfit !== 'width';
+  const pad = fillMode ? 0 : PAD;
   useLayoutEffect(() => {
     const el = area.current;
     if (!el || !vw) return;
     const update = () => {
-      const aw = el.clientWidth - PAD * 2;
-      const ah = el.clientHeight - PAD * 2;
-      const fitS = Math.max(0.1, Math.min(1, vfit === 'width' ? aw / vw : Math.min(aw / vw, ah / vh)));
+      const aw = el.clientWidth - pad * 2;
+      const ah = el.clientHeight - pad * 2;
+      const fs = stretch ? aw / vw : Math.min(aw / vw, ah / baseH);
+      const fitS = Math.max(0.1, vfit === 'width' ? Math.min(1, aw / vw) : stretch ? fs : fillMode ? fs : Math.min(1, fs));
+      const h = stretch ? Math.max(240, Math.round(ah / fitS)) : baseH;
       const s = z ?? fitS;
       setFit({
         s,
-        ox: Math.max(PAD, (el.clientWidth - vw * s) / 2),
-        oy: vfit === 'width' ? PAD : Math.max(PAD, (el.clientHeight - vh * s) / 2),
+        h,
+        ox: Math.max(pad, (el.clientWidth - vw * s) / 2),
+        oy: vfit === 'width' ? pad : Math.max(pad, (el.clientHeight - h * s) / 2),
       });
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [vw, vh, vfit, !!scr, z]);
+  }, [vw, baseH, vfit, !!scr, z, stretch, pad, fillMode]);
+  const vh = fit.h || baseH;
+  const vhRef = useRef(vh);
+  vhRef.current = vh;
+  useEffect(() => {
+    stageViewport.value = { w: vw, h: vh };
+  }, [vw, vh]);
 
   /* Ctrl+휠 — 화면 배율 (프레임 밖 여백에서. 화면 안의 휠은 화면이 쓴다) */
   const onStageWheel = (e: WheelEvent) => {
@@ -156,7 +176,22 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
 
   useEffect(() => {
     stageRef.frame = frameBox.current;
+    stageRef.snip = snipBox.current;
   });
+
+  /* 새 작성은 캡처부터. 작성을 끝내면 영역 녹화와 클립도 정리한다 */
+  useEffect(() => {
+    snipMode.value = 'capture';
+    if (!draft.value) {
+      stopSnipRecording();
+      draftClip.value = null;
+    }
+  }, [draft.value]);
+  /* 영역 녹화 중에는 화면을 돌린다 */
+  useEffect(() => {
+    if (!draft.peek()) return;
+    bridge.current?.send({ type: snipRec.value ? 'resume' : 'pause' });
+  }, [!!snipRec.value]);
 
   /* ── 에이전트에게 지금 상태 알리기 ─────────────────────────────────── */
   const anchorsMsg = () => ({
@@ -362,11 +397,16 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
       }
       seen.add(id);
       const x = Math.min(Math.max(t[0] * s - MARK / 2, 2), vw * s - MARK - 2);
-      const y = Math.min(Math.max(t[1] * s - MARK / 2, 2), vh * s - MARK - 2);
+      const y = Math.min(Math.max(t[1] * s - MARK / 2, 2), vhRef.current * s - MARK - 2);
       node.style.display = 'flex';
       node.style.transform = `translate(${x}px, ${y}px)`;
       node.dataset.tone = t[5] ? 'ondark' : 'onlight';
       if (id === selected.peek() || id === hovered.peek()) selRect = tupleBox(t);
+    }
+    // 캡처 Comment 는 마커가 없다 — 고르거나 마커 줄에서 가리키면 지금 화면의 그 자리를 박스로만 보인다
+    for (const cid of [selected.peek(), hovered.peek()]) {
+      const t = cid && !selRect && !shotViewRef.current ? rects.current[cid] : undefined;
+      if (t && t[4]) selRect = tupleBox(t);
     }
     place(selBox.current, selRect, s);
     const dr = draft.peek();
@@ -494,15 +534,34 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
   const innerStyle = { width: `${vw}px`, height: `${vh}px`, transform: `scale(${fit.s})` };
   const shotBox = sel?.shot?.box;
 
-  const spacer = { left: `${fit.ox + vw * fit.s + PAD - 1}px`, top: `${fit.oy + vh * fit.s + PAD - 1}px` };
+  const spacer = { left: `${fit.ox + vw * fit.s + pad - 1}px`, top: `${fit.oy + vh * fit.s + pad - 1}px` };
+  /* 달 때 찍은 그림 — 그때의 화면 비율 그대로 프레임 안에 담는다 (꽉 채우기로 비율이 달라져도 찌그러지지 않게) */
+  const shotFit = (() => {
+    const sh = sel?.shot;
+    if (!sh) return null;
+    const FW = vw * fit.s;
+    const FH = vh * fit.s;
+    const ra = sh.w / sh.h;
+    const w = FW / FH > ra ? FH * ra : FW;
+    const h = FW / FH > ra ? FH : FW / ra;
+    return { x: (FW - w) / 2, y: (FH - h) / 2, w, h };
+  })();
+  const shotTarget = showShot && shotBox && shotFit
+    ? { x: (shotFit.x + shotBox.x * shotFit.w) / fit.s, y: (shotFit.y + shotBox.y * shotFit.h) / fit.s, w: (shotBox.w * shotFit.w) / fit.s, h: (shotBox.h * shotFit.h) / fit.s }
+    : null;
+  const dr = draft.value;
+  const snipStyle = dr?.picked.region
+    ? { left: `${dr.picked.rect[0] * fit.s}px`, top: `${dr.picked.rect[1] * fit.s}px`, width: `${dr.picked.rect[2] * fit.s}px`, height: `${dr.picked.rect[3] * fit.s}px` }
+    : null;
 
   return (
     <div class="stage-col">
       <ScreenTabs tools={tabTools} />
       <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} scale={fit.s} versionTools={versionTools} screenActions={screenActions} />
+      <MarkerStrip />
     <div class={`stage ${scrolls ? 'stage-scroll' : ''}`} ref={area} onWheel={onStageWheel}>
       {scrolls && <div class="stage-spacer" style={spacer} />}
-      <div class={`stage-frame ${recording.value || capturing ? 'is-recording' : ''}`} style={frameStyle} ref={frameBox}>
+      <div class={`stage-frame ${recording.value || capturing || snipRec.value ? 'is-recording' : ''}`} style={frameStyle} ref={frameBox}>
         {live ? (
           <webview
             key={frameKey}
@@ -533,13 +592,16 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
             style={innerStyle}
           />
         )}
-        {still.value && <img class="stage-still" src={still.value.url} alt="" draggable={false} />}
+        {still.value && !snipRec.value && <img class="stage-still" src={still.value.url} alt="" draggable={false} />}
+        {snipStyle && <div class={`snip-target ${snipRec.value ? 'is-rec' : ''}`} ref={snipBox} style={snipStyle} aria-hidden="true" />}
         {showShot && shotSrc && (
           <div class="shot-view">
-            <img src={shotSrc} alt="이 Comment 를 달 때의 화면" draggable={false} />
-            {shotBox && (
-              <div class="shot-box" style={{ left: `${shotBox.x * 100}%`, top: `${shotBox.y * 100}%`, width: `${shotBox.w * 100}%`, height: `${shotBox.h * 100}%` }} />
-            )}
+            <div class="shot-fit" style={shotFit ? { left: `${shotFit.x}px`, top: `${shotFit.y}px`, width: `${shotFit.w}px`, height: `${shotFit.h}px` } : undefined}>
+              <img src={shotSrc} alt="이 Comment 를 달 때의 화면" draggable={false} />
+              {shotBox && (
+                <div class="shot-box" style={{ left: `${shotBox.x * 100}%`, top: `${shotBox.y * 100}%`, width: `${shotBox.w * 100}%`, height: `${shotBox.h * 100}%` }} />
+              )}
+            </div>
           </div>
         )}
         {isPicking && (
@@ -550,13 +612,23 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
         <div class="hl-box hl-pick" ref={pickBox} />
         <div class="hl-box hl-drag" ref={dragBox} />
         <div class="marker-layer" ref={markers} data-color={markerColor}>
-          {list.filter((a) => a.anchor).map((a) => <Marker key={a.id} a={a} scr={scr} />)}
+          {list.filter((a) => a.anchor && a.kind !== 'capture').map((a) => <Marker key={a.id} a={a} scr={scr} />)}
         </div>
         {(loading || revealing.value) && !error && <div class="stage-note" aria-label="불러오는 중"><span class="spinner" /></div>}
         {showShot && (
           <div class="stage-badge stage-badge-shot">
-            <span title="이 Comment 를 달 때 찍어 둔 화면입니다. 지금 화면과 다를 수 있습니다.">Comment 를 달 때 찍은 화면{sel?.createdAt ? ` · ${ago(sel.createdAt)}` : ''}</span>
-            <button type="button" class="badge-btn" onClick={() => (shotView.value = false)}>지금 화면 보기</button>
+            <span title="이 Comment 를 달 때 찍어 둔 화면입니다. 지금 화면과 다를 수 있습니다.">{sel?.kind === 'capture' ? '캡처' : 'Comment 를 달 때 찍은 화면'}{sel?.createdAt ? ` · ${ago(sel.createdAt)}` : ''}</span>
+            <button
+              type="button"
+              class="badge-btn"
+              onClick={() => {
+                shotView.value = false;
+                // 캡처는 마커가 없다 — 지금 화면에서 그 자리를 찾아가 박스로 보인다
+                if (sel?.kind === 'capture' && !rects.current[sel.id]?.[4]) requestReveal(sel.id);
+              }}
+            >
+              지금 화면 보기
+            </button>
           </div>
         )}
 
@@ -564,7 +636,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
       <StagePopover
         host={host}
         fit={fit}
-        target={draft.value ? tupleBox(draft.value.picked.rect) : showShot && shotBox ? { x: shotBox.x * vw, y: shotBox.y * vh, w: shotBox.w * vw, h: shotBox.h * vh } : popRect}
+        target={draft.value ? tupleBox(draft.value.picked.rect) : shotTarget ?? popRect}
         areaRef={area}
       />
       {error && (

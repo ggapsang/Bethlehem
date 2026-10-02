@@ -4,8 +4,15 @@ import { moveAnnotation, now, setField, sha256, toBase64, touchParticipant, uid 
 import type { SiteSnap } from './host';
 import { startRecording, type Recorder } from './stage/record';
 import {
-  addBlobs, askName, blobs, draft, mutate, notify, recording, screen, selected, stagePage, stageRef, still, user, version,
+  addBlobs, askName, blobs, draft, draftClip, mutate, notify, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
+  stageViewport, still, user, version,
 } from './store';
+
+/** 영역 Comment 를 캡처로 다는가 — 찍을 그림이 있고(작성 프로그램), 그림 화면이 아니고, 영역을 그렸을 때 */
+export function captureMode(): boolean {
+  const d = draft.peek();
+  return !!d?.picked.region && !!still.peek() && version.peek()?.source?.mode !== 'image' && snipMode.peek() === 'capture';
+}
 
 export function needName(): boolean {
   if (user.value) return false;
@@ -30,21 +37,67 @@ export async function addFromDraft(body: string): Promise<string | null> {
   if (st) {
     const sha = await shaOf(st.bytes);
     blobs.set(sha, { enc: 'b64', data: toBase64(st.bytes) });
-    const { w, h } = v.viewport;
+    const { w, h } = stageViewport.peek();
     shot = { sha, w: st.w, h: st.h, box: { x: p.rect[0] / w, y: p.rect[1] / h, w: p.rect[2] / w, h: p.rect[3] / h } };
   }
+  const capture = captureMode();
+  const clip = draftClip.peek();
   const a: Annotation = {
     ...blank(body),
     anchor: { fp: p.fp, ...(p.region ? { region: p.region } : {}), trail: p.trail, props: p.props, path: p.path, ...(stagePage.peek() ? { page: stagePage.peek() } : {}) },
+    ...(capture && shot ? { kind: 'capture' as const } : {}),
     ...(shot ? { shot } : {}),
+    ...(clip ? { clips: [clip] } : {}),
   };
   mutate((x) => {
     s.annotations.push(a);
     touchParticipant(x, user.value!);
   }, { label: 'Comment 추가' });
   draft.value = null;
+  draftClip.value = null;
   selected.value = a.id;
   return a.id;
+}
+
+/* ── 영역 녹화 — 그린 박스 자리만 짧게 (윈도우 캡처 도구처럼) ─────────────── */
+
+let snip: Recorder | null = null;
+let snipLimit: ReturnType<typeof setTimeout> | undefined;
+const SNIP_MAX_MS = 30_000;
+
+export async function toggleSnipRecording(target: HTMLElement | null): Promise<void> {
+  if (snip) return stopSnipRecording();
+  if (!target || !draft.peek() || rec) return;
+  try {
+    snipRec.value = { startedAt: Date.now() };
+    // 멈춤 그림이 걷히고 화면이 다시 도는 것을 한 박자 기다린다
+    await new Promise((r) => setTimeout(r, 120));
+    snip = await startRecording(target);
+    snip.onEnded(() => stopSnipRecording());
+    snipLimit = setTimeout(() => stopSnipRecording(), SNIP_MAX_MS);
+  } catch (e) {
+    snip = null;
+    snipRec.value = null;
+    if ((e as Error).name !== 'NotAllowedError') notify(`녹화를 시작하지 못했습니다: ${(e as Error).message}`, 'error');
+  }
+}
+
+export async function stopSnipRecording(): Promise<void> {
+  const r = snip;
+  if (!r) return void (snipRec.value = null);
+  snip = null;
+  clearTimeout(snipLimit);
+  try {
+    const clip = await r.stop();
+    const sha = await shaOf(clip.bytes);
+    blobs.set(sha, { enc: 'b64', data: toBase64(clip.bytes) });
+    draftClip.value = { id: uid(), sha, type: clip.type, ms: clip.ms, w: clip.w, h: clip.h, author: user.value ?? '', at: now() };
+    snipMode.value = 'capture';
+  } catch (e) {
+    notify(`녹화를 저장하지 못했습니다: ${(e as Error).message}`, 'error');
+  } finally {
+    snipRec.value = null;
+  }
 }
 
 /** 대상 없이 화면 전체에 단다 */

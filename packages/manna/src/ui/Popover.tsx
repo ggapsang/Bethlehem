@@ -1,12 +1,12 @@
 /* 대상 옆 팝업 — 새 Comment 쓰기와 Comment 보기·답글. 시선을 오른쪽 패널로 옮기지 않아도 된다 */
-import { useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { RefObject } from 'preact';
-import { Film, Trash2, X } from 'lucide-preact';
+import { Camera, Circle, Film, Pin, Square, Trash2, X } from 'lucide-preact';
 import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
-import { addFromDraft, addReply, editBody, editReply, removeClip, removeComment } from '../actions';
+import { addFromDraft, addReply, editBody, editReply, removeClip, removeComment, toggleSnipRecording } from '../actions';
 import type { Host } from '../host';
-import { annotations, draft, popHidden, rev, screen, selected, user, version } from '../store';
+import { annotations, draft, draftClip, popHidden, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
 import { MarkdownEditor } from './editor/MarkdownEditor';
 import { ago } from './labels';
@@ -97,6 +97,7 @@ function Composer() {
         <span class="grow" />
         <button type="button" class="btn-icon btn-xs" aria-label="취소" onClick={() => (draft.value = null)}><X {...ICON} /></button>
       </div>
+      <SnipBar />
       <MarkdownEditor
         value=""
         minRows={6}
@@ -114,6 +115,45 @@ function Composer() {
         <button type="button" class="btn btn-primary" onClick={add}>추가</button>
       </div>
     </div>
+  );
+}
+
+/** 영역을 그렸을 때 — 윈도우 캡처 도구처럼 캡처(기본) · 그 자리만 녹화 · 화면에 붙이기 */
+function SnipBar() {
+  const d = draft.value;
+  const can = !!d?.picked.region && !!still.value && version.value?.source?.mode !== 'image';
+  const rec = snipRec.value;
+  const clip = draftClip.value;
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!rec) return;
+    const t = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, [rec]);
+  if (!can) return null;
+  const m = snipMode.value;
+  const sec = rec ? Math.floor((Date.now() - rec.startedAt) / 1000) : 0;
+  return (
+    <>
+      <div class="snip-bar" role="group" aria-label="영역 Comment 방식">
+        <button type="button" class="snip-btn" aria-pressed={m === 'capture'} title="그린 영역을 그림으로 남깁니다. 실시간 화면에는 마커가 붙지 않습니다." onClick={() => (snipMode.value = 'capture')}>
+          <Camera {...ICON} /> 캡처
+        </button>
+        <button
+          type="button"
+          class={`snip-btn ${rec ? 'is-rec' : ''}`}
+          aria-pressed={!!rec}
+          title={rec ? '녹화 멈추기' : '그린 영역만 녹화합니다 (최대 30초)'}
+          onClick={() => toggleSnipRecording(stageRef.snip)}
+        >
+          {rec ? <><Square {...ICON} size={12} fill="currentColor" /> 멈추기 {`${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`}</> : <><Circle {...ICON} /> 녹화</>}
+        </button>
+        <button type="button" class="snip-btn" aria-pressed={m === 'pin'} title="실시간 화면의 이 자리에 마커를 붙입니다" onClick={() => (snipMode.value = 'pin')}>
+          <Pin {...ICON} /> 화면에 붙이기
+        </button>
+      </div>
+      {clip && <ClipView clip={clip} canRemove onRemove={() => (draftClip.value = null)} />}
+    </>
   );
 }
 

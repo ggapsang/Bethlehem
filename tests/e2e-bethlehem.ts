@@ -57,6 +57,10 @@ const nextOpen = (app: ElectronApplication, p: string) =>
   app.evaluate(({ dialog }, d) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [d] })) as typeof dialog.showOpenDialog;
   }, p);
+const nextOpenMany = (app: ElectronApplication, ps: string[]) =>
+  app.evaluate(({ dialog }, d) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: d })) as typeof dialog.showOpenDialog;
+  }, ps);
 const nextSave = (app: ElectronApplication, p: string) =>
   app.evaluate(({ dialog }, d) => {
     dialog.showSaveDialog = (async () => ({ canceled: false, filePath: d })) as typeof dialog.showSaveDialog;
@@ -218,6 +222,43 @@ async function main() {
     await page.keyboard.press('Escape');
   }
 
+  console.log('\n[3c] 영역 캡처 · 그 자리만 녹화');
+  await page.keyboard.press('Escape');
+  await page.mouse.click(5, 400);
+  f = await screenFrame(page);
+  await ctrlPick(page, await stagePoint(page, 300, 300), await stagePoint(page, 700, 600));
+  await page.waitForSelector('.popover-card .snip-bar');
+  check('영역을 그리면 캡처 · 녹화 · 화면에 붙이기가 뜨고 캡처가 기본', (await page.getAttribute('.snip-btn:has-text("캡처")', 'aria-pressed')) === 'true');
+  await page.click('.snip-btn:has-text("녹화")');
+  const recOn = await until(() => page.$('.snip-btn.is-rec'), 5000);
+  check('녹화 중에는 멈춤 그림이 걷히고 그 영역에 녹화 테두리', !!recOn && !(await page.$('.stage-still')) && !!(await page.$('.snip-target.is-rec')));
+  await page.waitForTimeout(1500);
+  await page.click('.snip-btn.is-rec');
+  const clipEl = await until(() => page.$('.popover-card .composer .clip video'), 10000);
+  const clipW = clipEl ? await clipEl.evaluate(async (v) => {
+    const el = v as HTMLVideoElement;
+    if (el.readyState < 1) await new Promise((r) => el.addEventListener('loadedmetadata', r, { once: true }));
+    return el.videoWidth;
+  }).catch(() => 0) : 0;
+  check('멈추면 그 영역만 담은 클립이 작성 창에 붙는다', clipW > 0 && clipW < 700, `폭 ${clipW}px`);
+  await page.click('.popover-card .composer .cm-content');
+  await page.keyboard.type('캡처 — 이 구역 색이 바랩니다');
+  await page.keyboard.press('Control+Enter');
+  const cap = await until(() => comments('SCR-001').find((c: { body: string }) => c.body.includes('캡처 —')), 8000);
+  check('캡처 Comment — 그림 · 클립과 함께 저장된다', cap?.kind === 'capture' && !!cap?.shot?.sha && cap?.clips?.length === 1, JSON.stringify({ kind: cap?.kind, clips: cap?.clips?.length }));
+  const capNo = String(comments('SCR-001').length);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  const live3 = await page.$$eval('.marker', (ms) => ms.filter((m) => (m as HTMLElement).style.display === 'flex').map((m) => m.textContent));
+  check('캡처는 실시간 화면에 마커가 붙지 않는다', !live3.includes(capNo), JSON.stringify(live3));
+  check('마커 줄에는 캡처로 구분되어 있다', !!(await page.$(`.mk-list .mk-capture:has-text("${capNo}")`)));
+  await page.click(`.mk-list .mk-capture:has-text("${capNo}")`);
+  check('마커 줄의 캡처를 누르면 찍어 둔 그림이 뜬다', !!(await until(() => page.$('.shot-view .shot-box'), 3000)) && ((await page.textContent('.stage-badge-shot')) ?? '').includes('캡처'));
+  await page.screenshot({ path: resolve(OUT, 'b3c-capture.png') });
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+
   console.log('\n[4] 원본 폴더가 바뀌면');
   appendFileSync(join(SRC, 'index.html'), '\n<!-- 수정 -->\n');
   const toast = await until(() => page.$('.toast:has-text("원본 폴더가 바뀌었습니다")'), 10000);
@@ -249,6 +290,7 @@ async function main() {
   // 지도 위 영역에 Comment
   await ctrlPick(page, await stagePoint(page, 800, 450), await stagePoint(page, 1100, 650));
   await page.waitForSelector('.popover-card .composer');
+  await page.click('.snip-btn:has-text("화면에 붙이기")'); // 받는 사람 문서에서도 지도 위에 마커가 붙게
   await page.click('.popover-card .composer .cm-content');
   await page.keyboard.type('지도 — 이 구역 차량 아이콘이 겹칩니다');
   await page.keyboard.press('Control+Enter');
@@ -310,7 +352,7 @@ async function main() {
   console.log('\n[5c] 그림 화면 (png)');
   await nextOpen(app, IMG);
   await page.click('button[aria-label="화면 추가"]');
-  await page.click('.popover-item:has-text("그림")');
+  await page.click('.popover-item:has-text("파일")');
   await until(async () => (await page.getAttribute('.tab.is-on', 'data-id').catch(() => '')) === 'SCR-004', 10000);
   check('그림이 화면(SCR-004)으로 들어와 새 탭으로 열린다', (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-004');
   check('실행 상태가 "그림" — 일시정지·녹화가 없다', ((await page.textContent('.sc-state')) ?? '').includes('그림') && !(await page.$('.sc-bar button[aria-label="화면 일시정지"]')));
@@ -376,7 +418,7 @@ async function main() {
     await badge.click();
     await page.click('.popover-returned button:has-text("병합")');
     await openScreen(page, 'SCR-001');
-    const merged = await until(() => comments('SCR-001').length === 3 && comments('SCR-001')[0].replies.length === 1, 8000);
+    const merged = await until(() => comments('SCR-001').length === 4 && comments('SCR-001')[0].replies.length === 1, 8000);
     check('병합 — Comment 추가와 답글이 들어온다', !!merged);
     check('병합한 회신본은 returned/merged/ 로', existsSync(join(WS, 'returned', 'merged', 'proto_수신자.terr.html')));
   }
@@ -402,6 +444,16 @@ async function main() {
   check('화면이 모두 풀린다', !!(await until(() => existsSync(join(UNPACK, 'screens')) && readdirSync(join(UNPACK, 'screens')).length === 4, 8000)),
     existsSync(join(UNPACK, 'screens')) ? readdirSync(join(UNPACK, 'screens')).join(',') : '');
   check('툴바가 그 폴더를 가리킨다', !!(await until(async () => ((await page.textContent('.tb-place')) ?? '').includes('unpack-ws'), 5000)));
+
+  console.log('\n[11] ＋ → 파일 — 다른 테라리움 문서의 화면 · 그림을 이 문서로');
+  await nextOpenMany(app, [EXPORT + '.terr.html', IMG]);
+  await page.click('button[aria-label="화면 추가"]');
+  await page.click('.popover-item:has-text("파일")');
+  const grown = await until(() => existsSync(join(UNPACK, 'screens')) && readdirSync(join(UNPACK, 'screens')).length === 4 + 4 + 1, 15000);
+  check('다른 문서의 화면 4개와 그림 1개가 들어온다', !!grown, readdirSync(join(UNPACK, 'screens')).join(','));
+  check('가져온 화면은 탭으로 열린다', (await page.$$('.tabs .tab')).length >= 5, `${(await page.$$('.tabs .tab')).length}개`);
+  const s5 = JSON.parse(readFileSync(join(UNPACK, 'screens', 'SCR-005', 'comments.json'), 'utf8'));
+  check('가져온 화면의 Comment 도 따라온다', s5.length >= 1, `${s5.length}개`);
   await app.close();
 
   for (const d of [WS, SRC, UD]) rmSync(d, { recursive: true, force: true });

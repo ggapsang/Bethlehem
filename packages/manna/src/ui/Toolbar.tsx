@@ -1,7 +1,7 @@
 /* 툴바 — 문서 수준만 (가이드 §17: 현재 문서 → 현재 화면 → 작업 모드 → 저장). 화면에 붙은 조작은 화면 컨테이너 머리에 */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
-  Circle, Crosshair, Moon, MousePointer2, PanelRight, PencilLine, Redo2, Save, Square, Sun, Undo2, UserRound,
+  Circle, Moon, Pipette, MousePointer2, PanelRight, PencilLine, Redo2, Save, Square, Sun, Undo2, UserRound,
 } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
 import type { MarkerColor } from '@core';
@@ -121,7 +121,7 @@ export function Toolbar({ host, start }: ToolbarProps) {
               <MousePointer2 {...ICON} size={16} /> 보기
             </button>
             <button type="button" role="radio" aria-checked={pickLocked} class="seg-btn" onClick={() => (mode.value = 'annotate')} title="피커 고정 — Ctrl 을 누르고 있는 동안에도 잠깐 피커가 됩니다">
-              <Crosshair {...ICON} size={16} /> 피커
+              <Pipette {...ICON} size={16} /> 피커
             </button>
           </div>
         </div>

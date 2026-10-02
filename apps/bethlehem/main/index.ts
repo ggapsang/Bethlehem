@@ -312,6 +312,22 @@ ipcMain.handle('pick-image', async () => {
   if (r.canceled || !r.filePaths.length) return [];
   return r.filePaths.map((f) => grant(f));
 });
+/* 화면으로 가져올 파일 — 다른 테라리움 문서(그 안의 화면들)나 그림, 여러 개 */
+ipcMain.handle('pick-screen-files', async () => {
+  const r = await dialog.showOpenDialog(win!, {
+    title: '화면 가져오기 — 테라리움 문서 · 그림',
+    defaultPath: settings.lastDocDir ?? settings.lastFolderDir,
+    filters: [
+      { name: '테라리움 문서 · 그림', extensions: [EXT, 'html', ...IMAGE_EXT] },
+      { name: '테라리움 문서 (*.terr.html)', extensions: [EXT, 'html'] },
+      { name: '그림', extensions: IMAGE_EXT },
+    ],
+    properties: ['openFile', 'multiSelections'],
+  });
+  if (r.canceled || !r.filePaths.length) return [];
+  return r.filePaths.map((f) => grant(f));
+});
+ipcMain.handle('read-doc', async (_e, p: string) => readFile(guard(p), 'utf8'));
 ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools());
 ipcMain.handle('pack-image', async (_e, path: string) => packImage(guard(path)));
 

@@ -6,7 +6,7 @@
 import type { Host } from './host';
 import { save } from './host';
 import { removeComment } from './actions';
-import { annotations, draft, fullscreen, holdPick, mode, notify, popHidden, redo, selected, undo, user } from './store';
+import { annotations, draft, fullscreen, holdPick, mode, notify, popHidden, redo, selected, stageScale, undo, user, zoom, zoomStep } from './store';
 
 let host: Host | null = null;
 export function setKeyHost(h: Host): void {
@@ -38,6 +38,16 @@ export function onKeyDown(e: KeyboardEvent, inScreen = false): void {
     } else if (((k === 'z' && e.shiftKey) || k === 'y') && !isTyping(e)) {
       e.preventDefault();
       redo();
+    } else if (k === '=' || k === '+') {
+      // Ctrl+= / Ctrl+- / Ctrl+0 — 화면 배율 (테라리움 창 자체를 키우지 않는다)
+      e.preventDefault();
+      zoomStep(1, stageScale.peek());
+    } else if (k === '-') {
+      e.preventDefault();
+      zoomStep(-1, stageScale.peek());
+    } else if (k === '0') {
+      e.preventDefault();
+      zoom.value = null;
     }
     return;
   }

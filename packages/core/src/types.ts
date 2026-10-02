@@ -142,6 +142,8 @@ export interface Annotation {
   version: number;
   /** 없으면 화면 전체에 단 Comment (녹화 클립 등) */
   anchor?: Anchor;
+  /** 'capture' — 영역을 찍어 둔 Comment. 실시간 화면에는 마커를 붙이지 않고, 열면 찍어 둔 그림(과 클립)을 보인다 */
+  kind?: 'capture';
   /** 마크다운. 할 일은 - [ ] 체크박스로 */
   body: string;
   clips?: Clip[];

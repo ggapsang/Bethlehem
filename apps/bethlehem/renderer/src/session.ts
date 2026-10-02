@@ -283,7 +283,12 @@ export async function handleDrop(files: FileList): Promise<void> {
     if (mode.peek().kind === 'none') return void (await openFolder(g.path));
     importing.value = { dir: g.path };
     refreshRecent();
-  } else if (/\.html?$/i.test(g.name)) await openDocument(g.path);
+  } else if (/\.html?$/i.test(g.name)) {
+    if (mode.peek().kind === 'workspace') {
+      await addScreensFromFiles([g.path]);
+      notify(`${g.name} 의 화면을 이 문서로 가져왔습니다.`, 'info', { label: '대신 그 문서 열기', run: () => openDocument(g.path) });
+    } else await openDocument(g.path);
+  }
   else if (IMAGE_RE.test(g.name)) {
     const more = await Promise.all([...files].slice(1).map((f) => api.grantDropped(f)));
     await addImageScreen(undefined, [g, ...more].filter((x): x is NonNullable<typeof x> => !!x && IMAGE_RE.test(x.name)).map((x) => x.path));
@@ -303,6 +308,42 @@ export async function addImageScreen(screenId?: string, paths?: string[]): Promi
     }
   } catch (e) {
     notify(`그림을 열지 못했습니다: ${clean((e as Error).message)}`, 'error');
+  }
+}
+
+/** 다른 테라리움 문서의 화면들을 이 문서로 가져온다 — 버전 · 개요 · Comment(답글 · 캡처 · 클립)까지. 화면 번호는 새로 매긴다 */
+export function importDocScreens(html: string, name: string): number {
+  if (!isManna(html)) throw new Error(`${name} 은 테라리움 문서가 아닙니다.`);
+  const inc = parseManna(html);
+  if (!inc.doc.screens.length) return 0;
+  addBlobs(inc.blobs);
+  const ids: string[] = [];
+  mutate((d: MannaDoc) => {
+    for (const s of inc.doc.screens) {
+      const id = nextScreenId(d);
+      const copy: Screen = JSON.parse(JSON.stringify(s));
+      copy.id = id;
+      d.screens.push(copy);
+      ids.push(id);
+    }
+    d.changelog.push({ version: d.meta.version, date: now(), author: user.value ?? '', note: `${name} 에서 화면 ${ids.length}개 가져옴 (${ids.join(', ')})` });
+  }, { label: '화면 가져오기' });
+  for (const id of ids) selectScreen(id);
+  return ids.length;
+}
+
+/** ＋ 의 "파일…" — 테라리움 문서는 그 안의 화면들을, 그림은 그림 화면으로. 여러 개를 한 번에 */
+export async function addScreensFromFiles(paths?: string[]): Promise<void> {
+  try {
+    if (!(await ensurePlace())) return;
+    const list = paths ?? (await api.pickScreenFiles());
+    const images = list.filter((p) => IMAGE_RE.test(p));
+    let n = 0;
+    for (const p of list.filter((x) => !IMAGE_RE.test(x))) n += importDocScreens(await api.readDoc(p), basename(p));
+    if (images.length) await addImageScreen(undefined, images);
+    if (n) notify(`화면 ${n + images.length}개를 가져왔습니다.`);
+  } catch (e) {
+    notify(`가져오지 못했습니다: ${clean((e as Error).message)}`, 'error');
   }
 }
 

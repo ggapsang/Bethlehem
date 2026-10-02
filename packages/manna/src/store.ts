@@ -29,7 +29,7 @@ export interface Miss {
 
 /* notes 는 키를 바꿨다 — 개요는 이제 기본으로 접혀 있다 (전에 펼쳐 둔 기록을 따르지 않는다) */
 const LS = {
-  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW',
+  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit',
   tabs: (docId: string) => `terr.tabs.${docId}`,
 };
 
@@ -103,6 +103,19 @@ export const zoom = signal<number | null>(null);
 export const stageScale = signal(1);
 /** Comment 목록 펼침 — 개요처럼 접을 수 있다 (기본 펼침) */
 export const commentsOpen = signal(lsGet(LS.comments) !== '0');
+/** 개요가 패널에서 차지하는 몫 — 기본 절반, 개요와 Comment 사이 손잡이로 바꾼다 */
+export const notesRatio = signal(Math.min(0.85, Math.max(0.15, Number(lsGet(LS.notesRatio)) || 0.5)));
+/** 화면 맞춤 — 'fit' 여백을 두고 비율 그대로 · 'fill' 탭을 꽉 채운다(높이를 탭에 맞춰 화면이 다시 배치된다) */
+export type FitMode = 'fit' | 'fill';
+export const fitMode = signal<FitMode>(lsGet(LS.fit) === 'fill' ? 'fill' : 'fit');
+/** 지금 스테이지가 쓰는 뷰포트 — 꽉 채우기면 높이가 버전의 기준과 다르다 */
+export const stageViewport = signal<{ w: number; h: number }>({ w: 1920, h: 1080 });
+/** 영역 Comment 작성 방식 — 캡처(기본) · 화면에 붙이기. 녹화는 캡처에 클립을 더한다 */
+export const snipMode = signal<'capture' | 'pin'>('capture');
+/** 작성 중인 영역 Comment 에 붙일 클립 */
+export const draftClip = signal<import('@core').Clip | null>(null);
+/** 영역만 녹화하는 중 — 그동안 멈춤 그림을 걷고 화면을 돌린다 */
+export const snipRec = signal<{ startedAt: number } | null>(null);
 export const canUndo = signal(false);
 export const canRedo = signal(false);
 
@@ -331,6 +344,17 @@ export function togglePanel(open = !panelOpen.value): void {
   lsSet(LS.panel, open ? '1' : '0');
 }
 
+export function setNotesRatio(r: number): void {
+  notesRatio.value = Math.min(0.85, Math.max(0.15, r));
+  lsSet(LS.notesRatio, notesRatio.value.toFixed(3));
+}
+
+export function setFitMode(m: FitMode): void {
+  fitMode.value = m;
+  zoom.value = null;
+  lsSet(LS.fit, m);
+}
+
 export function toggleComments(open = !commentsOpen.value): void {
   commentsOpen.value = open;
   lsSet(LS.comments, open ? '1' : '0');
@@ -359,4 +383,4 @@ export function requestReveal(id: string): void {
 export const stagePage = signal('');
 
 /** 녹화 대상 — 스테이지 프레임 요소 */
-export const stageRef: { frame: HTMLElement | null } = { frame: null };
+export const stageRef: { frame: HTMLElement | null; snip: HTMLElement | null } = { frame: null, snip: null };

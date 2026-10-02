@@ -39,7 +39,8 @@ export function ScreenTabs({ tools }: { tools?: ComponentChildren }) {
   };
 
   return (
-    <div class="tabs" role="tablist" aria-label="열린 화면" onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
+    <div class="tabs">
+    <div class="tabs-strip" role="tablist" aria-label="열린 화면" onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
       {ids.map((id) => {
         const s = d.screens.find((x) => x.id === id)!;
         const on = id === cur;
@@ -66,8 +67,12 @@ export function ScreenTabs({ tools }: { tools?: ComponentChildren }) {
           </div>
         );
       })}
-      <ScreenList openIds={ids} />
-      {tools}
+    </div>
+      {/* 탭 줄은 옆으로 스크롤되므로, 펼침 메뉴가 잘리지 않게 도구는 그 밖에 둔다 */}
+      <div class="tabs-tools">
+        <ScreenList openIds={ids} />
+        {tools}
+      </div>
     </div>
   );
 }

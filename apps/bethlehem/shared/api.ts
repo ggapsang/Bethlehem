@@ -42,6 +42,9 @@ export interface BethlehemApi {
   packFolder(opts: PackOptions): Promise<PackResult>;
   /* 그림 화면 */
   pickImage(): Promise<string[]>;
+  /** 화면으로 가져올 파일들 — 테라리움 문서 · 그림 */
+  pickScreenFiles(): Promise<string[]>;
+  readDoc(path: string): Promise<string>;
   packImage(path: string): Promise<{ title: string; version: PackResult['version']; blobs: [string, EncodedBlob][] }>;
   /* 작업 폴더 */
   wsPick(o?: { title?: string; defaultPath?: string }): Promise<string | null>;

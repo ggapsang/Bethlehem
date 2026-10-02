@@ -11,3 +11,12 @@ export function anchorLabel(fp: { tag: string; id?: string; classes: string[] },
   const base = fp.id ? `${fp.tag}#${fp.id}` : fp.classes[0] ? `${fp.tag}.${fp.classes[0]}` : fp.tag;
   return region ? `${base} 안의 영역` : base;
 }
+
+/** Comment 가 지금 화면에서 어떤 상태인가 — 마커 줄과 패널 카드가 같은 구분을 쓴다 */
+export type MarkState = 'live' | 'other' | 'capture' | 'screen';
+export function markState(a: { anchor?: unknown; kind?: string; id: string }, visible: ReadonlySet<string>): MarkState {
+  if (!a.anchor) return 'screen';
+  if (a.kind === 'capture') return 'capture';
+  return visible.has(a.id) ? 'live' : 'other';
+}
+export const MARK_LABEL: Record<MarkState, string> = { live: '화면에 있음', other: '다른 상태', capture: '캡처', screen: '화면 전체' };

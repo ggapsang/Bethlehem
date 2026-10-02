@@ -4,7 +4,7 @@ import type { ComponentChildren } from 'preact';
 import { ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Plus, Trash2 } from 'lucide-preact';
 import { rev, screen } from '@manna/store';
 import {
-  addImageScreen, addScreenFromFolder, askUrl, createWorkspace, mergeReturned, mode, openDocument, openFolder, placeName, recent, refreshRecent,
+  addImageScreen, addScreenFromFolder, addScreensFromFiles, askUrl, createWorkspace, mergeReturned, mode, openDocument, openFolder, placeName, recent, refreshRecent,
   refreshReturned, removeScreen, returned,
 } from './session';
 
@@ -152,9 +152,15 @@ function SourceMenu({ title, icon, label, screenId, kind, align }: { title: stri
           <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); askUrl(screenId); }}>
             <Globe {...ICON} size={16} /> URL…
           </button>
-          <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); addImageScreen(screenId); }}>
-            <Image {...ICON} size={16} /> 그림 (png · jpg)…
-          </button>
+          {screenId ? (
+            <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); addImageScreen(screenId); }}>
+              <Image {...ICON} size={16} /> 그림 (png · jpg)…
+            </button>
+          ) : (
+            <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); addScreensFromFiles(); }}>
+              <FileText {...ICON} size={16} /> 파일 — 테라리움 문서 · 그림…
+            </button>
+          )}
           <div class="popover-sep" />
           <span class="popover-label"><History {...ICON} size={14} /> 최근 폴더</span>
           <RecentList items={recent.value.folders} empty="최근에 쓴 폴더가 없습니다." onPick={(p) => { close(); addScreenFromFolder(screenId, p); }} />
