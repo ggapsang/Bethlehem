@@ -56,16 +56,27 @@
 
 /* 사용자 가이드 창 — 떠 있고, 옮기고, 크기를 바꾼다 */
 .guide-win {
-  position: fixed; z-index: 120; width: 760px; height: min(80vh, 820px); min-width: 360px; min-height: 240px;
-  max-width: calc(100vw - 16px); max-height: calc(100vh - 16px);
-  display: flex; flex-direction: column; resize: both; overflow: hidden;
+  position: fixed; z-index: 120; min-width: 360px; min-height: 220px;
+  display: flex; flex-direction: column; overflow: hidden; outline: none;
   background: var(--bg-panel); border: 1px solid var(--border-strong); border-radius: var(--unit-3); box-shadow: var(--shadow-pop);
 }
 .guide-head {
   display: flex; align-items: center; gap: var(--unit-1); height: 40px; padding: 0 var(--unit-2) 0 var(--unit-4); flex: none;
   border-bottom: 1px solid var(--border); cursor: move; user-select: none;
 }
-.guide-font { font-size: var(--text-xs); color: var(--text-tertiary); min-width: 34px; text-align: center; font-variant-numeric: tabular-nums; }
+.guide-font { font-size: var(--text-xs); color: var(--text-tertiary); min-width: 40px; height: 24px; text-align: center; font-variant-numeric: tabular-nums; border: 0; border-radius: var(--unit-1); background: transparent; }
+.guide-font:hover { color: var(--text-primary); background: var(--bg-hover); }
+.guide-sep { width: 1px; height: 18px; margin: 0 var(--unit-1); background: var(--border); }
+.guide-win.is-max { border-radius: 0; }
+/* 가장자리 · 모서리 손잡이 — 보이지 않고, 커서만 바뀐다 */
+.gw-edge { position: absolute; z-index: 3; }
+.gw-n, .gw-s { left: 10px; right: 10px; height: 8px; }
+.gw-n { top: 0; cursor: n-resize; } .gw-s { bottom: 0; cursor: s-resize; }
+.gw-e, .gw-w { top: 10px; bottom: 10px; width: 8px; }
+.gw-e { right: 0; cursor: e-resize; } .gw-w { left: 0; cursor: w-resize; }
+.gw-ne, .gw-nw, .gw-se, .gw-sw { width: 14px; height: 14px; }
+.gw-ne { top: 0; right: 0; cursor: ne-resize; } .gw-nw { top: 0; left: 0; cursor: nw-resize; }
+.gw-se { bottom: 0; right: 0; cursor: se-resize; } .gw-sw { bottom: 0; left: 0; cursor: sw-resize; }
 .guide-body { flex: 1; min-height: 0; overflow: auto; padding: var(--unit-4) var(--unit-6) var(--unit-10); line-height: 1.7; }
 /* 마크다운 그리기 */
 .md-render h1 { font-size: 1.7em; margin: .4em 0 .6em; }

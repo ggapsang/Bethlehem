@@ -190,6 +190,35 @@ export const appSpecs: Spec[] = [
         const f0 = await page.$eval('.guide-body', (el) => parseFloat(getComputedStyle(el).fontSize));
         await page.click('.guide-win button[aria-label="글자 크게"]');
         check('가이드 글자 크기', (await page.$eval('.guide-body', (el) => parseFloat(getComputedStyle(el).fontSize))) > f0);
+        const box = async () => (await (await page.$('.guide-win'))!.boundingBox())!;
+        const dragBy = async (sel: string, dx: number, dy: number) => {
+          const b = (await (await page.$(sel))!.boundingBox())!;
+          await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+          await page.mouse.down();
+          await page.mouse.move(b.x + b.width / 2 + dx, b.y + b.height / 2 + dy, { steps: 5 });
+          await page.mouse.up();
+        };
+        const g0 = await box();
+        await dragBy('.gw-w', -120, 0);
+        const g1 = await box();
+        check('왼쪽 가장자리를 끌면 왼쪽으로 넓어진다', g1.width > g0.width + 100 && g1.x < g0.x - 100, `${Math.round(g0.width)} → ${Math.round(g1.width)}`);
+        await dragBy('.gw-se', 60, -80);
+        const g2 = await box();
+        check('모서리를 끌면 두 방향으로 바뀐다', g2.width > g1.width + 40 && g2.height < g1.height - 60);
+        await dragBy('.gw-n', 0, 50);
+        check('위 가장자리', (await box()).height < g2.height - 30);
+        await page.click('.guide-win button[aria-label="최대화"]');
+        const gm = await box();
+        const vw = await page.evaluate(() => [innerWidth, innerHeight]);
+        check('최대화', Math.abs(gm.width - vw[0]!) < 2 && Math.abs(gm.height - vw[1]!) < 2);
+        await page.dblclick('.guide-head strong');
+        check('제목줄 두 번 누르면 원래 크기', Math.abs((await box()).width - g2.width) < 3);
+        const f1 = await page.$eval('.guide-body', (el) => parseFloat(getComputedStyle(el).fontSize));
+        await page.hover('.guide-body');
+        await page.keyboard.down('Control');
+        await page.mouse.wheel(0, -200);
+        await page.keyboard.up('Control');
+        check('Ctrl+휠로 글자 확대', !!(await until(async () => (await page.$eval('.guide-body', (el) => parseFloat(getComputedStyle(el).fontSize))) > f1, 2000)));
         await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.getMenuItemById('devtools')?.click());
         check('보기 → 개발자 도구', !!(await until(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.webContents.isDevToolsOpened())), 5000)));
       } finally {
