@@ -31,12 +31,17 @@ export const docSpecs: Spec[] = [
       const { page, f } = await openDoc();
       await ctrlPick(page, await pagePoint(page, f, '#tabB'));
       await page.fill('.composer .title-input', '탭 이름');
+      await page.fill('.composer .assignee-input', '한재준');
       await typeIn(page, '.composer .cm-content', '- [ ] 띄어쓰기');
       await page.keyboard.press('Control+Enter');
       await until(async () => (await cardCount(page)) === 1, 3000);
       check('제목 · 본문 Comment 가 생긴다', (await cardCount(page)) === 1);
-      check('카드 첫 줄에 제목, 둘째 줄에 이름', ((await page.textContent('.card .card-name')) ?? '') === '탭 이름' && ((await page.textContent('.card .author')) ?? '') === '검증봇');
-      check('마커 옆 이름표', (await page.getAttribute('.marker', 'data-label')) === '탭 이름 · 검증봇');
+      check('카드 첫 줄에 제목, 둘째 줄에 쓴 사람 → 담당', ((await page.textContent('.card .card-name')) ?? '') === '탭 이름' && ((await page.textContent('.card .card-meta')) ?? '').startsWith('검증봇→한재준'), (await page.textContent('.card .card-meta')) ?? '');
+      check('마커 옆 이름표에도 담당', (await page.getAttribute('.marker', 'data-label')) === '탭 이름 · 검증봇 → 한재준');
+      await page.fill('.popover-card .detail .assignee-input', '김민수');
+      await page.press('.popover-card .detail .assignee-input', 'Tab');
+      check('팝업에서 담당을 바꾼다', !!(await until(async () => ((await page.textContent('.card .assignee')) ?? '') === '김민수', 2000)));
+      check('담당은 고르기 목록에 남는다', !!(await page.$('#terr-people option[value="김민수"]')));
       // 제목만
       await ctrlPick(page, await pagePoint(page, f, '#tabC'));
       await page.fill('.composer .title-input', '제목만');
@@ -228,6 +233,17 @@ export const docSpecs: Spec[] = [
       const names = await p2.$$eval('.card .card-name', (els) => els.map((e) => e.textContent ?? ''));
       const tabIds = await p2.$$eval('.tabs .tab', (t) => t.map((x) => (x as HTMLElement).dataset.id));
       check('새 판에 더해진 화면은 저절로 탭으로 열린다 (이 브라우저가 기억한 탭에 없어도)', tabIds.includes('SCR-002'), JSON.stringify(tabIds));
+      // 현재 탭만 저장 — 저장 옆 단추를 펼쳐서
+      await p2.click('.tab[data-id="SCR-002"] .tab-main');
+      await p2.click('button[aria-label="저장 방식"]');
+      const items = await p2.$$eval('.save-menu .popover-item', (els) => els.map((e) => e.getAttribute('aria-label')));
+      check('저장 옆 단추를 누르면 다른 이름으로 저장 · 현재 탭만 저장', items.join(',') === '다른 이름으로 저장,현재 탭만 저장', items.join(','));
+      const dl2 = p2.waitForEvent('download');
+      await p2.click('.save-menu button[aria-label="현재 탭만 저장"]');
+      const one = join(OUT, 'smoke-one-tab.terr.html');
+      await (await dl2).saveAs(one);
+      const oneDoc = parseManna(readFileSync(one, 'utf8')).doc;
+      check('현재 탭만 저장 — 그 화면 하나만 담긴다 (문서 id 는 그대로)', oneDoc.screens.length === 1 && oneDoc.screens[0]!.id === 'SCR-002' && oneDoc.id === nd.id, oneDoc.screens.map((s) => s.id).join(','));
       check('새 판을 열면 작성자의 새 Comment 가 보이고, 이 브라우저에서 단 것도 합쳐진다', names.includes('작성자 새 Comment') && names.some((n) => n.includes('저장 확인')), JSON.stringify(names));
     },
   },

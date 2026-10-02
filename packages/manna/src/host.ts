@@ -4,7 +4,7 @@
 import type { EncodedBlob, ExternalEntry, MannaDoc, Runtime } from '@core';
 import { referencedShas, serializeManna, mergeDoc } from '@core';
 import { idbGet, idbPut } from './idb';
-import { blobs, dirty, doc, fileName, notify, rev, saveState, user } from './store';
+import { blobs, dirty, doc, fileName, notify, rev, saveState, user, screenId } from './store';
 
 export interface SiteSnap {
   entry: string;
@@ -27,6 +27,8 @@ export interface Host {
   site?: { partition: string };
   /** 실시간 사이트의 지금 모습을 보낸 파일용 사본으로 */
   snapshotSite?(guestId: number): Promise<SiteSnap | null>;
+  /** 따로 내보내기 — 지금 문서와 상관없는 새 파일로 (현재 탭만 저장). 없으면 브라우저 저장 대화상자나 다운로드 */
+  exportFile?(html: string, suggestedName: string): Promise<string | null>;
 }
 
 const safe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '_').trim();
@@ -50,10 +52,47 @@ export function suggestedName(host: Host): string {
   return fileName.value ? withExt(fileName.value) : `${base}${EXT}`;
 }
 
-export async function buildHtml(host: Host): Promise<string> {
+export async function buildHtml(host: Host, only?: string[]): Promise<string> {
   const d = doc.value;
   if (host.kind === 'manna' && user.value) d.origin = { by: user.value, at: new Date().toISOString(), baseUpdatedAt: d.origin?.baseUpdatedAt ?? d.meta.updatedAt };
-  return serializeManna(d, blobs, await host.runtime());
+  // 일부 화면만 — 문서 id 는 그대로 둔다 (받은 사람이 돌려보내면 원래 문서에 그대로 합쳐진다). 그 화면이 쓰는 블롭만 담긴다
+  const out = only ? { ...d, screens: d.screens.filter((s) => only.includes(s.id)) } : d;
+  return serializeManna(out, blobs, await host.runtime());
+}
+
+/** 현재 탭만 저장 — 지금 화면 하나(모든 버전 · Comment · 자유 노트)를 새 파일로. 지금 문서의 저장 위치는 바꾸지 않는다 */
+export async function saveScreenOnly(host: Host): Promise<boolean> {
+  const s = doc.peek().screens.find((x) => x.id === screenId.peek());
+  if (!s) return false;
+  try {
+    const html = await buildHtml(host, [s.id]);
+    const name = `${safe(doc.peek().meta.title)}_${s.id}_${safe(s.title)}${EXT}`;
+    let where: string | null;
+    if (host.exportFile) where = await host.exportFile(html, name);
+    else {
+      const pick = picker();
+      if (pick) {
+        try {
+          const h = await pick({ suggestedName: name, types: [{ description: '테라리움 문서', accept: { 'text/html': ['.html'] } }] });
+          await writeHandle(h, html);
+          where = h.name;
+        } catch (e) {
+          if ((e as Error).name === 'AbortError') return false;
+          download(html, name);
+          where = name;
+        }
+      } else {
+        download(html, name);
+        where = name;
+      }
+    }
+    if (!where) return false;
+    notify(`현재 탭(${s.id} ${s.title})만 저장했습니다 — ${where.split(/[\\/]/).pop()}`);
+    return true;
+  } catch (e) {
+    notify(`저장하지 못했습니다: ${(e as Error).message}`, 'error');
+    return false;
+  }
 }
 
 /** 사용자가 누른 저장 — 결과를 알린다 */

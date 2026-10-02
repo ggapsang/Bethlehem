@@ -1,5 +1,5 @@
 /* 창 메뉴(파일 · 편집 · 화면 · 보기)에서 온 명령 — 툴바·단축키와 같은 일을 한다 */
-import { save } from '@manna/host';
+import { save, saveScreenOnly } from '@manna/host';
 import { mode, paused, redo, screen, setTheme, stageScale, theme, togglePanel, undo, zoom, zoomStep } from '@manna/store';
 import type { MenuCommand } from '../../shared/api';
 import { addImageScreen, addScreenFromFolder, addScreensFromFiles, askUrl, host, openDocument, openFolder, reloadWorkspace, urlAsk } from './session';
@@ -19,6 +19,7 @@ export function runMenu(cmd: MenuCommand): void {
     case 'reload': return void reloadWorkspace(true);
     case 'save': return void save(host, false);
     case 'save-as': return void save(host, true);
+    case 'save-tab': return void saveScreenOnly(host);
     case 'reveal-dist': return void api.wsReveal('dist');
     case 'reveal-returned': return void api.wsReveal('returned');
     case 'undo': return undo();

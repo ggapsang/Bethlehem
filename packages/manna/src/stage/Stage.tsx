@@ -20,6 +20,7 @@ import { iframeBridge, webviewBridge, type Bridge, type WebviewLike } from './br
 import { prepareScreen } from './loader';
 import { StageHeader } from './StageHeader';
 import { ScreenTabs } from './ScreenTabs';
+import { whoText } from '../ui/Who';
 import { MarkerStrip } from './MarkerStrip';
 import { SiteGallery } from './SiteGallery';
 import { useBlobUrl } from './media';
@@ -691,8 +692,8 @@ function Marker({ a, scr }: { a: Annotation; scr: Screen }) {
       type="button"
       data-id={a.id}
       class={`marker ${sel ? 'is-sel' : ''}`}
-      title={`${displayNo(scr, a)}${a.title ? ` ${a.title}` : ''} · ${a.author}`}
-      data-label={a.title ? `${a.title} · ${a.author}` : a.author}
+      title={`${displayNo(scr, a)}${a.title ? ` ${a.title}` : ''} · ${whoText(a)}`}
+      data-label={a.title ? `${a.title} · ${whoText(a)}` : whoText(a)}
       onClick={(e) => {
         e.stopPropagation();
         if (sel && popHidden.peek()) popHidden.value = false;

@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
+import { parseManna } from '../../packages/core/src';
 import {
   CHROME, OUT, SITE, appWithScreen, check, comments, ctrlPick, launchApp, nextOpen, openScreen, screenFrame, stagePoint, tempDir, typeIn, until, wait, type Spec,
 } from './lib';
@@ -133,6 +134,17 @@ export const appSpecs: Spec[] = [
         await page.click('button[aria-label="화면 추가"]');
         await page.click('.popover-item:has-text("파일")');
         check('＋ → 파일 — 문서의 화면과 그림이 들어온다', !!(await until(() => readdirSync(join(ws, 'screens')).length === 3, 10000)), readdirSync(join(ws, 'screens')).join(','));
+        // 현재 탭만 저장
+        const oneOut = join(OUT, 'smoke-app-one-tab');
+        await app.evaluate(({ dialog }, d) => {
+          dialog.showSaveDialog = (async () => ({ canceled: false, filePath: d })) as typeof dialog.showSaveDialog;
+        }, oneOut);
+        const cur = await page.getAttribute('.tab.is-on', 'data-id');
+        await page.click('button[aria-label="저장 방식"]');
+        await page.click('.save-menu button[aria-label="현재 탭만 저장"]');
+        const oneFile = await until(() => (existsSync(oneOut + '.terr.html') ? oneOut + '.terr.html' : null), 8000);
+        const oneIds = oneFile ? parseManna(readFileSync(oneFile, 'utf8')).doc.screens.map((s) => s.id) : [];
+        check('현재 탭만 저장 — 그 화면 하나만 새 파일로', oneIds.length === 1 && oneIds[0] === cur, `${cur} → ${oneIds.join(',')}`);
         // 다시 켜면 최근 목록
         await app.close();
         ({ app, page } = await launchApp(ud, [ws, src]));

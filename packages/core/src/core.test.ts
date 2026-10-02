@@ -246,6 +246,17 @@ describe('merge', () => {
     expect(base.screens[0].annotations[0].done?.by).toBe('수신자');
   });
 
+  it('회신본에서 정한 담당을 합친다', async () => {
+    const { mergeDoc } = await import('./merge');
+    const base = mk();
+    const inc: MannaDoc = JSON.parse(JSON.stringify(base));
+    inc.origin = { by: '수신자', at: base.meta.updatedAt, baseUpdatedAt: base.meta.updatedAt };
+    inc.screens[0].annotations[0].assignee = '한재준';
+    inc.screens[0].annotations[0].updatedAt = new Date(Date.parse(base.meta.updatedAt) + 1000).toISOString();
+    mergeDoc(base, inc, new Map(), new Map());
+    expect(base.screens[0].annotations[0].assignee).toBe('한재준');
+  });
+
   it('다른 문서는 합치지 않는다', async () => {
     const { mergeDoc } = await import('./merge');
     expect(() => mergeDoc(mk(), mk(), new Map(), new Map())).toThrow(/다른 문서/);

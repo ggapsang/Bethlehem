@@ -697,3 +697,13 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .done-label input { accent-color: var(--accent); }
 .done-label.is-on { color: var(--accent-text); font-weight: 600; }
 .mk.is-done { opacity: .55; text-decoration: line-through; }
+
+/* 쓴 사람 → 담당 */
+.who-arrow { margin: 0 4px; color: var(--accent-text); font-weight: 700; }
+.card-meta .assignee { font-weight: 600; color: var(--accent-text); }
+.assignee-row { display: flex; align-items: center; gap: var(--unit-2); min-width: 0; }
+.assignee-from { flex: none; font-size: var(--text-xs); color: var(--text-secondary); font-weight: 600; }
+.assignee-input { flex: 1; min-width: 0; max-width: none; height: 30px; font-size: var(--text-sm); }
+.save-menu { min-width: 280px; }
+.save-menu .popover-item:disabled { opacity: .5; }
+.save-menu .saveas-icon .saveas-pen { background: var(--bg-panel); color: var(--text-primary); }

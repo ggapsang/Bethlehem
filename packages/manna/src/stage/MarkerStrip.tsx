@@ -7,6 +7,7 @@ import { displayNo } from '@core';
 import { shownAnnotations, hovered, popHidden, requestReveal, rev, screen, selected, shotView, version, visible } from '../store';
 import { MARK_LABEL, markState, type MarkState } from '../ui/labels';
 import { plainText } from '../ui/editor/MarkdownEditor';
+import { whoText } from '../ui/Who';
 
 const ORDER: MarkState[] = ['live', 'other', 'capture', 'screen'];
 
@@ -43,7 +44,7 @@ export function MarkerStrip() {
               data-id={a.id}
               data-state={st}
               aria-pressed={on}
-              title={`${displayNo(scr, a)} · ${a.done ? '완료 · ' : ''}${MARK_LABEL[st]}${first ? ` — ${first.slice(0, 60)}` : ''}`}
+              title={`${displayNo(scr, a)} · ${whoText(a)} · ${a.done ? '완료 · ' : ''}${MARK_LABEL[st]}${first ? ` — ${first.slice(0, 60)}` : ''}`}
               onClick={() => (on && !popHidden.peek() ? (selected.value = null) : openComment(a))}
               onPointerEnter={() => (hovered.value = a.id)}
               onPointerLeave={() => (hovered.value = null)}

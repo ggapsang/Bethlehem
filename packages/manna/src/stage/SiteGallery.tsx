@@ -8,7 +8,7 @@ import { displayNo } from '@core';
 import type { Host } from '../host';
 import { popHidden, rev, selected, shownAnnotations } from '../store';
 import { Detail } from '../ui/Popover';
-import { ago } from '../ui/labels';
+import { Who } from '../ui/Who';
 import { useBlobUrl } from './media';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
@@ -74,7 +74,7 @@ export function SiteGallery({ host, scr, v, hasCopy, copyLabel = '마지막 사�
                     <span class="grow" />
                     {(a.clips?.length ?? 0) > 0 && <span class="badge-icon"><Film {...ICON} size={14} /> {a.clips!.length}</span>}
                   </div>
-                  <span class="card-meta"><strong class="author">{a.author}</strong> · {ago(a.createdAt)}</span>
+                  <Who a={a} />
                   <Shot a={a} />
                 </button>
                 {(a.clips ?? []).length > 0 && (

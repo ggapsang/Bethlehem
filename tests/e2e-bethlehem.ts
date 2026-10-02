@@ -410,7 +410,8 @@ async function main() {
 
   console.log('\n[6] 다른 이름으로 저장');
   await nextSave(app, EXPORT);
-  await page.click('button[aria-label="다른 이름으로 저장"]');
+  await page.click('button[aria-label="저장 방식"]');
+  await page.click('.save-menu button[aria-label="다른 이름으로 저장"]');
   check('다른 이름으로 저장 — .terr.html 이 붙는다', !!(await until(() => existsSync(EXPORT + '.terr.html'), 8000)));
 
   console.log('\n[7] 받는 사람이 보는 URL 화면');

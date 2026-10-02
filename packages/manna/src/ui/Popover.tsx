@@ -5,11 +5,12 @@ import { createPortal } from 'preact/compat';
 import { Camera, Circle, Film, Pin, Square, Trash2, X } from 'lucide-preact';
 import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
-import { toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleSnipRecording } from '../actions';
+import { editAssignee, toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleSnipRecording } from '../actions';
 import type { Host } from '../host';
 import { annotations, draft, draftClip, popHidden, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
 import { MarkdownEditor } from './editor/MarkdownEditor';
+import { PeopleList, Who } from './Who';
 import { ago } from './labels';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
@@ -161,7 +162,8 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
 function Composer() {
   const text = useRef('');
   const title = useRef('');
-  const add = () => addFromDraft(text.current, title.current);
+  const who = useRef('');
+  const add = () => addFromDraft(text.current, title.current, who.current);
   return (
     <div class="composer" aria-label="새 Comment">
       <div class="row pop-drag" title="끌어서 옮기기">
@@ -180,6 +182,21 @@ function Composer() {
           if (e.key === 'Escape') draft.value = null;
         }}
       />
+      <label class="assignee-row">
+        <span class="assignee-from">{user.value ?? ''} →</span>
+        <input
+          class="input input-sm assignee-input"
+          list="terr-people"
+          placeholder="담당 (없어도 됩니다)"
+          aria-label="담당"
+          onInput={(e) => (who.current = e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) add();
+            if (e.key === 'Escape') draft.value = null;
+          }}
+        />
+      </label>
+      <PeopleList />
       <MarkdownEditor
         value=""
         minRows={6}
@@ -263,7 +280,7 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
     <div class="detail">
       <div class="row detail-head pop-drag" title="끌어서 옮기기">
         <span class={`no ${a.anchor ? '' : 'no-screen'}`}>{displayNo(scr, a)}</span>
-        <span class="card-meta"><strong class="author">{a.author}</strong> · {ago(a.createdAt)}</span>
+        <Who a={a} />
         <span class="grow" />
         <label class={`done-label ${a.done ? 'is-on' : ''}`} title={a.done ? `${a.done.by} · ${ago(a.done.at)}` : '완료 — 지우지 않고 숨긴다'}>
           <input type="checkbox" checked={!!a.done} onChange={() => toggleDone(a)} /> 완료
@@ -282,6 +299,19 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
       ) : (
         a.title && <h3 class="detail-title">{a.title}</h3>
       )}
+      <label class="assignee-row">
+        <span class="assignee-from">{a.author} →</span>
+        <input
+          key={`w-${a.id}`}
+          class="input input-sm assignee-input"
+          list="terr-people"
+          placeholder="담당 (없어도 됩니다)"
+          aria-label="담당"
+          defaultValue={a.assignee ?? ''}
+          onChange={(e) => editAssignee(a, e.currentTarget.value)}
+        />
+      </label>
+      <PeopleList />
       <MarkdownEditor
         key={a.id}
         value={a.body}

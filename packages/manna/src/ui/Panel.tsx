@@ -11,6 +11,7 @@ import {
 } from '../store';
 import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
 import { ago, markState } from './labels';
+import { Who } from './Who';
 import { openComment } from '../stage/MarkerStrip';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
@@ -286,7 +287,7 @@ function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip
           <span class="card-lines">
             <span class={`card-name ellipsis ${a.title ? '' : 'is-untitled'}`}>{a.title || plainText(a.body).split('\n').find((l) => l.trim()) || '제목 없음'}</span>
             <span class="card-sub">
-              <span class="card-meta"><strong class="author">{a.author}</strong> · {ago(a.createdAt)}</span>
+              <Who a={a} />
               {!a.anchor && <span class="chip">화면 전체</span>}
           {st === 'other' && <span class="chip chip-hint" title="다른 화면 상태에 있습니다. 누르면 그 상태로 이동합니다."><EyeOff {...ICON} size={12} /> 다른 상태</span>}
           {st === 'capture' && <span class="chip chip-capture" title="그린 영역을 찍어 둔 Comment 입니다. 실시간 화면에는 마커가 붙지 않습니다."><Camera {...ICON} size={12} /> 캡처</span>}

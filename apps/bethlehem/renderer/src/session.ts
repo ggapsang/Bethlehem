@@ -99,6 +99,9 @@ export const host: Host = {
       throw new Error('아직 저장할 곳이 없습니다 — 작업 폴더를 만들어 주세요.');
     }
   },
+  async exportFile(html, name) {
+    return api.exportAs({ html, suggestedName: name });
+  },
   async save(saveAs) {
     const m = mode.peek();
     if (saveAs) {

@@ -555,7 +555,7 @@ async function main() {
   await page3.waitForTimeout(1500);
   check('이 브라우저에 남은 변경이 이어서 열린다 (Comment 3개)', (await cardCount(page3)) === 3, `${await cardCount(page3)}개`);
   check('자동 저장 상태가 보인다', ((await page3.textContent('.save-status')) ?? '').length > 0, (await page3.textContent('.save-status')) ?? '');
-  check('저장과 다른 이름으로 저장이 따로 있다 (디스켓 · 연필)', !!(await page3.$('.split-main')) && !!(await page3.$('button[aria-label="다른 이름으로 저장"] .saveas-pen')));
+  check('저장과 다른 이름으로 저장이 따로 있다 (디스켓 · 연필)', !!(await page3.$('.split-main')) && !!(await page3.$('button[aria-label="저장 방식"] .saveas-pen')));
   check('로고는 앱 아이콘 그림', (await page3.getAttribute('.toolbar img.logo', 'src'))?.startsWith('data:image/png') ?? false);
 
   const real = errors.filter((e) => !/favicon|ERR_FILE_NOT_FOUND/.test(e));

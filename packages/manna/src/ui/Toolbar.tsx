@@ -1,14 +1,14 @@
 /* 툴바 — 문서 수준만 (가이드 §17: 현재 문서 → 현재 화면 → 작업 모드 → 저장). 화면에 붙은 조작은 화면 컨테이너 머리에 */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
-  Circle, Moon, Pipette, MousePointer2, PanelRight, PencilLine, Redo2, Save, Square, Sun, Undo2, UserRound,
+  Circle, FileOutput, Moon, Pipette, MousePointer2, PanelRight, PencilLine, Redo2, Save, Square, Sun, Undo2, UserRound,
 } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
 import type { MarkerColor } from '@core';
 import { MARKER_COLORS } from '@core';
 import { setMarkerColor, toggleRecording } from '../actions';
 import type { Host } from '../host';
-import { canConnectFile, connectFile, save } from '../host';
+import { canConnectFile, connectFile, save, saveScreenOnly } from '../host';
 import { ago } from './labels';
 import {
   askName, canRedo, canUndo, dirty, doc, rev, saveState, draft, mode, mutate, panelOpen, recording, redo, screen,
@@ -149,12 +149,45 @@ export function Toolbar({ host, start }: ToolbarProps) {
           <button type="button" class="btn btn-primary split-main" onClick={() => save(host, false)} title="저장 (Ctrl+S) — 고치면 자동으로도 저장됩니다">
             <Save {...ICON} size={16} /> 저장
           </button>
-          <button type="button" class="btn btn-primary split-more" onClick={() => save(host, true)} title="다른 이름으로 저장 (Ctrl+Shift+S)" aria-label="다른 이름으로 저장">
-            <SaveAsIcon />
-          </button>
+          <SaveMenu host={host} />
         </div>
       </div>
     </header>
+  );
+}
+
+/** 저장 옆 단추 — 펼치면 다른 이름으로 저장 · 현재 탭만 저장 */
+function SaveMenu({ host }: { host: Host }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const scr = screen.value;
+  return (
+    <div class="popover-wrap" ref={ref}>
+      <button type="button" class="btn btn-primary split-more" aria-haspopup="true" aria-expanded={open} aria-label="저장 방식" title="다른 이름으로 저장 · 현재 탭만 저장" onClick={() => setOpen(!open)}>
+        <SaveAsIcon />
+      </button>
+      {open && (
+        <div class="popover save-menu" role="menu" aria-label="저장 방식">
+          <button type="button" role="menuitem" class="popover-item" aria-label="다른 이름으로 저장" onClick={() => { setOpen(false); save(host, true); }}>
+            <SaveAsIcon /> 다른 이름으로 저장… <span class="grow" /><span class="muted small">Ctrl+Shift+S</span>
+          </button>
+          <button type="button" role="menuitem" class="popover-item" aria-label="현재 탭만 저장" disabled={!scr} onClick={() => { setOpen(false); saveScreenOnly(host); }}>
+            <FileOutput {...ICON} size={16} /> 현재 탭만 저장…{scr && <span class="muted small ellipsis"> {scr.id} {scr.title}</span>}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

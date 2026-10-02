@@ -34,7 +34,7 @@ function blank(body: string): Annotation {
 }
 
 /** 지금 잡은 대상(draft)에 Comment 를 단다. 피커를 켤 때 찍어 둔 화면(still)은 이 Comment 의 shot 이 된다 */
-export async function addFromDraft(body: string, title = ''): Promise<string | null> {
+export async function addFromDraft(body: string, title = '', assignee = ''): Promise<string | null> {
   const d = draft.peek();
   const s = screen.peek();
   const v = version.peek();
@@ -53,6 +53,7 @@ export async function addFromDraft(body: string, title = ''): Promise<string | n
   const a: Annotation = {
     ...blank(body),
     ...(title.trim() ? { title: title.trim() } : {}),
+    ...(assignee.trim() ? { assignee: assignee.trim() } : {}),
     anchor: { fp: p.fp, ...(p.region ? { region: p.region } : {}), trail: p.trail, props: p.props, path: p.path, ...(stagePage.peek() ? { page: stagePage.peek() } : {}) },
     ...(capture && shot ? { kind: 'capture' as const } : {}),
     ...(shot ? { shot } : {}),
@@ -61,6 +62,7 @@ export async function addFromDraft(body: string, title = ''): Promise<string | n
   mutate((x) => {
     s.annotations.push(a);
     touchParticipant(x, user.value!);
+    if (a.assignee) touchParticipant(x, a.assignee);
   }, { label: 'Comment 추가' });
   draft.value = null;
   draftClip.value = null;
@@ -131,6 +133,17 @@ export function toggleDone(a: Annotation): void {
     if (selected.peek() === a.id) selected.value = null;
     notify('완료 — 숨겼습니다 (완료 보기로 다시 봅니다)', 'info', { label: '되돌리기', run: undo });
   }
+}
+
+/** 담당 — 비우면 담당 없음 */
+export function editAssignee(a: Annotation, name: string): void {
+  if (needName()) return;
+  const v = name.trim();
+  mutate((x) => {
+    setField(a, 'assignee', v || undefined, user.value!);
+    if (!a.assignee) delete a.assignee;
+    if (v) touchParticipant(x, v);
+  }, { label: 'Comment 담당' });
 }
 
 export function editTitle(a: Annotation, title: string): void {
