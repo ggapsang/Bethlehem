@@ -1,299 +1,301 @@
-/* 오른쪽 패널 — TODO(어노테이션) 와 화면 설명 (docs/ARCHITECTURE.md §4.1) */
+/* 오른쪽 패널 — 위에 화면 개요(마크다운), 아래에 Comment 목록. 한 스크롤로 이어진다 */
+import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { MessageSquare, Trash2, X } from 'lucide-preact';
-import type { Annotation, Kind, Screen, Status } from '@core';
+import { ChevronDown, ChevronRight, EyeOff, Film, GripVertical, MessageSquare, Plus, Trash2, X } from 'lucide-preact';
+import type { Annotation, Clip, Screen } from '@core';
+import { decodeBlob, displayNo } from '@core';
 import {
-  KINDS, STATUSES, displayNo, fingerprint, nextAnnotationNo, now, setField, styleProps, touchParticipant, trailOf, uid,
-} from '@core';
+  addFromDraft, addReply, addScreenComment, editBody, editNotes, editReply, removeClip, removeComment, reorder,
+} from '../actions';
 import type { Host } from '../host';
 import {
-  annotations, askName, draft, hovered, mode, mutate, screen, selected, tab, user, version, visible,
+  annotations, blobs, draft, hovered, notesOpen, requestReveal, rev, screen, selected, toggleNotes, user, visible,
 } from '../store';
-import { Description } from './Description';
-import { KIND_CLASS, STATUS_CLASS, ago, anchorLabel } from './labels';
+import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
+import { ago, anchorLabel } from './labels';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
-function needName(): boolean {
-  if (user.value) return false;
-  askName.value = true;
-  return true;
-}
-
 export function Panel({ host }: { host: Host }) {
   const scr = screen.value;
-  const list = annotations.value;
-  const vis = visible.value;
-  const hasDesc = !!scr?.description;
-  const current = tab.value === 'desc' && hasDesc ? 'desc' : 'todo';
-  const shown = list.filter((a) => vis.has(a.id));
-  const hidden = list.filter((a) => !vis.has(a.id));
-  const open = list.filter((a) => a.status !== '완료').length;
-
+  if (!scr) return <aside class="panel" aria-label="개요와 Comment" />;
   return (
-    <aside class="panel" aria-label="TODO 와 설명">
-      <div class="panel-tabs" role="tablist">
-        <button role="tab" aria-selected={current === 'todo'} class="ptab" onClick={() => (tab.value = 'todo')}>
-          TODO <span class="count">{open}/{list.length}</span>
-        </button>
-        {hasDesc && (
-          <button role="tab" aria-selected={current === 'desc'} class="ptab" onClick={() => (tab.value = 'desc')}>
-            설명
-          </button>
-        )}
+    <aside class="panel" aria-label="개요와 Comment">
+      <div class="panel-scroll">
+        <Notes scr={scr} />
+        <Comments scr={scr} host={host} />
       </div>
-      {current === 'desc' && scr?.description ? (
-        <Description sha={scr.description.sha} />
-      ) : (
-        <div class="panel-body">
-          {draft.value && scr && <Composer host={host} scr={scr} />}
-          {!list.length && !draft.value && (
-            <div class="panel-empty">
-              <p>아직 어노테이션이 없습니다.</p>
-              <p class="muted">
-                툴바의 <strong>어노테이션</strong> 모드에서 요소를 클릭하거나, 드래그해 영역을 잡으세요. 캔버스 위 특정 지점은 드래그로 잡습니다.
-              </p>
-            </div>
-          )}
-          {shown.length > 0 && <Group title="지금 화면에 보이는 항목" items={shown} scr={scr!} host={host} />}
-          {hidden.length > 0 && <Group title="다른 화면 상태에 있는 항목" items={hidden} scr={scr!} host={host} dim />}
-        </div>
-      )}
     </aside>
   );
 }
 
-function Group({ title, items, scr, host, dim }: { title: string; items: Annotation[]; scr: Screen; host: Host; dim?: boolean }) {
-  const sorted = [...items].sort((a, b) => (a.no ?? 1e9) - (b.no ?? 1e9) || a.createdAt.localeCompare(b.createdAt));
+function Notes({ scr }: { scr: Screen }) {
+  rev.value; // 문서는 제자리에서 고치므로 props 가 같아도 다시 그려야 한다 (signals 의 얕은 비교를 피한다)
+  const open = notesOpen.value;
   return (
-    <section class="group">
-      <h3 class="group-title">{title}</h3>
-      <ul class="cards">
-        {sorted.map((a) => <Card key={a.id} a={a} scr={scr} host={host} dim={dim} />)}
-      </ul>
+    <section class="notes">
+      <button type="button" class="section-head" aria-expanded={open} onClick={() => toggleNotes()}>
+        {open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
+        <span>개요</span>
+        {!open && scr.notes && <span class="muted small ellipsis">{plainText(scr.notes).split('\n')[0]}</span>}
+      </button>
+      {open && (
+        <MarkdownEditor
+          key={scr.id}
+          value={scr.notes}
+          onChange={editNotes}
+          allowCheck
+          minRows={3}
+          placeholder="이 화면의 개요 — 마크다운으로 적습니다"
+          label="화면 개요"
+          class="notes-editor"
+        />
+      )}
     </section>
   );
 }
 
-function Card({ a, scr, host, dim }: { a: Annotation; scr: Screen; host: Host; dim?: boolean }) {
+function Comments({ scr, host }: { scr: Screen; host: Host }) {
+  const list = annotations.value;
+  const listRef = useRef<HTMLOListElement>(null);
+  const [drag, setDrag] = useState<{ id: string; to: number; y: number } | null>(null);
+
+  /* 끌어서 순서 바꾸기 — 손잡이를 잡고 위아래로 */
+  const startDrag = (e: PointerEvent, id: string) => {
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const target = (y: number) => {
+      const cards = Array.from(listRef.current?.querySelectorAll<HTMLElement>(':scope > .card') ?? []).filter((c) => c.dataset.id !== id);
+      return cards.filter((c) => {
+        const r = c.getBoundingClientRect();
+        return r.top + r.height / 2 < y;
+      }).length;
+    };
+    setDrag({ id, to: target(e.clientY), y: e.clientY });
+    const move = (ev: PointerEvent) => setDrag({ id, to: target(ev.clientY), y: ev.clientY });
+    const up = (ev: PointerEvent) => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      const to = target(ev.clientY);
+      setDrag(null);
+      if (ev.type === 'pointerup' && to !== list.findIndex((a) => a.id === id)) reorder(id, to);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  };
+
+  // 끄는 카드는 자리를 지킨다(손잡이가 포인터를 잡고 있다). 들어갈 자리는 다른 카드들 사이에 선으로 보인다
+  const others = list.filter((a) => a.id !== drag?.id);
+  const lineBefore = drag && drag.to < others.length ? others[drag.to].id : null;
+  return (
+    <section class="comments">
+      <div class="section-head section-head-static">
+        <span>Comment</span>
+        <span class="count">{list.length}</span>
+        <span class="grow" />
+        <button type="button" class="btn-icon btn-xs" title="화면 전체에 Comment 달기" aria-label="화면 전체에 Comment 달기" onClick={() => addScreenComment()}>
+          <Plus {...ICON} />
+        </button>
+      </div>
+      {draft.value && <Composer key="composer" />}
+      {!list.length && !draft.value && (
+        <p class="panel-empty muted">Ctrl 을 누른 채 화면의 요소를 클릭하거나, 드래그해 영역을 잡으세요.</p>
+      )}
+      <ol class="cards" ref={listRef}>
+        {list.map((a) => (
+          <Fragment key={a.id}>
+            {lineBefore === a.id && <li class="drop-line" aria-hidden="true" />}
+            <Card a={a} scr={scr} host={host} onGrip={startDrag} dragging={drag?.id === a.id} />
+          </Fragment>
+        ))}
+        {drag && drag.to >= others.length && <li class="drop-line" aria-hidden="true" />}
+      </ol>
+      {drag && (
+        <div class="drag-ghost" style={{ top: `${drag.y}px` }}>
+          {displayNo(scr, list.find((a) => a.id === drag.id)!)}번 옮기는 중
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Card({ a, scr, host, onGrip, dragging }: { a: Annotation; scr: Screen; host: Host; onGrip: (e: PointerEvent, id: string) => void; dragging?: boolean }) {
+  rev.value;
   const sel = selected.value === a.id;
+  const shown = !a.anchor || visible.value.has(a.id);
   const ref = useRef<HTMLLIElement>(null);
   useEffect(() => {
     if (sel) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [sel]);
+
+  const open = () => {
+    selected.value = a.id;
+    if (!shown && a.anchor) requestReveal(a.id);
+  };
+
   return (
     <li
       ref={ref}
-      class={`card ${sel ? 'is-sel' : ''} ${dim ? 'is-dim' : ''}`}
+      data-id={a.id}
+      class={`card ${sel ? 'is-sel' : ''} ${shown ? '' : 'is-dim'} ${dragging ? 'is-dragging' : ''}`}
       onPointerEnter={() => (hovered.value = a.id)}
       onPointerLeave={() => (hovered.value = null)}
     >
-      <button type="button" class="card-head" aria-expanded={sel} onClick={() => (selected.value = sel ? null : a.id)}>
-        <span class={`no st-${STATUS_CLASS[a.status]}`}>{displayNo(scr, a)}</span>
-        <span class={`chip kind-${KIND_CLASS[a.kind]}`}>{a.kind}</span>
-        <span class={`chip status st-${STATUS_CLASS[a.status]}`}>{a.status}</span>
-        <span class="card-meta">{a.author} · {ago(a.createdAt)}</span>
-      </button>
-      {!sel && (
-        <button type="button" class="card-preview" onClick={() => (selected.value = a.id)}>
-          <span class="clamp">{a.body}</span>
-          {dim && a.anchor.trail.length > 0 && <span class="hint">{a.anchor.trail.join(' · ')} 상태에서 작성</span>}
-          {a.replies.length > 0 && (
-            <span class="replies-count"><MessageSquare {...ICON} size={14} /> {a.replies.length}</span>
-          )}
+      <div class="card-head">
+        <span class="grip" title="끌어서 순서 바꾸기" aria-label="끌어서 순서 바꾸기" onPointerDown={(e) => onGrip(e, a.id)}>
+          <GripVertical {...ICON} />
+        </span>
+        <button type="button" class="card-title" aria-expanded={sel} onClick={() => (sel && shown ? (selected.value = null) : open())}>
+          <span class={`no ${a.anchor ? '' : 'no-screen'}`}>{displayNo(scr, a)}</span>
+          <span class="card-meta">{a.author} · {ago(a.createdAt)}</span>
+          {!a.anchor && <span class="chip">화면 전체</span>}
+          {!shown && <span class="chip chip-hint" title="다른 화면 상태에 있습니다. 누르면 그 상태로 이동합니다."><EyeOff {...ICON} size={12} /> 다른 상태</span>}
+          <span class="grow" />
+          {(a.clips?.length ?? 0) > 0 && <span class="badge-icon"><Film {...ICON} size={14} /> {a.clips!.length}</span>}
+          {a.replies.length > 0 && <span class="badge-icon"><MessageSquare {...ICON} size={14} /> {a.replies.length}</span>}
+        </button>
+      </div>
+      {!sel && a.body && (
+        <button type="button" class="card-preview" onClick={open}>
+          <span class="clamp">{plainText(a.body)}</span>
         </button>
       )}
-      {sel && <Detail a={a} host={host} dim={dim} />}
+      {sel && <Detail a={a} host={host} />}
     </li>
   );
 }
 
-function Detail({ a, host, dim }: { a: Annotation; host: Host; dim?: boolean }) {
+function Detail({ a, host }: { a: Annotation; host: Host }) {
+  rev.value; // 문서는 제자리에서 고치므로 props 가 같아도 다시 그려야 한다 (signals 의 얕은 비교를 피한다)
   const me = user.value ?? '';
   const mine = a.author === me || host.author;
-  const [body, setBody] = useState(a.body);
-  const [reply, setReply] = useState('');
-  useEffect(() => setBody(a.body), [a.id]);
+  const reply = useRef('');
+  const [replyKey, setReplyKey] = useState(0);
 
-  const set = <K extends keyof Annotation>(field: K, value: Annotation[K]) => {
-    if (needName()) return;
-    mutate(() => setField(a, field, value, user.value!));
-  };
-
-  const sendReply = () => {
-    const text = reply.trim();
-    if (!text || needName()) return;
-    mutate((d) => {
-      a.replies.push({ id: uid(), author: user.value!, at: now(), body: text });
-      a.updatedAt = now();
-      touchParticipant(d, user.value!);
-    });
-    setReply('');
-  };
-
-  const remove = () => {
-    if (!confirm(`${a.no ?? '새'}번 어노테이션을 지울까요? 답글도 함께 지워집니다.`)) return;
-    mutate(() => {
-      const s = screen.peek()!;
-      s.annotations = s.annotations.filter((x) => x.id !== a.id);
-    });
-    selected.value = null;
+  const send = () => {
+    if (!reply.current.trim()) return;
+    addReply(a, reply.current);
+    reply.current = '';
+    setReplyKey((k) => k + 1);
   };
 
   return (
     <div class="detail">
-      {dim && (
-        <p class="hint-box">
-          이 항목의 대상은 지금 화면에 보이지 않습니다.
-          {a.anchor.trail.length > 0 ? ` 작성 당시 선택 상태: ${a.anchor.trail.join(' · ')}.` : ''} 화면에서 해당 탭이나 상태로 이동하면 마커가 나타납니다.
+      <MarkdownEditor
+        key={a.id}
+        value={a.body}
+        editable={mine}
+        allowCheck
+        minRows={6}
+        autoFocus={mine && !a.body}
+        onChange={(t) => editBody(a, t)}
+        placeholder={mine ? 'Comment — 마크다운' : ''}
+        label={`${a.id} Comment 본문`}
+        class="body-editor"
+      />
+      {(a.clips ?? []).map((c) => <ClipView key={c.id} clip={c} canRemove={c.author === me || host.author} onRemove={() => removeClip(a, c.id)} />)}
+      {a.anchor && (
+        <p class="muted small ellipsis" title={a.anchor.fp.selector}>
+          <code>{anchorLabel(a.anchor.fp, false)}</code>{a.anchor.region ? ' 안의 영역' : ''}
         </p>
       )}
-      {mine ? (
-        <textarea
-          class="input body-edit"
-          value={body}
-          rows={Math.min(10, Math.max(3, body.split('\n').length + 1))}
-          onInput={(e) => setBody(e.currentTarget.value)}
-          onBlur={() => body !== a.body && set('body', body)}
-        />
-      ) : (
-        <p class="body">{a.body}</p>
-      )}
-      <div class="fields">
-        <label class="field">
-          <span>유형</span>
-          <select class="input" value={a.kind} disabled={!mine} onChange={(e) => set('kind', e.currentTarget.value as Kind)}>
-            {KINDS.map((k) => <option key={k}>{k}</option>)}
-          </select>
-        </label>
-        <label class="field">
-          <span>상태</span>
-          <select class="input" value={a.status} onChange={(e) => set('status', e.currentTarget.value as Status)}>
-            {STATUSES.map((s) => <option key={s}>{s}</option>)}
-          </select>
-        </label>
-        <label class="field field-wide">
-          <span>담당</span>
-          <input
-            class="input"
-            value={a.assignee ?? ''}
-            placeholder="이름"
-            onBlur={(e) => e.currentTarget.value !== (a.assignee ?? '') && set('assignee', e.currentTarget.value || undefined)}
-          />
-        </label>
-      </div>
-      <details class="props">
-        <summary>요소 속성 · {anchorLabel(a.anchor.fp, !!a.anchor.region)}</summary>
-        <dl>
-          {Object.entries(a.anchor.props ?? {}).map(([k, v]) => (
-            <div key={k} class="prop"><dt>{k}</dt><dd>{v}</dd></div>
-          ))}
-          <div class="prop"><dt>선택자</dt><dd><code>{a.anchor.fp.selector}</code></dd></div>
-        </dl>
-      </details>
       {a.replies.length > 0 && (
         <ol class="replies">
           {a.replies.map((r) => (
             <li key={r.id} class="reply">
               <span class="reply-meta">{r.author} · {ago(r.at)}</span>
-              <p>{r.body}</p>
+              <MarkdownEditor
+                value={r.body}
+                editable={r.author === me}
+                allowCheck
+                onChange={(t) => editReply(a, r.id, t)}
+                label="답글"
+              />
             </li>
           ))}
         </ol>
       )}
       <div class="reply-box">
-        <textarea
-          class="input"
-          rows={2}
-          placeholder="답글 (Ctrl+Enter)"
-          value={reply}
-          onInput={(e) => setReply(e.currentTarget.value)}
-          onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && sendReply()}
+        <MarkdownEditor
+          key={replyKey}
+          value=""
+          minRows={2}
+          onChange={(t) => (reply.current = t)}
+          onSubmit={send}
+          placeholder="답글 — 마크다운 (Ctrl+Enter)"
+          label="답글 쓰기"
+          class="reply-editor"
         />
         <div class="row">
           {mine && (
-            <button type="button" class="btn btn-ghost btn-danger" onClick={remove}>
+            <button type="button" class="btn btn-ghost btn-danger" onClick={() => confirm('이 Comment 를 지울까요? 답글도 함께 지워집니다. (Ctrl+Z 로 되돌릴 수 있습니다)') && removeComment(a)}>
               <Trash2 {...ICON} /> 삭제
             </button>
           )}
           <span class="grow" />
-          <button type="button" class="btn btn-secondary" disabled={!reply.trim()} onClick={sendReply}>답글</button>
+          <button type="button" class="btn btn-secondary" onClick={send}>답글</button>
         </div>
       </div>
     </div>
   );
 }
 
-function Composer({ host, scr }: { host: Host; scr: Screen }) {
-  const d = draft.value!;
-  const [kind, setKind] = useState<Kind>(host.author ? '설명' : '요청');
-  const [body, setBody] = useState('');
-  const area = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => area.current?.focus(), [d]);
+const clipUrls = new Map<string, string>();
 
-  const add = () => {
-    const text = body.trim();
-    if (!text || needName()) return;
-    const v = version.peek()!;
-    const t = now();
-    const a: Annotation = {
-      id: uid(),
-      no: host.author ? nextAnnotationNo(scr) : null,
-      version: v.v,
-      anchor: {
-        fp: fingerprint(d.el),
-        ...(d.region ? { region: d.region } : {}),
-        trail: trailOf(d.el.ownerDocument),
-        props: styleProps(d.el),
-      },
-      kind,
-      status: '열림',
-      body: text,
-      author: user.value!,
-      createdAt: t,
-      updatedAt: t,
-      replies: [],
-      history: [],
-    };
-    mutate((doc) => {
-      scr.annotations.push(a);
-      touchParticipant(doc, user.value!);
+function ClipView({ clip, canRemove, onRemove }: { clip: Clip; canRemove: boolean; onRemove: () => void }) {
+  const [src, setSrc] = useState<string | null>(clipUrls.get(clip.sha) ?? null);
+  useEffect(() => {
+    if (src) return;
+    const b = blobs.get(clip.sha);
+    if (!b) return;
+    decodeBlob(b).then((bytes) => {
+      const u = URL.createObjectURL(new Blob([bytes as BlobPart], { type: clip.type }));
+      clipUrls.set(clip.sha, u);
+      setSrc(u);
     });
-    draft.value = null;
-    selected.value = a.id;
-  };
-
-  const fp = fingerprint(d.el);
+  }, [clip.sha]);
   return (
-    <div class="composer" role="form" aria-label="새 어노테이션">
-      <div class="row">
-        <strong>새 어노테이션</strong>
-        <span class="muted mono">{anchorLabel(fp, !!d.region)}</span>
+    <figure class="clip">
+      {src ? <video src={src} controls loop muted playsInline style={{ aspectRatio: `${clip.w} / ${clip.h}` }} /> : <div class="clip-missing">클립을 불러오는 중…</div>}
+      <figcaption class="row muted small">
+        <Film {...ICON} size={14} /> {(clip.ms / 1000).toFixed(1)}초 · {clip.author}
         <span class="grow" />
-        <button type="button" class="btn-icon" aria-label="취소" onClick={() => (draft.value = null)}><X {...ICON} /></button>
+        {canRemove && <button type="button" class="btn-icon btn-xs" aria-label="클립 지우기" onClick={onRemove}><X {...ICON} size={14} /></button>}
+      </figcaption>
+    </figure>
+  );
+}
+
+function Composer() {
+  const d = draft.value!;
+  const text = useRef('');
+  const add = () => addFromDraft(text.current);
+  return (
+    <div class="composer" role="form" aria-label="새 Comment">
+      <div class="row">
+        <strong>새 Comment</strong>
+        <span class="muted mono ellipsis">{d.region ? '영역' : d.el.tagName.toLowerCase()}</span>
+        <span class="grow" />
+        <button type="button" class="btn-icon btn-xs" aria-label="취소" onClick={() => (draft.value = null)}><X {...ICON} /></button>
       </div>
-      <div class="seg" role="radiogroup" aria-label="유형">
-        {KINDS.map((k) => (
-          <button key={k} type="button" role="radio" aria-checked={kind === k} class={`seg-btn kind-${KIND_CLASS[k]}`} onClick={() => setKind(k)}>{k}</button>
-        ))}
-      </div>
-      <textarea
-        ref={area}
-        class="input"
-        rows={4}
-        placeholder="이 요소에 대한 설명이나 요청 (Ctrl+Enter 로 추가)"
-        value={body}
-        onInput={(e) => setBody(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) add();
-          if (e.key === 'Escape') draft.value = null;
-        }}
+      <MarkdownEditor
+        value=""
+        minRows={6}
+        autoFocus
+        onChange={(t) => (text.current = t)}
+        onSubmit={add}
+        onEscape={() => (draft.value = null)}
+        placeholder="마크다운 — Ctrl+Enter 로 추가, Esc 취소"
+        label="새 Comment 본문"
+        class="body-editor"
       />
-      <p class="muted small">Alt+↑/↓ 로 부모·자식 요소로 옮깁니다. 화면을 다시 클릭하면 대상이 바뀝니다.</p>
       <div class="row">
         <span class="grow" />
-        <button type="button" class="btn btn-ghost" onClick={() => { draft.value = null; mode.value = 'view'; }}>그만 달기</button>
-        <button type="button" class="btn btn-primary" disabled={!body.trim()} onClick={add}>추가</button>
+        <button type="button" class="btn btn-ghost" onClick={() => (draft.value = null)}>취소</button>
+        <button type="button" class="btn btn-primary" onClick={add}>추가</button>
       </div>
     </div>
   );

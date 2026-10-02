@@ -18,13 +18,21 @@ export default defineConfig({
   },
   preload: {
     build: {
-      lib: { entry: r('apps/bethlehem/preload/index.ts'), formats: ['cjs'], fileName: () => 'index.cjs' },
+      // 메인 창(index)과 URL 담기 창의 막대(snapshot). sandbox 라 cjs 여야 한다
+      rollupOptions: {
+        input: { index: r('apps/bethlehem/preload/index.ts'), snapshot: r('apps/bethlehem/preload/snapshot.ts') },
+        output: { format: 'cjs', entryFileNames: '[name].cjs' },
+      },
     },
   },
   renderer: {
     root: r('apps/bethlehem/renderer'),
     resolve: { alias },
     plugins: [preact()],
-    build: { rollupOptions: { input: r('apps/bethlehem/renderer/index.html') } },
+    build: {
+      rollupOptions: {
+        input: { index: r('apps/bethlehem/renderer/index.html'), snapshot: r('apps/bethlehem/renderer/snapshot.html') },
+      },
+    },
   },
 });

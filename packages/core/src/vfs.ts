@@ -92,3 +92,8 @@ export function rewriteSrcset(srcset: string, base: string, map: (abs: string) =
     })
     .join(', ');
 }
+
+/** 버전의 엔트리 문서 URL — 패키지 경로면 가상 출처 아래, URL 스냅샷이면 원래 주소 */
+export function entryUrlOf(version: Pick<ScreenVersion, 'entry'>): string {
+  return /^https?:\/\//i.test(version.entry) ? version.entry : pkgUrl(version.entry);
+}

@@ -1,56 +1,70 @@
-/* Manna 와 Bethlehem 이 같이 쓰는 화면 틀 */
+/* Manna 와 Bethlehem 이 같이 쓰는 화면 틀 — 툴바 · 스테이지 | 크기 조절 손잡이 | 개요·Comment 패널 */
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
+import { Crosshair, Minimize2, MousePointer2, PanelRight, Pause, Play } from 'lucide-preact';
 import type { Host } from './host';
-import { save } from './host';
+import { onKeyDown, onKeyUp, setKeyHost } from './keys';
 import { Stage } from './stage/Stage';
-import { askName, dirty, rev, setUser, theme, toast, user } from './store';
+import {
+  askName, dirty, fullscreen, holdPick, mode, panelOpen, panelWidth, paused, rev, screen, setPanelWidth, setUser, theme,
+  toast, togglePanel, user,
+} from './store';
 import { Panel } from './ui/Panel';
-import { Toolbar } from './ui/Toolbar';
+import { MarkerColorPicker, RecordButton, Toolbar, type ToolbarProps } from './ui/Toolbar';
 
 export interface AppProps {
   host: Host;
-  /** Bethlehem 이 왼쪽에 끼우는 화면 목록 */
-  sidebar?: ComponentChildren;
-  /** 툴바 제목 옆 (Bethlehem 의 열기·새 문서) */
-  start?: ComponentChildren;
+  start?: ToolbarProps['start'];
+  screenTools?: ToolbarProps['screenTools'];
   /** 화면이 하나도 없을 때 */
   empty?: ComponentChildren;
 }
 
-export function App({ host, sidebar, start, empty }: AppProps) {
+const ICON = { size: 18, strokeWidth: 1.5 };
+const MIN_PANEL = 300;
+
+export function App({ host, start, screenTools, empty }: AppProps) {
   rev.value; // 문서가 바뀌면 틀 전체를 다시 그린다 (제목·버전 등)
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme.value;
   }, [theme.value]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        save(host, e.shiftKey);
-      }
-    };
+    setKeyHost(host);
+    const down = (e: KeyboardEvent) => onKeyDown(e);
+    const blur = () => (holdPick.value = false);
     const onLeave = (e: BeforeUnloadEvent) => {
       if (host.kind === 'manna' && dirty.peek()) e.preventDefault();
     };
-    window.addEventListener('keydown', onKey);
+    const onFs = () => (fullscreen.value = !!document.fullscreenElement);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', blur);
     window.addEventListener('beforeunload', onLeave);
+    document.addEventListener('fullscreenchange', onFs);
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', blur);
       window.removeEventListener('beforeunload', onLeave);
+      document.removeEventListener('fullscreenchange', onFs);
     };
   }, [host]);
 
+  const full = fullscreen.value;
+  const showPanel = panelOpen.value && !!screen.value;
+  const width = Math.max(MIN_PANEL, Math.min(panelWidth.value, Math.round(window.innerWidth * 0.7)));
+
   return (
-    <div class={`app ${sidebar ? 'has-sidebar' : ''}`}>
-      <Toolbar host={host} start={start} />
-      <div class="workspace">
-        {sidebar}
+    <div class={`app ${full ? 'is-full' : ''} ${holdPick.value || mode.value === 'annotate' ? 'is-picking' : ''}`}>
+      {!full && <Toolbar host={host} start={start} screenTools={screenTools} />}
+      <div class="workspace" style={{ gridTemplateColumns: showPanel ? `1fr auto ${width}px` : '1fr' }}>
         <main class="main">
           <Stage empty={empty ?? <p class="muted">이 문서에는 아직 화면이 없습니다.</p>} />
+          {full && <FloatingBar />}
         </main>
-        <Panel host={host} />
+        {showPanel && <Splitter />}
+        {showPanel && <Panel host={host} />}
       </div>
       {askName.value && <NameDialog host={host} />}
       {toast.value && (
@@ -58,6 +72,61 @@ export function App({ host, sidebar, start, empty }: AppProps) {
           {toast.value.text}
         </div>
       )}
+    </div>
+  );
+}
+
+/* 메인과 패널 사이 — 끌어서 패널 폭을 바꾼다. 끄는 동안 iframe 이 포인터를 가져가지 않게 막는다 */
+function Splitter() {
+  const onDown = (e: PointerEvent) => {
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    document.body.classList.add('is-resizing');
+    const move = (ev: PointerEvent) => {
+      const w = Math.max(MIN_PANEL, Math.min(window.innerWidth - ev.clientX, window.innerWidth * 0.7));
+      panelWidth.value = w;
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      document.body.classList.remove('is-resizing');
+      setPanelWidth(panelWidth.value);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  };
+  return (
+    <div
+      class="splitter"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="패널 폭 조절"
+      tabIndex={0}
+      onPointerDown={onDown}
+      onDblClick={() => setPanelWidth(400)}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft') setPanelWidth(panelWidth.value + 24);
+        if (e.key === 'ArrowRight') setPanelWidth(Math.max(MIN_PANEL, panelWidth.value - 24));
+      }}
+    />
+  );
+}
+
+/* 전체화면에서 위쪽 가운데에 뜨는 작은 막대 */
+function FloatingBar() {
+  const pickLocked = mode.value === 'annotate';
+  return (
+    <div class="float-bar" role="toolbar" aria-label="전체화면 도구">
+      <button type="button" class={`btn-icon ${pickLocked ? '' : 'is-on-soft'}`} aria-label="보기" title="보기" onClick={() => (mode.value = 'view')}><MousePointer2 {...ICON} /></button>
+      <button type="button" class={`btn-icon ${pickLocked ? 'is-on-soft' : ''}`} aria-label="피커" title="피커 (Ctrl 을 누르고 있어도 됩니다)" onClick={() => (mode.value = 'annotate')}><Crosshair {...ICON} /></button>
+      <button type="button" class={`btn-icon ${paused.value ? 'is-on' : ''}`} aria-label={paused.value ? '화면 재생' : '화면 일시정지'} onClick={() => (paused.value = !paused.value)}>
+        {paused.value ? <Play {...ICON} /> : <Pause {...ICON} />}
+      </button>
+      <RecordButton />
+      <MarkerColorPicker />
+      <button type="button" class={`btn-icon ${panelOpen.value ? 'is-on-soft' : ''}`} aria-label="개요·Comment 패널" onClick={() => togglePanel()}><PanelRight {...ICON} /></button>
+      <button type="button" class="btn-icon" aria-label="전체화면 나가기" title="전체화면 나가기 (Esc)" onClick={() => document.exitFullscreen?.()}><Minimize2 {...ICON} /></button>
     </div>
   );
 }
@@ -78,8 +147,8 @@ function NameDialog({ host }: { host: Host }) {
         <h2 id="name-title">이름을 알려 주세요</h2>
         <p class="muted">
           {host.kind === 'manna'
-            ? '이 문서에 다는 어노테이션·답글·상태 변경에 이름이 함께 남습니다. 서버는 없으며, 이름은 이 브라우저에만 기억됩니다.'
-            : '작성하는 어노테이션과 답글에 이 이름이 남습니다.'}
+            ? 'Comment·답글에 이름이 함께 남습니다. 이름은 이 브라우저에만 기억됩니다.'
+            : 'Comment·답글에 이 이름이 남습니다.'}
         </p>
         <input ref={input} class="input" placeholder="예: 홍길동" defaultValue={user.value ?? ''} maxLength={40} />
         <div class="row">

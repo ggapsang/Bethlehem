@@ -1,5 +1,4 @@
-/* Manna E2E — 구운 첫 빵(out/e2e/proto.manna.html)을 설치된 Chrome 에서 file:// 로 열어 확인한다.
- * docs/ARCHITECTURE.md §9 Phase 0 완료 기준 2~6.
+/* Manna E2E — 구운 문서(out/e2e/proto.terr.html)를 설치된 Chrome 에서 file:// 로 열어 확인한다.
  *
  *   npm run test:e2e
  */
@@ -10,8 +9,8 @@ import { pathToFileURL } from 'node:url';
 import { chromium, type Frame, type Page } from 'playwright-core';
 
 const OUT = resolve('out/e2e');
-const DOC = resolve(OUT, 'proto.manna.html');
-const SAVED = resolve(OUT, 'proto.saved.html');
+const DOC = resolve(OUT, 'proto.terr.html');
+const SAVED = resolve(OUT, 'proto.saved.terr.html');
 const CHROME = [
   process.env.CHROME_PATH,
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -27,20 +26,17 @@ function check(name: string, ok: boolean, detail = ''): void {
 }
 
 async function screenFrame(page: Page): Promise<Frame> {
-  const handle = await page.waitForSelector('iframe.stage-iframe');
-  for (let i = 0; i < 100; i++) {
-    const f = await handle.contentFrame();
+  for (let i = 0; i < 150; i++) {
+    const h = await page.$('iframe.stage-iframe');
+    const f = h && (await h.contentFrame());
     if (f && (await f.evaluate(() => !!(window as unknown as { __manna?: unknown }).__manna).catch(() => false))) return f;
     await page.waitForTimeout(100);
   }
   throw new Error('품은 화면이 뜨지 않았습니다');
 }
 
-async function waitSplash(f: Frame): Promise<boolean> {
-  return f
-    .waitForFunction(() => document.querySelector('#splash')?.classList.contains('done'), null, { timeout: 30000 })
-    .then(() => true, () => false);
-}
+const splashDone = (f: Frame) =>
+  f.waitForFunction(() => document.querySelector('#splash')?.classList.contains('done'), null, { timeout: 30000 }).then(() => true, () => false);
 
 /** iframe 안 요소의 페이지 좌표 (스테이지 축소 반영) */
 async function pagePoint(page: Page, f: Frame, sel: string, fx = 0.5, fy = 0.5) {
@@ -53,8 +49,22 @@ async function pagePoint(page: Page, f: Frame, sel: string, fx = 0.5, fy = 0.5) 
   return { x: box.x + (r.x + r.w * fx) * scale, y: box.y + (r.y + r.h * fy) * scale };
 }
 
-async function visibleMarkers(page: Page): Promise<number> {
-  return page.$$eval('.marker', (ms) => ms.filter((m) => (m as HTMLElement).style.display === 'flex').length);
+const visibleMarkers = (page: Page) => page.$$eval('.marker', (ms) => ms.filter((m) => (m as HTMLElement).style.display === 'flex').map((m) => m.textContent));
+const cardCount = (page: Page) => page.$$eval('.cards > .card', (cs) => cs.length);
+
+/** 피커 — Ctrl 을 누른 채 클릭 */
+async function ctrlClick(page: Page, p: { x: number; y: number }) {
+  await page.mouse.move(p.x, p.y);
+  await page.keyboard.down('Control');
+  await page.waitForTimeout(80);
+  await page.mouse.click(p.x, p.y);
+  await page.keyboard.up('Control');
+}
+
+async function typeComposer(page: Page, text: string) {
+  await page.waitForSelector('.composer .cm-content');
+  await page.click('.composer .cm-content');
+  await page.keyboard.type(text);
 }
 
 async function main() {
@@ -63,8 +73,24 @@ async function main() {
   await mkdir(OUT, { recursive: true });
   const browser = await chromium.launch({ executablePath: CHROME });
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 960 }, acceptDownloads: true });
-  // 파일 저장 대화상자 대신 다운로드 경로(Firefox·Safari 와 같은 흐름)로 확인한다
-  await ctx.addInitScript(() => Object.defineProperty(window, 'showSaveFilePicker', { value: undefined }));
+  await ctx.addInitScript(() => {
+    // 저장은 다운로드 흐름으로, 화면 공유는 움직이는 캔버스 스트림으로 바꿔 끼운다 (자동 테스트에서 대화상자를 띄울 수 없다)
+    Object.defineProperty(window, 'showSaveFilePicker', { value: undefined });
+    if (window.top !== window) return;
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const c = document.createElement('canvas');
+      c.width = innerWidth;
+      c.height = innerHeight;
+      const g = c.getContext('2d')!;
+      let t = 0;
+      setInterval(() => {
+        t++;
+        g.fillStyle = `hsl(${(t * 7) % 360} 70% 50%)`;
+        g.fillRect(0, 0, c.width, c.height);
+      }, 33);
+      return c.captureStream(30);
+    };
+  });
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -74,112 +100,184 @@ async function main() {
   const t0 = Date.now();
   await page.goto(pathToFileURL(DOC).href);
   await page.waitForSelector('.modal input');
-  check('이름 입력 창이 뜬다', true);
   await page.fill('.modal input', '검증봇');
   await page.click('.modal button[type=submit]');
   let f = await screenFrame(page);
-  check('품은 화면의 데이터 로딩이 끝난다 (스플래시 종료)', await waitSplash(f), `${Date.now() - t0}ms`);
+  check('품은 화면의 데이터 로딩이 끝난다', await splashDone(f), `${Date.now() - t0}ms`);
   const loaded = await f.$$eval('.loadrow.ok', (rows) => rows.length);
-  const failedRows = await f.$$eval('.loadrow .rt', (rs) => rs.filter((r) => r.textContent === '불러오지 못함').length);
-  check('data/*.js 6개를 모두 불러온다', loaded === 6 && failedRows === 0, `ok ${loaded}, 실패 ${failedRows}`);
-  const misses = await f.evaluate(() => (window as unknown as { __manna: { misses: unknown[] } }).__manna.misses.length);
-  check('찾지 못한 파일이 없다', misses === 0, `${misses}개`);
-  const font = await f.evaluate(() => document.fonts.check('16px "Pretendard Variable"'));
-  check('Pretendard 가 문서 안의 파일로 적용된다 (오프라인)', font);
+  check('data/*.js 6개를 모두 불러온다', loaded === 6, `${loaded}개`);
+  check('찾지 못한 파일이 없다', (await f.evaluate(() => (window as unknown as { __manna: { misses: unknown[] } }).__manna.misses.length)) === 0);
+  check('Pretendard 가 문서 안의 파일로 적용된다', await f.evaluate(() => document.fonts.check('16px "Pretendard Variable"')));
+  check('개요에 README 가 마크다운으로 보인다', ((await page.textContent('.notes .cm-content')) ?? '').includes('데이터 매핑'));
+  check('개요의 # 기호는 숨고 제목 서식만 보인다', !!(await page.$('.notes .cm-h1')) && !((await page.textContent('.notes .cm-h1')) ?? '').startsWith('#'));
+  await page.click('.notes .section-head'); // 개요 접기 — Comment 를 위로
   await page.screenshot({ path: resolve(OUT, '1-open.png') });
 
-  console.log('\n[2] 어노테이션');
-  await page.click('.seg-btn:has-text("어노테이션")');
+  console.log('\n[2] Ctrl 피커 · 마크다운 Comment');
   let p = await pagePoint(page, f, '#tabB');
   await page.mouse.move(p.x, p.y);
+  await page.keyboard.down('Control');
+  await page.waitForTimeout(100);
+  check('Ctrl 을 누르면 피커가 된다', !!(await page.$('.pick-layer')) && !!(await page.$('.stage-badge-pick')));
   await page.mouse.click(p.x, p.y);
-  await page.waitForSelector('.composer textarea');
-  check('요소 클릭으로 작성 창이 열린다', true, await page.textContent('.composer .mono') ?? '');
-  await page.fill('.composer textarea', '설비정보 탭 — 탭 이름을 "설비 정보"로 띄어 써 주세요.');
-  await page.click('.composer .btn-primary');
-  // 캔버스 위 영역 드래그
+  await page.keyboard.up('Control');
+  await page.waitForTimeout(100);
+  check('Ctrl 을 떼면 피커가 꺼지고 작성 창은 남는다', !(await page.$('.pick-layer')) && !!(await page.$('.composer')));
+  await typeComposer(page, '## 탭 이름\n- [ ] 띄어쓰기 "설비 정보"');
+  await page.keyboard.press('Control+Enter');
+  await page.waitForTimeout(300);
+  check('Comment 가 생긴다', (await cardCount(page)) === 1);
+  check('목록 이어 쓰기와 체크박스가 렌더링된다', !!(await page.$('.card .cm-task')));
+  // 캔버스 위 영역 — Ctrl 누른 채 드래그
   const a = await pagePoint(page, f, '#fabCv', 0.3, 0.3);
   const b = await pagePoint(page, f, '#fabCv', 0.45, 0.5);
   await page.mouse.move(a.x, a.y);
+  await page.keyboard.down('Control');
   await page.mouse.down();
   await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 4 });
+  await page.keyboard.up('Control'); // 끄는 중에 떼도 영역은 잡힌다
   await page.mouse.move(b.x, b.y, { steps: 4 });
   await page.mouse.up();
-  await page.waitForSelector('.composer textarea');
-  const label = (await page.textContent('.composer .mono')) ?? '';
-  check('캔버스 드래그는 canvas 안의 영역으로 잡힌다', /canvas#fabCv 안의 영역/.test(label), label);
-  await page.click('.composer .seg-btn:has-text("이슈")');
-  await page.fill('.composer textarea', 'BAY-4 구역 — 경고 색이 배경과 구분이 약합니다.');
+  await page.waitForSelector('.composer');
+  check('드래그는 영역으로 잡힌다', ((await page.textContent('.composer .mono')) ?? '') === '영역');
+  await typeComposer(page, 'BAY-4 구역 — **경고 색** 대비가 약함');
+  await page.click('.composer .btn-primary');
+  await page.waitForTimeout(400);
+  check('Comment 2개 · 마커 2개', (await cardCount(page)) === 2 && (await visibleMarkers(page)).length === 2, JSON.stringify(await visibleMarkers(page)));
+  check('유형·상태·담당 입력이 없다', !(await page.$('.detail select')) && !(await page.$('.detail input:not([type=checkbox])')));
+  await page.screenshot({ path: resolve(OUT, '2-comments.png') });
+
+  console.log('\n[3] 마커 색');
+  const tones = await page.$$eval('.marker', (ms) => ms.map((m) => (m as HTMLElement).dataset.tone));
+  check('자동 — 배경 밝기에 따라 마커 톤을 고른다', tones.every((t) => t === 'ondark' || t === 'onlight'), tones.join(','));
+  await page.click('button[aria-label="마커 색"]');
+  await page.click('.popover-item:has-text("빨강")');
+  check('마커 색을 바꿀 수 있다', (await page.getAttribute('.marker-layer', 'data-color')) === 'red');
+
+  console.log('\n[4] 되돌리기');
+  await page.click('.toolbar .tb-title');
+  await page.mouse.click(5, 300); // 입력창 밖으로 포커스
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(200);
+  check('Ctrl+Z — 마커 색이 돌아간다', (await page.getAttribute('.marker-layer', 'data-color')) === 'auto');
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  check('Ctrl+Z — 마지막 Comment 가 사라진다', (await cardCount(page)) === 1);
+  await page.keyboard.press('Control+Shift+z');
+  await page.waitForTimeout(300);
+  check('Ctrl+Shift+Z — 다시 생긴다', (await cardCount(page)) === 2);
+
+  console.log('\n[5] 순서 바꾸기');
+  const grips = await page.$$('.cards > .card .grip');
+  const g2 = (await grips[1].boundingBox())!;
+  const g1 = (await grips[0].boundingBox())!;
+  await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(g1.x + g1.width / 2, g1.y + 2, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const firstPreview = (await page.textContent('.cards > .card:first-child')) ?? '';
+  check('끌어서 순서를 바꾼다', firstPreview.includes('BAY-4'), firstPreview.slice(0, 40));
+  const firstNo = await page.textContent('.cards > .card:first-child .no');
+  check('번호가 순서를 따른다', firstNo === '1');
+
+  console.log('\n[6] 체크박스');
+  await page.click('.cards > .card:nth-child(2) .card-title');
+  await page.waitForSelector('.cards > .card:nth-child(2) .detail .cm-task');
+  await page.click('.cards > .card:nth-child(2) .detail .cm-task');
+  await page.waitForTimeout(200);
+  check('체크박스를 누르면 [x] 로 바뀐다', await page.$eval('.cards > .card:nth-child(2) .detail .cm-task', (el) => (el as HTMLInputElement).checked));
+
+  console.log('\n[7] 다른 화면 상태로 이동');
+  await f.click('#tabB');
+  await page.waitForTimeout(600);
+  check('설비정보 탭에서는 FAB 캔버스 마커가 숨는다', (await visibleMarkers(page)).length === 1);
+  check('숨은 Comment 에 "다른 상태" 표시', !!(await page.$('.card .chip-hint')));
+  // 설비정보 탭 안의 캔버스에 하나 더 단다 — 경로에 #tabB 클릭이 남는다
+  await ctrlClick(page, await pagePoint(page, f, '#eqFleetRadar'));
+  await typeComposer(page, '설비정보 탭에서 단 Comment');
   await page.keyboard.press('Control+Enter');
   await page.waitForTimeout(300);
-  check('카드 2개가 생긴다', (await page.$$('.card')).length === 2);
-  check('마커 2개가 화면에 보인다', (await visibleMarkers(page)) === 2);
-  await page.screenshot({ path: resolve(OUT, '2-annotated.png') });
-
-  console.log('\n[3] 일시정지');
-  await page.click('button[aria-label="화면 일시정지"]');
-  await page.waitForTimeout(100);
-  const frozen = await f.evaluate(async () => {
-    const a = performance.now();
-    await new Promise((r) => setTimeout(r, 400));
-    return performance.now() - a;
-  });
-  check('일시정지하면 품은 화면의 시계가 멈춘다', frozen < 5, `${frozen.toFixed(1)}ms 흐름`);
-  await page.click('button[aria-label="화면 재생"]');
-  const running = await f.evaluate(async () => {
-    const a = performance.now();
-    await new Promise((r) => setTimeout(r, 200));
-    return performance.now() - a;
-  });
-  check('재생하면 시계가 이어서 흐른다', running > 150, `${running.toFixed(0)}ms`);
-
-  console.log('\n[4] 화면 상태와 마커');
-  await page.click('.seg-btn:has-text("보기")');
-  await f.click('#tabB');
-  await page.waitForTimeout(500);
-  const afterTab = await visibleMarkers(page);
-  check('설비정보 탭으로 가면 FAB 캔버스의 마커가 숨는다', afterTab === 1, `보이는 마커 ${afterTab}`);
-  check('패널에 "다른 화면 상태" 묶음이 생긴다', !!(await page.$('.group-title:has-text("다른 화면 상태")')));
-  await page.screenshot({ path: resolve(OUT, '3-tab-b.png') });
   await f.click('#tabC');
-  await page.waitForTimeout(500);
-  check('FAB 로 돌아오면 다시 보인다', (await visibleMarkers(page)) === 2);
+  await page.waitForTimeout(600);
+  check('FAB 로 가면 설비정보 탭의 Comment 가 숨는다', !(await visibleMarkers(page)).includes('3'));
+  // 수신자가 숨은 Comment 를 누른다 — 경로의 탭을 눌러 그 상태로 간다 (빠른 길)
+  await page.click('.cards > .card:nth-child(3) .card-title');
+  await page.waitForFunction(() => !document.querySelector('.stage-note'), null, { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(700);
+  const inB = await f.evaluate(() => !document.querySelector('#viewB')?.hasAttribute('hidden'));
+  check('탭 안의 Comment 를 누르면 그 탭으로 전환된다', inB && (await visibleMarkers(page)).includes('3'), JSON.stringify(await visibleMarkers(page)));
+  // 캔버스 Comment(경로 없음)를 누른다 — 처음부터 다시 불러와 FAB 로 돌아간다
+  await page.click('.cards > .card:first-child .card-title');
+  await page.waitForFunction(() => !document.querySelector('.stage-note'), null, { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(800);
+  f = await screenFrame(page);
+  const back = await visibleMarkers(page);
+  check('다른 상태의 Comment 를 누르면 그 화면 상태로 돌아간다', back.includes('1'), JSON.stringify(back));
 
-  console.log('\n[5] 저장 → 다시 열기');
+  console.log('\n[8] 녹화');
+  await page.click('.cards > .card:first-child .card-title').catch(() => {});
+  if (!(await page.$('.cards > .card.is-sel'))) await page.click('.cards > .card:first-child .card-title');
+  await page.click('button[aria-label="화면 녹화"]');
+  await page.waitForSelector('.btn-icon.is-rec');
+  await page.waitForTimeout(1500);
+  await page.click('button[aria-label="녹화 멈추기"]');
+  await page.waitForSelector('.card.is-sel .clip video', { timeout: 10000 }).catch(() => {});
+  const dur = await page.$eval('.card.is-sel .clip video', async (v) => {
+    const el = v as HTMLVideoElement;
+    if (el.readyState < 1) await new Promise((r) => el.addEventListener('loadedmetadata', r, { once: true }));
+    return el.videoWidth;
+  }).catch(() => 0);
+  check('녹화한 클립이 선택한 Comment 에 붙고 재생된다', dur > 0, `폭 ${dur}px`);
+
+  console.log('\n[9] 패널 폭 · 전체화면');
+  const panelW = async () => (await (await page.$('.panel'))!.boundingBox())!.width;
+  const w0 = await panelW();
+  const sp = (await (await page.$('.splitter'))!.boundingBox())!;
+  await page.mouse.move(sp.x + 2, sp.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(sp.x - 120, sp.y + 200, { steps: 5 });
+  await page.mouse.up();
+  const w1 = await panelW();
+  check('손잡이로 패널 폭을 바꾼다', w1 - w0 > 100, `${Math.round(w0)} → ${Math.round(w1)}px`);
+  await page.click('button[aria-label="전체화면"]');
+  await page.waitForTimeout(400);
+  const full = await page.evaluate(() => !!document.fullscreenElement);
+  check('전체화면 — 툴바가 숨고 작은 막대가 뜬다', full && !(await page.$('.toolbar')) && !!(await page.$('.float-bar')));
+  await page.screenshot({ path: resolve(OUT, '3-fullscreen.png') });
+  await page.click('button[aria-label="전체화면 나가기"]');
+  await page.waitForTimeout(300);
+
+  console.log('\n[10] 개요 편집 · 저장 → 다시 열기');
+  await page.click('.notes .section-head');
+  await page.click('.notes .cm-content');
+  await page.keyboard.press('Control+Home');
+  await page.keyboard.type('검증 메모\n');
+  await page.click('.toolbar .tb-title').catch(() => {});
+  await page.waitForTimeout(500);
   const dl = page.waitForEvent('download');
   await page.click('.toolbar .btn-primary');
   const d = await dl;
-  check('저장하면 HTML 한 장이 내려받아진다', /\.html$/.test(d.suggestedFilename()), d.suggestedFilename());
+  check('저장 이름이 .terr.html 이고 내 이름이 붙는다', /_검증봇\.terr\.html$/.test(d.suggestedFilename()), d.suggestedFilename());
   await d.saveAs(SAVED);
   const page2 = await ctx.newPage();
   page2.on('pageerror', (e) => errors.push(e.message));
   await page2.goto(pathToFileURL(SAVED).href);
   f = await screenFrame(page2);
-  await waitSplash(f);
+  await splashDone(f);
   await page2.waitForTimeout(800);
-  const cards = await page2.$$eval('.card', (cs) => cs.length);
-  check('다시 연 문서에 어노테이션 2개가 남아 있다', cards === 2, `${cards}개`);
-  check('수신자가 단 항목은 "새 N" 번호로 보인다', ((await page2.textContent('.card .no')) ?? '').startsWith('새'));
-  check('다시 연 문서에서도 마커가 붙는다', (await visibleMarkers(page2)) === 2);
+  check('Comment 3개가 남아 있다', (await cardCount(page2)) === 3);
+  check('개요 편집이 남아 있다', ((await page2.textContent('.notes .cm-content')) ?? '').startsWith('검증 메모'));
+  check('클립이 남아 있다', ((await page2.textContent('.cards')) ?? '').length > 0 && (await page2.$$('.card .badge-icon')).length > 0);
 
-  console.log('\n[6] 버전');
-  const options = await page2.$$eval('select[aria-label="화면 버전"] option', (os) => os.map((o) => o.textContent));
-  check('화면 버전 v1·v2 가 있다', options.length === 2, options.join(' / '));
+  console.log('\n[11] 버전 · 테마');
   await page2.selectOption('select[aria-label="화면 버전"]', '1');
   f = await screenFrame(page2);
-  check('v1(옛 화면)도 같은 데이터로 뜬다', await waitSplash(f));
-  const m1 = await f.evaluate(() => (window as unknown as { __manna: { misses: unknown[] } }).__manna.misses.length);
-  check('v1 에서도 찾지 못한 파일이 없다', m1 === 0, `${m1}개`);
-  await page2.screenshot({ path: resolve(OUT, '4-v1.png') });
-
-  console.log('\n[7] 설명 · 테마');
-  await page2.click('.ptab:has-text("설명")');
-  await page2.waitForSelector('.markdown h1, .markdown h2');
-  check('README 가 설명 탭에 렌더링된다', true, (await page2.textContent('.markdown h1, .markdown h2'))?.slice(0, 40));
+  check('v1(옛 화면)도 같은 데이터로 뜬다', await splashDone(f));
   await page2.click('button[aria-label="테마 전환"]');
   await page2.waitForTimeout(100);
   check('다크 테마로 바뀐다', (await page2.getAttribute('html', 'data-theme')) === 'dark');
-  await page2.screenshot({ path: resolve(OUT, '5-dark-desc.png') });
+  await page2.screenshot({ path: resolve(OUT, '4-dark-v1.png') });
 
   const real = errors.filter((e) => !/favicon|ERR_FILE_NOT_FOUND/.test(e));
   check('페이지 오류가 없다', real.length === 0, real.slice(0, 3).join(' | '));

@@ -45,7 +45,9 @@ function boot(): void {
   document.body.appendChild(root);
   try {
     const { doc, blobs } = readDocument();
-    loadDocument(doc, blobs, null);
+    // 받은 파일 이름 — 다시 저장할 때 그 뒤에 내 이름을 붙인다
+    const own = location.protocol === 'file:' ? decodeURIComponent(location.pathname.split('/').pop() ?? '') : '';
+    loadDocument(doc, blobs, own || null);
     render(<App host={browserHost} />, root);
     if (!user.value) askName.value = true;
     adoptPretendard(doc, blobs).catch(() => {});

@@ -1,6 +1,6 @@
 /* 명령줄 굽기 — Bethlehem 없이 화면 폴더를 Manna 한 장으로. 테스트와 자동화용.
  *
- *   npm run bake -- <화면 폴더> <출력.html> [--entry a.html,b.html] [--title 제목]
+ *   npm run bake -- <화면 폴더> <출력.terr.html> [--entry a.html,b.html] [--title 제목]
  *
  * --entry 에 여러 개를 주면 앞에서부터 v1, v2 … 로 등록한다 (같은 폴더의 옛 화면과 새 화면).
  */
@@ -25,7 +25,7 @@ async function main() {
   const base = await scanFolder(resolve(dir), entries?.[0]);
   const doc = newDoc(arg('title') ?? base.title ?? base.name);
   const blobs: BlobStore = new Map();
-  const s: Screen = { id: 'SCR-001', title: base.title ?? base.name, versions: [], annotations: [] };
+  const s: Screen = { id: 'SCR-001', title: base.title ?? base.name, notes: '', versions: [], annotations: [] };
   doc.screens.push(s);
 
   for (const entry of entries ?? [base.entry]) {
@@ -36,14 +36,14 @@ async function main() {
       dir: scan.dir,
       entry: scan.entry,
       include,
-      description: scan.description,
+      notesFrom: s.notes ? undefined : scan.description,
       external: scan.external.map((url) => ({ url })),
       viewport: { w: 1920, h: 1080, fit: 'contain' },
     });
     for (const [sha, b] of r.blobs) blobs.set(sha, b);
     const v = s.versions.length + 1;
     s.versions.push({ v, label: entry, createdAt: now(), ...r.version });
-    if (r.description) s.description = r.description;
+    if (r.notes != null) s.notes = r.notes;
     console.log(`v${v} ${scan.entry}: 파일 ${include.length}개 ${formatBytes(r.stats.raw)}${skipped.length ? ` · 제외(미참조) ${skipped.join(', ')}` : ''}`);
     for (const e of r.version.external) console.log(`   외부 ${e.excluded ? '✗' : '✓'} ${e.url}${e.size ? ` ${formatBytes(e.size)}` : ''}${e.note ? ` — ${e.note}` : ''}${e.error ? ` — ${e.error}` : ''}`);
   }

@@ -1,6 +1,6 @@
 /* 화면 버전 하나를 iframe srcdoc 으로 — docs/ARCHITECTURE.md §5.1 */
 import type { BlobStore, ScreenVersion } from '@core';
-import { absolutize, buildIndex, decodeBlob, lookup, pkgUrl, rewriteCss, rewriteSrcset } from '@core';
+import { absolutize, buildIndex, decodeBlob, entryUrlOf, lookup, pkgUrl, rewriteCss, rewriteSrcset } from '@core';
 import shimSource from './shim.js?raw';
 
 export interface Prepared {
@@ -54,7 +54,7 @@ export async function prepareScreen(version: ScreenVersion, blobs: BlobStore): P
 
   const urls = new Map<string, string>();
   const made: string[] = [];
-  const entryUrl = pkgUrl(version.entry);
+  const entryUrl = entryUrlOf(version);
 
   const urlFor = (abs: string): string | undefined => {
     const key = [abs, abs.split('#')[0], abs.split('#')[0].split('?')[0]].find((k) => bytes.has(k));
@@ -78,23 +78,27 @@ export async function prepareScreen(version: ScreenVersion, blobs: BlobStore): P
   if (!entry) throw new Error(`엔트리 파일 '${version.entry}' 이 문서에 없습니다.`);
   const dom = new DOMParser().parseFromString(utf8.decode(entry), 'text/html');
   const warnings: string[] = [];
+  // <base href> 가 있으면 문서 안 상대 경로의 기준이 바뀐다. 해석에 반영하고, 태그는 지운다(srcdoc 에서는 엉뚱한 곳을 가리킨다)
+  const baseEl = dom.querySelector('base[href]');
+  const docBase = (baseEl && absolutize(baseEl.getAttribute('href')!, entryUrl)) || entryUrl;
+  baseEl?.remove();
 
   for (const [sel, attr] of URL_ATTRS) {
     for (const el of Array.from(dom.querySelectorAll(sel))) {
       const ref = el.getAttribute(attr)!;
-      const abs = absolutize(ref, entryUrl);
+      const abs = absolutize(ref, docBase);
       const to = abs && lookup(urls, abs);
       if (to) el.setAttribute(attr, to);
     }
   }
   for (const el of Array.from(dom.querySelectorAll('img[srcset],source[srcset]'))) {
-    el.setAttribute('srcset', rewriteSrcset(el.getAttribute('srcset')!, entryUrl, (a) => lookup(urls, a)));
+    el.setAttribute('srcset', rewriteSrcset(el.getAttribute('srcset')!, docBase, (a) => lookup(urls, a)));
   }
   for (const el of Array.from(dom.querySelectorAll('style'))) {
-    el.textContent = rewriteCss(el.textContent ?? '', entryUrl, (a) => lookup(urls, a));
+    el.textContent = rewriteCss(el.textContent ?? '', docBase, (a) => lookup(urls, a));
   }
   for (const el of Array.from(dom.querySelectorAll('[style*="url("]'))) {
-    el.setAttribute('style', rewriteCss(el.getAttribute('style')!, entryUrl, (a) => lookup(urls, a)));
+    el.setAttribute('style', rewriteCss(el.getAttribute('style')!, docBase, (a) => lookup(urls, a)));
   }
   if (dom.querySelector('script[type=module]')) {
     warnings.push('모듈 스크립트(type="module")가 있습니다. 파일로 연 문서에서는 브라우저가 막으므로 번들된 결과물을 넣어야 합니다.');
@@ -103,7 +107,7 @@ export async function prepareScreen(version: ScreenVersion, blobs: BlobStore): P
   const map: Record<string, string> = {};
   for (const [k, v] of urls) map[k] = v;
   const shim = dom.createElement('script');
-  shim.textContent = `(${shimSource.trim().replace(/;?\s*$/, '')})(${JSON.stringify(map)}, ${JSON.stringify(entryUrl)});`;
+  shim.textContent = `(${shimSource.trim().replace(/;?\s*$/, '')})(${JSON.stringify(map)}, ${JSON.stringify(docBase)});`;
   dom.head.prepend(shim);
 
   const doctype = dom.doctype ? `<!DOCTYPE ${dom.doctype.name}>` : '';

@@ -33,15 +33,20 @@ export function latest(screen: Screen): ScreenVersion {
   return screen.versions[screen.versions.length - 1];
 }
 
-export function nextAnnotationNo(screen: Screen): number {
-  return Math.max(0, ...screen.annotations.map((a) => a.no ?? 0)) + 1;
+/** 화면 버전 안에서의 순서 = 번호 (1부터) */
+export function displayNo(screen: Screen, a: Annotation): number {
+  return screen.annotations.filter((x) => x.version === a.version).indexOf(a) + 1;
 }
 
-/** 수신자가 단 번호 없는 항목은 '새 1', '새 2' … 로 보인다 */
-export function displayNo(screen: Screen, a: Annotation): string {
-  if (a.no != null) return String(a.no);
-  const fresh = screen.annotations.filter((x) => x.no == null);
-  return `새 ${fresh.indexOf(a) + 1}`;
+/** 같은 버전의 Comment 들 사이에서 id 를 to 번째 자리로 옮긴다. 다른 버전 항목의 자리는 그대로 */
+export function moveAnnotation(screen: Screen, id: string, to: number): void {
+  const a = screen.annotations.find((x) => x.id === id);
+  if (!a) return;
+  const slots: number[] = [];
+  screen.annotations.forEach((x, i) => x.version === a.version && slots.push(i));
+  const order = slots.map((i) => screen.annotations[i]).filter((x) => x !== a);
+  order.splice(Math.max(0, Math.min(to, order.length)), 0, a);
+  slots.forEach((slot, k) => (screen.annotations[slot] = order[k]));
 }
 
 export function touchParticipant(doc: MannaDoc, name: string): void {

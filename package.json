@@ -12,7 +12,7 @@
     "bake": "npm run build:manna && tsx scripts/bake.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "test:e2e": "npm run bake -- example/proto out/e2e/proto.manna.html --entry \"index - old.html,index.html\" && tsx tests/e2e.ts",
+    "test:e2e": "npm run bake -- example/proto out/e2e/proto.terr.html --entry \"index - old.html,index.html\" && tsx tests/e2e.ts",
     "test:e2e:app": "npm run build:manna && electron-vite build && tsx tests/e2e-bethlehem.ts"
   },
   "devDependencies": {
@@ -28,9 +28,14 @@
     "vitest": "^3.2.7"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@lezer/highlight": "^1.2.5",
+    "@lezer/markdown": "^1.7.2",
     "@preact/signals": "^2.11.3",
     "lucide-preact": "^1.49.0",
-    "marked": "^18.0.14",
     "preact": "^10.29.8"
   }
 }

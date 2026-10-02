@@ -1,6 +1,7 @@
 # Terrarium 아키텍처
 
 > CONCEPT.md를 구현 단위로 옮긴 문서다. 첫 빵은 `example/proto`(OHT 모니터링 화면)이며, 이 문서의 모든 결정은 그 화면을 실제로 구워낼 수 있는지를 기준으로 했다.
+> 사용자에게 보이는 이름은 **테라리움(Terrarium)** 하나다. Bethlehem(작성 프로그램)·Manna(내보낸 문서)는 코드와 이 문서 안에서만 쓰는 코드명이다.
 
 ---
 
@@ -12,11 +13,20 @@
 | D-2 | 기술 스택 | TypeScript + Vite + Preact (electron-vite) |
 | D-3 | 자체 UI 테마 | 라이트 기본 + 다크 토글. 다임리서치 디자인 가이드 v1.0 토큰 |
 | D-4 | 외부 리소스 | 굽을 때 내려받아 포함. 리소스별로 제외 가능 |
-| D-5 | 작업 파일 | Manna HTML 하나. 작업 파일이 곧 보내는 파일이다 (별도 프로젝트 포맷 없음) |
+| D-5 | 작업 파일 | 테라리움 문서 HTML 하나. 작업 파일이 곧 보내는 파일이다 (별도 프로젝트 포맷 없음) |
+| D-6 | 파일 이름 | 이중 확장자 `.terr.html` — 브라우저는 HTML 로 바로 열고, 사람은 테라리움 문서인지 알아본다 |
+| D-7 | 보이는 이름 | UI 의 모든 문자열은 "테라리움". Bethlehem·Manna 는 노출하지 않는다 |
+| D-8 | Comment | 유형·상태·담당 없이 **마크다운 본문 하나 + 마크다운 답글**. 할 일은 `- [ ]` 체크박스로 |
+| D-9 | 개요 | 화면마다 마크다운 개요. README 는 한 번 가져와 복사될 뿐, 그 뒤로는 문서의 텍스트다 |
+| D-10 | 오른쪽 패널 | 위에 개요, 아래에 Comment 목록이 한 스크롤로 이어진다. 탭 없음 |
+| D-11 | 녹화 | Bethlehem 과 수신자 브라우저 양쪽에서 |
+| D-12 | 검증 범위 | Chrome·Edge·Electron. Firefox 검증은 하지 않는다 |
 
-**D-2 근거.** Manna 런타임은 품은 화면과 한 파일에 같이 실린다. 작고(Preact 약 4KB), 전역을 더럽히지 않아야 한다. Preact는 React 문법을 그대로 쓰면서 이 조건을 만족하고, 같은 컴포넌트를 Bethlehem 렌더러에서도 쓴다.
+**D-2 근거.** Manna 런타임은 품은 화면과 한 파일에 같이 실린다. Preact는 React 문법을 그대로 쓰면서 작고, 같은 컴포넌트를 Bethlehem 렌더러에서도 쓴다.
 
-**D-5 근거.** 빵이 곧 반죽이다. 기획자는 Manna 파일을 Bethlehem으로 열고 저장한다. 수신자에게 보내는 것도, 돌려받는 것도 같은 형식이다. "원본 따로, 보낸 것 따로"가 없으므로 최신본이 어느 것인지 헷갈리지 않는다. 내보내기는 옵션(이전 버전 제외, 작성자 메모 제거 등)을 적용한 사본 저장이다.
+**D-5 근거.** 빵이 곧 반죽이다. 기획자는 테라리움 문서를 열고 저장한다. 수신자에게 보내는 것도, 돌려받는 것도 같은 형식이다. "원본 따로, 보낸 것 따로"가 없으므로 최신본이 어느 것인지 헷갈리지 않는다.
+
+**D-8 근거.** 유형·상태 같은 정형 필드는 기획자마다 쓰는 법이 달라 결국 본문에 다시 적게 된다. 옵시디언처럼 마크다운 하나로 두고, 확인이 필요한 일은 체크박스로 적는다. 수신자는 남의 Comment 본문은 고칠 수 없지만 체크박스는 누를 수 있다.
 
 ---
 
@@ -24,31 +34,31 @@
 
 | 관찰 | 실제 | 대응 |
 |---|---|---|
-| 구성 | `index.html` 470KB + `data/*.js` 2.9MB + `assets/` 2.7MB | `assets/` 이미지 3개는 `index.html`이 참조하지 않는다 → 굽기 시 **미참조 파일**로 표시, 기본 제외 제안 |
+| 구성 | `index.html` 470KB + `data/*.js` 2.9MB + `assets/` 2.7MB | `assets/` 이미지 3개는 `index.html`이 참조하지 않는다 → 등록 때 "참조 없음 · 제외"로 제안 |
 | 데이터 로딩 | `createElement('script')` 후 `s.src = 'data/${key}.js'` 동적 삽입 | 가상 파일 시스템 shim (§5) |
-| 화면 본체 | `<canvas>` 16개 (3D 맵, FAB 조망, 레이더, 미니맵) | 요소 선택만으로는 `canvas#iso` 하나로 잡힘 → **요소 + 요소 내 상대 영역** 앵커 (§6) |
-| 화면 상태 | FAB 조망 → BAY-4 상세, 설비정보 탭, LIVE/REC, 보조 창 | 앵커 요소가 보일 때만 마커 표시, 어느 뷰에서 달았는지 기록 (§6.3) |
-| 움직임 | rAF 루프, 13.4초 순환 | 마커는 매 프레임 위치 추적. 품은 화면 **일시정지** (§5.4) |
+| 화면 본체 | `<canvas>` 16개 (3D 맵, FAB 조망, 레이더, 미니맵) | **요소 + 요소 내 상대 영역** 앵커 (§6) |
+| 화면 상태 | FAB 조망 → BAY-4 상세, 설비정보 탭, LIVE/REC, 보조 창 | 앵커가 보일 때만 마커 표시, 클릭 경로를 남겨 그 상태로 돌아간다 (§6.4) |
+| 움직임 | rAF 루프, 13.4초 순환 | 마커는 매 프레임 위치 추적. 일시정지(§5.4), 녹화(§7) |
 | 해상도 | `#app`에 CSS `zoom`, 1440×900 이상 권장 | 화면별 기준 뷰포트(기본 1920×1080)로 띄우고 축소 표시 (§4.2) |
 | 버전 | `index - old.html`(v1)과 `index.html`(v2)이 같은 `data/`를 씀 | 내용 해시 저장으로 데이터 중복 제거 (§3.3) |
 | 외부 의존 | Pretendard CDN (dynamic-subset, woff2 92개 ≈ 3MB) | 동일 폰트의 단일 variable woff2(2.0MB)로 대체해 포함 (§5.3) |
-| 기획 문서 | `README.md` 60KB — 화면 의도, 데이터 근거, 결정 기록 | 화면의 **설명** 탭으로 담는다. 화면정의서 본문 |
+| 기획 문서 | `README.md` 60KB | 화면 개요로 한 번 가져온다 (D-9) |
 
-### 2.1 용량 추정
+### 2.1 용량
 
-| 내용 | 원본 | gzip | 문서 내(base64) |
-|---|---|---|---|
-| v2 화면 + data | 3.4MB | 0.96MB | 1.3MB |
-| v1 추가 (data 공유) | +0.29MB | +0.09MB | +0.12MB |
-| Pretendard variable | 2.0MB | (압축 불가) | 2.7MB |
-| Manna 런타임 | — | — | 약 0.15MB |
-| **합계** | | | **약 4.3MB** |
+| 내용 | 문서 내(base64) |
+|---|---|
+| v2 화면 + data | 1.3MB |
+| v1 추가 (data 공유) | +0.12MB |
+| Pretendard variable | 2.7MB |
+| 런타임 (JS 412KB + CSS 20KB) | 0.43MB |
+| **합계 (실측)** | **4.4MB** |
 
-메일 첨부(일반적으로 10~25MB)에 무리가 없다. 미참조 `assets/` 2.7MB는 제외했을 때 기준이다.
+런타임은 CodeMirror(마크다운 편집기) 때문에 128KB → 412KB 로 커졌다. 그중 `@codemirror/view`가 149KB 다. `@codemirror/lang-markdown`은 HTML·CSS·JS 언어 지원을 끌고 와 0.6MB 가 되므로 쓰지 않고, 같은 파서(`@lezer/markdown` + GFM)로 언어를 직접 만든다(`ui/editor/markdownLang.ts`). 녹화 클립은 10초에 1~3MB 가 더해진다.
 
 ---
 
-## 3. Manna 파일 형식
+## 3. 문서 형식
 
 ### 3.1 구조
 
@@ -57,9 +67,9 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>OHT 모니터링 화면정의서 v1.2</title>
+<title>OHT 모니터링 화면정의서</title>
 <script type="application/json" id="manna-doc">{ ...문서 데이터... }</script>
-<script type="application/octet-stream" id="manna-blob-3f9a…" data-enc="gzip+b64">H4sIA…</script>
+<script type="application/octet-stream" id="manna-blob-3f9a…" data-enc="gz64">H4sIA…</script>
 <script type="application/octet-stream" id="manna-blob-81c2…" data-enc="b64">d09GMg…</script>
 <style id="manna-style">/* 런타임 CSS */</style>
 </head>
@@ -70,9 +80,9 @@
 ```
 
 - **문서 데이터**는 JSON 하나다. 블롭과 분리되어 있으므로 따로 꺼내 읽거나 주고받을 수 있다.
-- **블롭**은 화면 패키지의 파일 하나하나다. 이름은 내용의 SHA-256이다. 텍스트는 `gzip+b64`, 이미 압축된 것(woff2, png, jpg)은 `b64`로 담는다. 압축은 브라우저 내장 `CompressionStream`/`DecompressionStream`을 쓴다.
-- **저장**은 런타임이 자기 자신을 다시 직렬화하는 것이다. 바뀌는 것은 문서 데이터 JSON뿐이고, 블롭과 런타임 문자열은 읽은 그대로 다시 쓴다.
-- JSON 안의 `<`는 `<`로 이스케이프해 `</script>` 조기 종료를 막는다.
+- **블롭**은 화면 파일·외부 리소스·녹화 클립 하나하나다. 이름은 내용의 SHA-256이다. 텍스트는 `gz64`(gzip 후 base64), 이미 압축된 것(woff2, png, webm)은 `b64`로 담는다.
+- **저장**은 런타임이 자기 자신을 다시 직렬화하는 것이다. 바뀌는 것은 문서 데이터 JSON 과 새 블롭(클립)뿐이다. 문서가 더는 참조하지 않는 블롭은 저장할 때 빠진다.
+- JSON 안의 `<` 와 줄 구분 문자(U+2028·U+2029)는 유니코드 이스케이프로 바꿔 `</script>` 조기 종료를 막는다.
 
 ### 3.2 문서 데이터
 
@@ -80,35 +90,35 @@
 interface MannaDoc {
   format: 'manna/1';
   id: string;                  // 문서 UUID. 병합 시 같은 문서인지 판별
-  meta: { title: string; project?: string; version: string; createdAt: string; updatedAt: string };
-  changelog: { version: string; date: string; author: string; note: string }[];
-  participants: { id: string; name: string; role?: string }[];
+  meta: { title; project?; version; createdAt; updatedAt; marker?: MarkerColor };
+  changelog: { version; date; author; note }[];
+  participants: { name: string; role?: string }[];
   screens: Screen[];
-  origin?: { by: string; at: string; baseUpdatedAt: string }; // 수신자가 저장한 회신본이면 기록
+  origin?: { by; at; baseUpdatedAt };   // 수신자가 저장한 회신본이면 기록
 }
 
 interface Screen {
   id: string;                  // 'SCR-003'
-  title: string;               // '설비정보 확인'
-  description?: BlobRef;       // README.md 등 화면 설명 문서
+  title: string;
+  notes: string;               // 개요 — 마크다운
   versions: ScreenVersion[];
-  annotations: Annotation[];
+  annotations: Annotation[];   // 배열 순서가 곧 번호 (§6.1)
 }
 
 interface ScreenVersion {
   v: number;
   label?: string;
-  createdAt: string;
-  entry: string;               // 'index.html'
-  viewport: { w: number; h: number; fit: 'contain' | 'width' };
-  files: Record<string, { sha: string; size: number; type: string }>;  // 가상 경로 → 블롭
-  external: { url: string; sha?: string; excluded?: boolean }[];       // 원래 외부 URL → 포함된 블롭
+  entry: string;               // 'index.html' 또는 URL 스냅샷이면 원래 페이지 URL
+  source?: { url; mode: 'live' | 'static'; at };   // URL 로 담았을 때
+  viewport: { w; h; fit: 'contain' | 'width' };
+  files: Record<string, { sha; size; type }>;     // 가상 경로 → 블롭
+  external: { url; sha?; type?; excluded?; via?; note?; error? }[];  // 원래 URL → 블롭
 }
 ```
 
 ### 3.3 내용 해시와 중복 제거
 
-같은 내용의 파일은 버전이 달라도 블롭 하나다. proto의 v1과 v2는 `data/` 2.9MB를 공유하므로 v1 추가 비용은 HTML 하나(gzip 88KB)뿐이다.
+같은 내용의 파일은 버전이 달라도 블롭 하나다. proto의 v1과 v2는 `data/` 2.9MB를 공유하므로 v1 추가 비용은 HTML 하나뿐이다.
 
 ---
 
@@ -116,219 +126,218 @@ interface ScreenVersion {
 
 ### 4.1 레이아웃
 
-Manna와 Bethlehem은 같은 화면을 쓴다. Bethlehem은 왼쪽 화면 목록과 작성 전용 기능이 더 있을 뿐이다.
+Manna와 Bethlehem은 같은 틀을 쓴다. 왼쪽 패널은 없다. Bethlehem 의 작성 기능(새 문서·열기·화면 추가·새 버전·삭제)은 모두 툴바에 있다.
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│ 문서 제목 · 화면 ▾ · 버전 ▾ │ 보기 · 어노테이션 │ ⏸ │ ☀/☾ │ 저장     │
-├────────────┬────────────────────────────────────────┬────────────────┤
-│ 화면 목록  │                                        │ TODO  설명     │
-│ SCR-001    │       품은 화면 (실제 동작)             │ ───────────── │
-│ SCR-002    │       ① ② ③ 마커                       │ ① 요청 · 열림 │
-│ ▸ SCR-003  │                                        │ ② 질문 · 완료 │
-│   v1  v2   │                                        │ ③ (다른 화면) │
-│ (Bethlehem)│                                        │                │
-└────────────┴────────────────────────────────────────┴────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 🌱 [새 문서][열기▾] 제목 v0.1 │ 화면▾ 버전▾ [화면 추가▾][새 버전▾][🗑] │ 보기·피커 ⏸ ● ◐ │ ↶ ↷ │ ▣ ⤢ ☾ 이름 [저장] │
+├──────────────────────────────────────────────────────┬─┬─────────────────────┤
+│                                                      │┃│ ▾ 개요              │
+│              품은 화면 (실제 동작)                    │┃│   마크다운 편집기   │
+│              ① ② ③ 마커                              │┃│ ─────────────────── │
+│                                                      │┃│ Comment 3       ＋  │
+│                                                      │┃│ ⠿ ① 이름 · 방금     │
+│                                                      │┃│ ⠿ ② … 다른 상태     │
+└──────────────────────────────────────────────────────┴─┴─────────────────────┘
+                                          끌어서 폭 조절 ┘
 ```
+
+- **열기 ▾** 는 대화상자와 최근 문서 10개, **화면 추가 ▾ / 새 버전 ▾** 는 폴더 선택·URL 로 담기·최근 폴더 10개. 대화상자는 마지막으로 쓴 위치에서 열린다 (`userData/settings.json`).
+- 패널과 스테이지 사이 손잡이를 끌어 패널 폭을 바꾼다(300px ~ 창의 70%, 브라우저에 기억). 더블클릭하면 400px.
+- **전체화면**(⤢)은 Fullscreen API 로 창 전체를 쓰고 툴바를 숨긴다. 위쪽 가운데에 작은 막대(보기·피커·일시정지·녹화·마커 색·패널·나가기)만 뜬다. Esc 로 나간다.
+- 패널(▣)은 숨길 수 있다.
 
 ### 4.2 스테이지
 
-품은 화면은 기준 뷰포트(기본 1920×1080) 크기의 iframe으로 띄우고 `transform: scale()`로 남는 영역에 맞춘다. 화면 자신은 늘 같은 크기에서 돌기 때문에 레이아웃이 작성자가 본 그대로 유지된다. proto처럼 내부에서 `zoom`으로 해상도에 적응하는 화면도 기준 뷰포트 안에서 의도대로 동작한다. 화면별로 기준 뷰포트와 맞춤 방식(전체 맞춤 / 폭 맞춤)을 바꿀 수 있다.
+품은 화면은 기준 뷰포트(기본 1920×1080) 크기의 iframe으로 띄우고 `transform: scale()`로 남는 영역에 맞춘다. 화면 자신은 늘 같은 크기에서 돌기 때문에 레이아웃이 작성자가 본 그대로 유지된다.
 
 ### 4.3 디자인 토큰
 
 디자인 가이드 §8.1 원시 토큰을 그대로 쓰고, §8.2 시맨틱 매핑으로 라이트/다크를 전환한다. 자체 UI는 Pretendard를 쓴다. 문서에 Pretendard 블롭이 있으면 그것을 같이 쓰고, 없으면 시스템 폰트로 폴백한다.
 
-| 요소 | 토큰 |
-|---|---|
-| 마커 (기본) | `neutral-900` 바탕 + 흰 번호, 상태색 테두리 |
-| 마커 (선택·호버) | `primary-500` — Accent 1 비중 안에서만 쓴다 |
-| 상태 열림 / 진행 중 / 완료 / 보류 | `neutral` / `primary` / `success` / `warning` (항상 레이블 병기) |
-| 유형 이슈 | `error` |
+**마커 색.** 마커는 화면 위에 뜨므로 아래 배경이 무엇일지 모른다. 기본(자동)은 마커 자리의 배경 밝기를 0.5초마다 재서(캔버스는 픽셀을, DOM 은 불투명한 배경색을) 어두운 배경이면 흰 바탕·검은 숫자, 밝은 배경이면 그 반대로 고른다. 어느 쪽이든 바깥 고리와 그림자를 둘러 어떤 배경에서도 테두리가 보인다. 툴바의 마커 색(◐)에서 주황·검정·흰색·파랑·노랑·빨강으로 고정할 수 있고, 이 설정은 문서에 저장된다.
 
-**브랜드 자산.** `docs/icon.png`는 Bethlehem 창·앱 아이콘과 Manna 파비콘(64px, 약 14KB)으로, `docs/key_art.png`는 Bethlehem 첫 화면에 쓴다. 키 아트는 용량(0.8MB) 때문에 Manna 에 넣지 않는다. 툴바 로고는 키 아트의 잎 마크를 SVG 로 옮긴 것이고, 그 녹색은 로고에만 쓴다 — UI 색상은 가이드 팔레트만 쓴다.
+**브랜드 자산.** `docs/icon.png`는 창·앱 아이콘과 문서 파비콘(64px)으로, `docs/key_art.png`는 Bethlehem 첫 화면에 쓴다(소개 문구 없이 키 아트와 버튼만). 키 아트는 용량 때문에 문서에 넣지 않는다. 툴바 로고는 키 아트의 잎 마크를 SVG 로 옮긴 것이고, 그 녹색은 로고에만 쓴다.
 
 ---
 
-## 5. 화면 품기 — 가상 파일 시스템
+## 5. 화면 품기
 
 ### 5.1 iframe 로딩
 
-1. 엔트리 HTML 블롭을 풀어 `DOMParser`로 읽는다. 원본은 건드리지 않고 메모리에서만 다룬다.
-2. 정적 참조(`script[src]`, `link[href]`, `img[src]`, `source`, `video`, `audio`, 인라인 `style`의 `url()`)를 패키지 파일의 Blob URL로 바꾼다. CSS 파일은 내부 `url()`을 그 CSS 파일의 경로 기준으로 풀어 바꾼 뒤 Blob URL로 만든다.
+1. 엔트리 HTML 블롭을 풀어 `DOMParser`로 읽는다. 원본은 건드리지 않는다.
+2. 정적 참조(`script[src]`, `link[href]`, `img[src]`, `srcset`, `source`, `video`, `audio`, 인라인 `style`의 `url()`)를 Blob URL로 바꾼다. CSS 파일은 내부 `url()`을 그 CSS 의 경로 기준으로 풀어 바꾼다. `<base href>` 가 있으면 해석에 반영하고 태그는 지운다.
 3. `<head>` 맨 앞에 shim 스크립트를 넣는다.
-4. `iframe.srcdoc`으로 띄운다. srcdoc 문서는 부모와 같은 출처이므로 부모(Manna)가 내부 DOM에 접근할 수 있고, 이것이 어노테이션의 전제다.
+4. `iframe.srcdoc`으로 띄운다. srcdoc 문서는 부모와 같은 출처이므로 부모가 내부 DOM에 접근할 수 있고, 이것이 Comment 의 전제다.
 
 ### 5.2 shim — 실행 중 요청 가로채기
 
-품은 화면의 스크립트보다 먼저 실행되어 다음을 패치한다. 받은 경로를 현재 가상 문서 경로 기준으로 풀어 패키지에 있으면 Blob URL로 바꾸고, 없으면 원래대로 통과시킨다.
-
-| 대상 | proto에서의 쓰임 |
-|---|---|
-| `HTMLScriptElement.prototype.src` setter, `setAttribute('src')` | `data/*.js` 동적 로딩 — **필수** |
-| `fetch`, `XMLHttpRequest.open` | (proto 미사용) |
-| `HTMLImageElement.src`, `Image`, `HTMLLinkElement.href` | (proto 미사용) |
-| `Worker` | 코드를 블롭으로 바꿔 생성 (CONCEPT §8) |
-
-풀리지 않은 요청은 **패키지 진단**에 쌓인다. Bethlehem은 이것을 보고 "이 화면은 X 파일을 찾지 못했다"를 원인·위치·조치와 함께 보여 준다 (가이드 UX-2).
+품은 화면의 스크립트보다 먼저 실행되어 `script.src`·`img.src`·`link.href` 세터, `setAttribute`, `fetch`, `XMLHttpRequest.open`, `Worker` 를 패치한다. 받은 경로를 문서 기준으로 풀어 담겨 있으면 Blob URL로 바꾸고, 없으면 그대로 통과시킨다. 풀리지 않은 요청은 스테이지 아래 진단에 원인·위치·조치와 함께 쌓인다.
 
 ### 5.3 외부 리소스
 
-Bethlehem(Electron 메인 프로세스, CORS 제약 없음)이 굽기 시점에 외부 URL을 내려받는다. CSS면 그 안의 `url()`까지 재귀로 받는다. 원래 URL → 블롭 매핑은 `external`에 기록하고, shim과 정적 치환이 같은 매핑을 쓴다.
-
-- **알려진 대체**: Pretendard dynamic-subset(woff2 92개)은 같은 폰트의 단일 variable woff2로 바꿔 담는다 (3MB → 2MB, 파일 92개 → 1개).
-- **제외**: 리소스별로 체크를 끄면 링크를 그대로 둔다. 오프라인에서 달라질 수 있다는 표시를 남긴다.
+Bethlehem(메인 프로세스, CORS 제약 없음)이 등록 시점에 외부 URL을 내려받는다. CSS면 그 안의 `url()`까지 재귀로 받는다. Pretendard dynamic-subset(woff2 92개)은 같은 폰트의 단일 variable woff2로 바꿔 담는다. 리소스별로 체크를 끄면 링크를 그대로 둔다.
 
 ### 5.4 일시정지
 
-shim이 품은 화면의 `requestAnimationFrame`, `performance.now`, `Date.now`를 감싼다. 일시정지 중에는 rAF 콜백을 보류하고, 재개하면 멈춰 있던 시간만큼 시계를 빼서 넘긴다. 화면 입장에서는 시간이 멈췄다가 이어진다. 움직이는 대상(주행 중 OHT, 경고 펄스)에 어노테이션을 달 때 쓴다. `setTimeout`/`setInterval`은 1차 범위에서 제외한다.
+shim이 `requestAnimationFrame`, `performance.now`, `Date.now`, CSS 애니메이션을 감싼다. 일시정지 중에는 rAF 콜백을 보류하고, 재개하면 멈춰 있던 시간만큼 시계를 빼서 넘긴다.
+
+### 5.5 URL 로 담기
+
+폴더가 아니라 주소로 화면을 담는다 (CONCEPT §4 스냅샷). Bethlehem 이 별도 창을 띄운다 — 위는 테라리움 막대(주소·뒤로·새로고침·화면 크기·담기 버튼), 아래는 실제 페이지(`WebContentsView`, 별도 세션 `persist:terrarium-snapshot`). 사용자는 그 창에서 로그인하거나 원하는 상태까지 이동한 뒤 담는다.
+
+- 창이 받은 응답은 CDP `Network` 로 모두 적어 둔다(GET, 2xx, 하나 40MB·합계 150MB 까지). 새 문서로 이동하면 지난 페이지의 응답은 버린다.
+- **동작 포함(live)**: 원래 HTML + 받은 응답 전부를 외부 리소스로 담는다. 화면에서 스크립트가 다시 돌고, `fetch`·XHR 은 shim 이 그때 받은 응답으로 돌려준다. 서버가 없어도 그 순간의 데이터로 동작한다.
+- **보이는 그대로(static)**: 지금 DOM 을 직렬화해 담는다. 스크립트와 `on*` 속성은 빼고, 캔버스는 이미지로, 입력값은 속성으로, `insertRule` 로만 들어간 CSS 규칙은 `<style>` 글로 옮긴다. 정지 화면이지만 사용자가 이동해 둔 상태가 그대로 남는다.
+- EUC-KR 처럼 UTF-8 이 아닌 텍스트 응답은 담을 때 UTF-8 로 바꾸고 `meta charset` 을 고친다.
+- 화면 크기는 막대에서 고른다(1920×1080 등). 페이지 뷰를 그 CSS 크기로 확대·축소해 보여 주고, 그 크기가 버전의 기준 뷰포트가 된다.
+- **한계**: srcdoc 안에서는 `location` 이 원래 주소가 아니므로 주소로 화면을 고르는 SPA 라우터는 다른 화면을 띄울 수 있다. POST 응답(GraphQL 등)은 다시 낼 수 없다. WebSocket 은 담지 않는다.
 
 ---
 
-## 6. 어노테이션 — Leaven
+## 6. Comment — Leaven
 
 ### 6.1 데이터
 
 ```ts
-interface Annotation {
-  id: string;                  // UUID
-  no: number | null;           // 표시 번호. 수신자가 새로 단 항목은 null(병합 시 부여)
-  version: number;             // 붙어 있는 화면 버전
-  anchor: Anchor;
-  kind: '설명' | '요청' | '질문' | '이슈';
-  status: '열림' | '진행 중' | '완료' | '보류';
-  assignee?: string;
-  body: string;
-  author: string; createdAt: string; updatedAt: string;
-  replies: { id: string; author: string; at: string; body: string }[];
-  history: { at: string; by: string; field: string; from: unknown; to: unknown }[]; // 병합용
+interface Annotation {          // UI 이름은 Comment
+  id: string;
+  version: number;              // 붙어 있는 화면 버전
+  anchor?: Anchor;              // 없으면 화면 전체에 단 Comment (녹화 클립 등)
+  body: string;                 // 마크다운
+  clips?: Clip[];               // 녹화한 움직임 (§7)
+  author; createdAt; updatedAt;
+  replies: { id; author; at; body /* 마크다운 */ }[];
+  history: { at; by; field; from; to }[];   // 병합용
 }
 
 interface Anchor {
   fp: Fingerprint;
-  region?: { x: number; y: number; w: number; h: number };  // 요소 박스 기준 0~1
-  trail: string[];             // 달 때 선택되어 있던 탭·토글 레이블 (예: ['모니터링', 'LIVE'])
-  props?: Record<string, string>;  // 크기, 색상, 폰트 등 계산된 스타일 (개발자용)
-}
-
-interface Fingerprint {
-  id?: string;
-  selector: string;            // nth-of-type 경로
-  tag: string;
-  classes: string[];
-  text?: string;               // 앞 80자
-  attrs: Record<string, string>;   // aria-label, role, data-*
-  ancestry: string[];          // 가까운 id 조상들
+  region?: { x; y; w; h };      // 요소 박스 기준 0~1
+  trail: string[];              // 달 때 선택되어 있던 탭·토글 레이블
+  path?: { fp: Fingerprint; x; y }[];   // 화면을 연 뒤 달기 전까지의 클릭 (§6.4)
+  props?: Record<string, string>;       // 계산된 스타일 (지금은 화면에 보이지 않는다)
 }
 ```
 
-### 6.2 앵커 — 요소 + 영역
+**번호는 따로 저장하지 않는다.** 같은 화면 버전 안에서 배열 순서가 곧 번호다. 패널에서 카드 왼쪽 손잡이(⠿)를 끌어 순서를 바꾸면 마커 번호도 함께 바뀐다. 다른 버전의 항목 자리는 건드리지 않는다.
 
-- **클릭**: 요소를 잡는다. 하이라이트 상태에서 `↑`/`↓`로 부모/자식으로 옮긴다. 작성 창에 글을 쓰는 중에는 `Alt+↑`/`Alt+↓`.
-- **드래그**: 영역을 잡는다. 시작점 아래 요소(canvas면 그 canvas, 아니면 드래그 박스를 모두 품는 가장 깊은 요소)를 기준으로 상대 좌표 0~1을 저장한다. proto의 3D 맵 위 레일 결함 지점, FAB 조망의 특정 구역이 이 방식으로 달린다.
-- 상대 좌표이므로 스케일, `zoom`, 창 크기가 바뀌어도 같은 자리를 가리킨다.
+### 6.2 피커 — 요소 + 영역
 
-### 6.3 표시
+- **Ctrl 을 누르고 있는 동안** 피커가 된다(커서 십자, 스테이지에 주황 테두리, "피커" 배지). 떼면 보기로 돌아가고, 잡아 둔 대상의 작성 창은 남는다. 드래그 중에 떼도 영역은 잡힌다. Ctrl+문자 조합(Ctrl+S 등)을 누르면 피커는 바로 꺼진다. 툴바의 "피커"로 고정할 수도 있다.
+- **클릭**은 요소를, **드래그**는 그 영역을 품는 가장 깊은 요소(캔버스면 그 캔버스) 안의 상대 영역을 잡는다. `↑`/`↓`(글을 쓰는 중에는 `Alt+↑`/`↓`)로 부모·자식 요소로 옮긴다.
+- 화면 전체에 다는 Comment 는 패널의 ＋ 로 만든다.
 
-마커 레이어는 iframe 바깥(부모 문서)에 있다. 매 프레임 앵커 요소의 `getBoundingClientRect()`를 스테이지 스케일로 변환해 마커를 옮긴다.
+### 6.3 마크다운 편집기
 
-- 앵커 요소가 `checkVisibility()`로 보이고 뷰포트 안에 있을 때만 마커를 띄운다.
-- 패널은 "지금 화면에 보이는 항목"과 "다른 화면 상태에 있는 항목"으로 나눠 보여 준다. 안 보이는 항목은 흐리게, 달 때의 `trail`을 붙여 "모니터링 · LIVE 상태에서 작성"처럼 안내한다.
-- `trail`은 화면의 `aria-selected` · `aria-pressed` · `aria-current` 요소 레이블에서 자동으로 얻는다. 접근성 속성을 쓰지 않는 화면에서는 비어 있을 수 있다.
+Comment 본문·답글·개요가 모두 같은 편집기(CodeMirror 6)를 쓴다. 옵시디언식 라이브 미리보기 — 커서가 있는 줄만 마크다운 기호를 보이고, 나머지 줄은 서식만 보인다(제목, 굵게·기울임·취소선, 코드, 인용, 링크, 구분선, 글머리표). `- [ ]` 는 체크박스로 그려지고 누르면 바로 `[x]` 가 된다. Enter 는 목록·체크박스·인용을 이어 쓰고, 빈 항목에서 누르면 목록을 끝낸다. Ctrl+B / Ctrl+I, Ctrl+Enter 로 추가.
 
-### 6.4 찾기와 재부착
+남의 Comment·답글은 읽기 전용이지만 체크박스는 누를 수 있다. 작성자(Bethlehem)는 모두 고칠 수 있다.
 
-열 때는 `id` → `selector` → 지문 점수 순으로 요소를 찾는다. 점수는 태그, 클래스, 텍스트, 속성, 조상 일치를 가중합한다. 새 화면 버전으로 넘어갈 때(재부착) Bethlehem이 모든 어노테이션을 새 버전에서 다시 찾아 신뢰도를 보여 주고, 낮은 것만 작성자가 다시 지정한다.
+### 6.4 표시와 화면 상태 찾아가기
 
-**Phase 0 현재**: 새 버전 등록 시 "기존 어노테이션을 새 버전으로 옮기기"를 고르면 버전 번호만 옮기고, 화면에서는 지문 점수로 찾는다. 신뢰도 표시와 재지정 UI는 아직 없다. proto의 v1(`index - old.html`)로 옮겼을 때 `#tabB`(설비정보 확인)에 단 항목이 옛 화면의 다른 탭에 붙는 것을 확인했다 — 같은 id가 다른 탭을 가리키기 때문이다. Phase 1에서 신뢰도와 함께 "텍스트가 달라졌음" 같은 차이를 보여 줘야 한다.
+마커 레이어는 iframe 바깥에 있다. 매 프레임 앵커 요소의 위치를 스테이지 스케일로 변환해 옮기고, 요소가 보일 때(`checkVisibility()`, 뷰포트 안)만 띄운다. 안 보이는 Comment 는 패널에서 흐리게, "다른 상태" 표시를 붙인다.
+
+**다른 상태의 Comment 를 누르면 그 화면 상태로 간다.** 화면을 연 뒤 사람이 누른 클릭(요소 지문 + 요소 안의 상대 위치)을 적어 두고, Comment 를 달 때 그 경로를 함께 저장한다(`anchor.path`, 최근 24번).
+
+1. **빠른 길** — 경로 중 탭·토글(`role="tab"`, `aria-selected`·`aria-pressed`·`aria-expanded`)이고 지금 선택되지 않은 것만 다시 누른다. 탭 안의 Comment 는 대개 여기서 끝난다.
+2. **처음부터** — 그래도 안 보이면 화면을 다시 불러와 경로 전체를 순서대로 누른다. 각 단계는 그 요소가 나타날 때까지(최대 10초) 기다린다. 캔버스 위 클릭(FAB 조망 → BAY-4)도 같은 상대 위치에 pointer·mouse·click 이벤트를 내서 재현한다.
+
+### 6.5 찾기와 재부착
+
+열 때는 `id` → `selector` → 지문 점수 순으로 요소를 찾는다. 새 버전을 등록할 때 "기존 Comment 를 새 버전으로 옮기기"를 고르면 버전 번호만 옮기고, 화면에서는 지문 점수로 다시 찾는다. **신뢰도 표시와 재지정 UI 는 아직 없다** — proto 의 v1 로 옮겼을 때 `#tabB` 에 단 항목이 옛 화면의 다른 탭에 붙는 것을 확인했다(같은 id 가 다른 탭을 가리킨다).
 
 ---
 
-## 7. 저장과 병합
+## 7. 녹화
 
-### 7.1 Manna 안에서 저장
+툴바의 ●(전체화면에서는 작은 막대)로 시작·정지한다(최대 60초). 스테이지 영역만 webm(VP9, 2Mbps)으로 담고, 녹화 중에는 마커와 하이라이트를 숨긴다.
+
+- **화면 받기**: `getDisplayMedia`. Bethlehem 은 메인 프로세스가 `setDisplayMediaRequestHandler` 로 요청한 프레임(자기 창)을 바로 건넨다 — 대화상자가 없다. 브라우저는 "이 탭 공유" 대화상자가 뜬다(`preferCurrentTab`). 화면 전체·다른 창을 고르면 거절하고 이 탭을 고르라고 안내한다.
+- **자르기**: Region Capture(`cropTo`)가 되면 그것으로, 안 되면 받은 영상을 캔버스에 옮기며 스테이지 자리만 잘라 다시 녹화한다. Bethlehem 실측 1130×636(스테이지와 같은 16:9).
+- **붙이기**: 선택한 Comment 가 있으면 그 Comment 에, 없으면 화면 전체 Comment 를 새로 만들어 붙인다. 클립은 `b64` 블롭으로 문서에 들어가고, 카드 안에서 반복 재생된다.
+
+---
+
+## 8. 저장과 병합
+
+### 8.1 저장
 
 | 환경 | 동작 |
 |---|---|
-| Chrome / Edge | 첫 저장 때 `showSaveFilePicker`로 파일을 한 번 지정, 이후 같은 파일에 덮어쓰기 |
-| Firefox / Safari | `{제목}_v{버전}_{이름}.html`로 다운로드 |
-| Bethlehem | Electron `fs`로 바로 쓰기 |
+| Bethlehem | 처음 저장할 때 대화상자(마지막 위치에서 열림). 이후 같은 파일에 덮어쓰기. 확장자를 빼거나 `.html` 로만 적어도 `.terr.html` 로 맞춘다 |
+| Chrome / Edge | 첫 저장 때 `showSaveFilePicker`로 한 번 지정, 이후 같은 파일에 덮어쓰기 |
+| 그 밖의 브라우저 | 다운로드 |
 
-수신자는 처음 열 때 이름을 한 번 입력한다. 이름은 브라우저 `localStorage`에 기억해 다음에 열 때 다시 묻지 않는다 (실패해도 다시 물을 뿐이다).
+수신자가 저장하면 받은 파일 이름 뒤에 자기 이름이 붙는다 (`proto.terr.html` → `proto_홍길동.terr.html`). 수신자는 처음 열 때 이름을 한 번 입력하고, 이름은 그 브라우저에 기억된다.
 
-### 7.2 병합 (Bethlehem)
+### 8.2 되돌리기
 
-같은 `doc.id`의 회신본들을 원본에 합친다.
+문서를 고치는 모든 동작(Comment·답글·개요·순서·마커 색·화면 등록·삭제)은 고치기 직전 문서 JSON 을 쌓는다(최대 100단계). 같은 Comment 를 이어 타이핑하면 2초 안의 변경은 한 단계로 묶는다. **Ctrl+Z / Ctrl+Shift+Z(Ctrl+Y)**, 툴바 ↶ ↷. 글을 쓰는 중에는 편집기 자체의 되돌리기가 먼저다. 블롭은 덧붙기만 하므로 되돌리지 않고, 저장할 때 참조되지 않는 것은 빠진다.
 
-- 어노테이션과 답글은 UUID로 식별한다. 새 것은 추가하고, 같은 것은 필드별 `history` 시각 기준으로 나중 것을 쓴다.
-- 같은 필드를 양쪽이 다르게 바꿨으면 충돌 목록에 올려 작성자가 고른다.
-- 수신자가 새로 단 항목(`no: null`)은 병합 시 번호를 받는다. 수신자 화면에서는 "새 1", "새 2"로 보인다.
+### 8.3 병합 (Bethlehem, 다음 단계)
+
+같은 `doc.id`의 회신본들을 원본에 합친다. Comment·답글은 UUID로 식별해 새 것은 추가하고, 같은 것은 필드별 `history` 시각 기준으로 나중 것을 쓴다. 양쪽이 같은 필드를 다르게 바꿨으면 충돌 목록에 올린다. 순서는 원본 순서를 따르고 새 항목은 뒤에 붙인다.
 
 ---
 
-## 8. 저장소 구조
+## 9. 저장소 구조
 
 ```
 Bethlehem/
-├── package.json             패키지 하나 · npm start = Manna 런타임 빌드 + electron-vite dev
-├── electron.vite.config.ts  main · preload(cjs) · renderer
-├── apps/
-│   └── bethlehem/
-│       ├── main/            창, 파일 입출력, 화면 패키징·외부 리소스 다운로드 (net.fetch)
-│       ├── preload/         렌더러에 노출할 최소 API (contextBridge)
-│       ├── shared/          preload ↔ renderer API 타입
-│       ├── renderer/        화면 목록, 화면 등록 대화상자, 첫 화면 — 나머지는 packages/manna 의 틀
-│       └── resources/       앱 아이콘 (docs/icon.png 에서 만든 크기별 PNG)
+├── package.json             패키지 하나 · npm start = 런타임 빌드 + electron-vite dev
+├── electron.vite.config.ts  main · preload(index, snapshot · cjs) · renderer(index, snapshot)
+├── apps/bethlehem/
+│   ├── main/                창, 파일 입출력, 최근 경로, 화면 패키징, URL 담기(snapshot.ts), 녹화 허용
+│   ├── preload/             index(메인 창 API) · snapshot(URL 담기 막대 API)
+│   ├── shared/              preload ↔ renderer API 타입
+│   ├── renderer/            툴바 도구, 화면 등록·URL 대화상자, 첫 화면, URL 담기 막대
+│   └── resources/           앱 아이콘
 ├── packages/
-│   ├── core/src/            문서 스키마, 블롭 코덱, 가상 FS, Leaven(지문·찾기), Manna 파일 읽기·쓰기 — 브라우저/Node 공용
-│   ├── core/node/           폴더 훑기·패키징 — Node 전용
-│   └── manna/               Manna 런타임 — 단일 IIFE + CSS 로 빌드되어 내보낸 HTML 에 인라인 (packages/manna/vite.config.ts)
-├── scripts/bake.ts          명령줄 굽기 (Bethlehem 없이 폴더 → Manna)
-├── tests/                   E2E — e2e.ts(Manna, Chrome) · e2e-bethlehem.ts(Electron)
+│   ├── core/src/            문서 스키마, 블롭 코덱, 가상 FS, Leaven(지문·찾기), 문서 읽기·쓰기 — 브라우저/Node 공용
+│   ├── core/node/           폴더 훑기·패키징, 문자 인코딩 변환 — Node 전용
+│   └── manna/src/           런타임 — 틀(App), 스테이지(shim·로더·경로·녹화), 패널, 마크다운 편집기, 상태·되돌리기
+├── scripts/bake.ts          명령줄 굽기
+├── tests/                   e2e.ts(문서, Chrome) · e2e-bethlehem.ts(Electron)
 ├── example/proto/           첫 빵
 └── docs/
 ```
 
-npm workspaces 로 나누지 않고 패키지 하나에 폴더만 나눴다. 세 갈래가 같은 TypeScript 소스를 경로 별칭(`@core`, `@core/node`, `@manna`)으로 직접 가져다 쓰므로, 패키지 사이 빌드 순서를 관리할 일이 없다.
+**보안.** Electron 렌더러는 `contextIsolation`, `sandbox` 로 띄운다. 품은 화면은 작성 UI 와 같은 출처(srcdoc)에서 돌기 때문에 `window.parent.bethlehem` 을 부를 수 있다. 그래서 메인 프로세스는 사용자가 대화상자로 고르거나 끌어다 놓은 경로, 그리고 예전에 그렇게 고른 최근 목록만 읽고 쓴다. URL 담기 창의 페이지는 별도 세션·샌드박스에서 돌고 preload 가 없다. 막대의 요청은 보낸 webContents 가 그 막대인지 확인한다.
 
-**보안.** Electron 렌더러는 `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`로 띄운다. 품은 화면은 Node 에 닿지 않는다. 다만 품은 화면은 Bethlehem UI 와 같은 출처(srcdoc)에서 돌기 때문에 `window.parent.bethlehem` API 를 부를 수 있다. 그래서 메인 프로세스는 사용자가 대화상자로 고르거나 창에 끌어다 놓은 경로만 읽고 쓴다. 끌어다 놓은 경로는 preload 가 `webUtils.getPathForFile`로 진짜 `File` 에서만 얻으므로 스크립트가 지어낼 수 없다. 렌더러 CSP 는 품은 화면에 그대로 물려지므로 인라인 스크립트·eval·CDN 을 막지 않는다.
+**구현 메모.** 문서는 제자리에서 고치므로 `@preact/signals` 의 얕은 props 비교에 걸려 다시 그려지지 않는 컴포넌트가 생긴다. 문서 내용을 그리는 컴포넌트(툴바, 개요, 카드, 상세, 마커)는 `rev` 를 읽어 구독한다.
 
 ---
 
-## 9. 단계
+## 10. 단계
 
-### Phase 0 — 첫 빵 굽기
+### Phase 0 — 첫 빵 굽기 (2026-10-01 완료)
 
-proto를 Manna 한 장으로 구워 내는 것까지. 가장 위험한 기술(가상 FS, canvas 영역 앵커, zoom 위 마커)을 여기서 검증한다.
+proto 를 문서 한 장으로 구워 내고, 가상 FS · 캔버스 영역 앵커 · zoom 위 마커를 검증했다.
 
-**완료 기준**
+### Phase 0.5 — 작성 경험 (2026-10-02)
 
-1. `npm start` → Bethlehem 창 → `example/proto` 폴더를 끌어다 놓으면 화면이 등록된다. 엔트리 자동 감지, 미참조 파일(`assets/` 3개) 제외 제안, Pretendard 포함.
-2. Bethlehem 안에서 화면이 원본과 똑같이 동작한다. 데이터 로딩 스플래시 완료, FAB 조망 → BAY-4 상세, 설비정보 탭.
-3. DOM 요소 클릭, canvas 영역 드래그, 일시정지 후 달기, 뷰 전환 시 마커 숨김/표시가 된다.
-4. 저장하면 HTML 하나가 나온다. Chrome과 Firefox에서 더블클릭으로 열리고, 오프라인에서도 똑같이 보인다.
-5. 수신자 흐름: 이름 입력 → 답글, 상태 변경, 새 어노테이션 → 저장 (Chrome 덮어쓰기 / Firefox 다운로드).
-6. `index - old.html`을 v1, `index.html`을 v2로 등록하면 데이터가 한 번만 들어가고 버전 전환이 된다.
+| 항목 | 근거 (자동 테스트) |
+|---|---|
+| Ctrl 누르고 있는 동안 피커, 떼면 보기 · 작성 창 유지 · 드래그 중 떼도 영역 | `test:e2e` [2] |
+| Comment = 마크다운 + 마크다운 답글, 유형·상태·담당 없음, 체크박스 토글 | [2][6] |
+| 개요(README 한 번 복사 → 편집), 개요 아래 Comment 한 스크롤 | [1][10], `test:e2e:app` [2] |
+| Ctrl+Z / Ctrl+Shift+Z | [4] |
+| 끌어서 순서 변경 = 번호 변경 | [5] |
+| 다른 상태 Comment → 탭 전환(빠른 길) · 다시 불러와 경로 재생 | [7] |
+| 녹화 — 브라우저(가짜 화면 공유 스트림으로 확인) · Electron(실제 창 캡처, 스테이지만 잘림) | [8], app [4] |
+| 패널 폭 조절, 전체화면 | [9] |
+| `.terr.html`, 수신자 이름 붙여 저장 | [10], app [8] |
+| 마커 자동 대비 · 색 고정 | [3] |
+| 왼쪽 패널 제거 → 툴바, 최근 문서·폴더, 마지막 위치에서 대화상자 | app [5][6][8] |
+| URL 로 담기 — 보이는 그대로 · 동작 포함(서버 끈 뒤 API 응답 재생) | app [7] |
 
-**검증 항목**: CSS `zoom` 안 요소의 `getBoundingClientRect()` 값 (Chromium 128+ 표준 zoom 동작), srcdoc iframe에서 동적 `<script>` 순차 로딩, 1.9MB 데이터 블롭 해제 속도.
-
-**결과 (2026-10-01)**
-
-| 기준 | 상태 | 근거 |
-|---|---|---|
-| 1 화면 등록 | 완료 | `test:e2e:app` — 엔트리 자동 감지, `assets/` 3개와 옛 HTML 에 "미참조 추정", README 설명, Pretendard 단일 woff2 로 포함 |
-| 2 원본과 같은 동작 | 완료 | 두 E2E 모두 데이터 6채널 로딩 완료, 찾지 못한 파일 0 |
-| 3 어노테이션 | 완료 | 요소 클릭, `canvas#fabCv` 영역 드래그, 일시정지(시계 정지 확인), 설비정보 탭 이동 시 FAB 마커 숨김 → 복귀 시 다시 표시 |
-| 4 HTML 한 장 · 오프라인 | Chrome 완료 | `test:e2e` — `file://`, 외부 네트워크 없이 Pretendard 적용. **Firefox 는 설치돼 있지 않아 확인하지 못했다** |
-| 5 수신자 흐름 | Chrome 완료 | 이름 입력 → 어노테이션 → 다운로드 저장 → 다시 열기, "새 N" 번호. `showSaveFilePicker` 덮어쓰기는 대화상자라 자동 확인하지 못했다 |
-| 6 버전 · 중복 제거 | 완료 | v1+v2 = 4.1MB (데이터 블롭 공유, 예상 4.3MB) |
-
-검증 항목은 모두 문제가 없었다: `zoom` 안의 `getBoundingClientRect()`는 확대가 반영된 값을 돌려주고, `file://` 문서가 만든 `blob:null/…` URL 을 srcdoc iframe 이 불러오며, 문서 열기부터 화면 스플래시 종료까지 약 1초다.
+자동으로 확인하지 못한 것: 브라우저의 실제 "이 탭 공유" 대화상자 흐름(테스트는 가짜 스트림), `showSaveFilePicker` 덮어쓰기(대화상자), 실제 외부 사이트 URL 담기(로컬 서버로만 확인).
 
 ### Phase 1 — 협업
 
-병합, 재부착 신뢰도와 재지정 UI(§6.4), 화면 CSS 변수 이름 역추적(`#F86517` → `--brand`), 변경 이력 화면, 버전 나란히 비교, 어노테이션 썸네일(`capturePage`), Firefox·Safari 확인.
+병합, 재부착 신뢰도와 재지정 UI(§6.5), 변경 이력 화면, 버전 나란히 비교, Comment 썸네일(`capturePage`), 요소 속성 표시(지금도 `anchor.props` 로 저장은 한다).
 
 ### Phase 2 — 빵집 확장
 
-외부 URL 스냅샷, 움직임 클립 녹화, 모듈 번들링(esbuild), Worker 변환, 배포 빌드와 자동 업데이트.
+모듈 번들링(esbuild), Worker 변환, URL 담기의 SPA 라우팅 보정, 배포 빌드와 자동 업데이트.

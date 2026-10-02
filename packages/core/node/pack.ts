@@ -128,7 +128,8 @@ export interface PackOptions {
   dir: string;
   entry: string;
   include: string[];
-  description?: string;
+  /** 개요로 한 번 가져올 마크다운 파일 (README.md) — 문서에는 텍스트로 들어간다 */
+  notesFrom?: string;
   external: { url: string; excluded?: boolean }[];
   viewport: Viewport;
 }
@@ -136,7 +137,7 @@ export interface PackOptions {
 export interface PackResult {
   version: Omit<ScreenVersion, 'v' | 'createdAt'>;
   blobs: [string, EncodedBlob][];
-  description?: { sha: string; name: string };
+  notes?: string;
   stats: { files: number; raw: number; encoded: number };
 }
 
@@ -226,13 +227,7 @@ export async function packFolder(opts: PackOptions, fetcher: Fetcher = nodeFetch
     raw += bytes.length;
   }
 
-  let description: PackResult['description'];
-  if (opts.description) {
-    const bytes = new Uint8Array(await readFile(join(opts.dir, opts.description)));
-    const { sha, blob } = makeBlob(bytes, 'text/markdown');
-    blobs.set(sha, blob);
-    description = { sha, name: opts.description };
-  }
+  const notes = opts.notesFrom ? (await readFile(join(opts.dir, opts.notesFrom), 'utf8')).replace(/\r\n?/g, '\n') : undefined;
 
   const external: ExternalEntry[] = [];
   for (const e of opts.external) {
@@ -246,7 +241,7 @@ export async function packFolder(opts: PackOptions, fetcher: Fetcher = nodeFetch
   return {
     version: { entry: opts.entry, viewport: opts.viewport, files, external },
     blobs: [...blobs],
-    description,
+    ...(notes != null ? { notes } : {}),
     stats: { files: include.size, raw, encoded },
   };
 }

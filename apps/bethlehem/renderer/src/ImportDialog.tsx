@@ -14,7 +14,7 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [entry, setEntry] = useState<string | undefined>(undefined);
   const [include, setInclude] = useState<Set<string>>(new Set());
-  const [desc, setDesc] = useState<string>('');
+  const [notesFrom, setNotesFrom] = useState<string>('');
   const [ext, setExt] = useState<Record<string, boolean>>({});
   const [title, setTitle] = useState(existing?.title ?? '');
   const [label, setLabel] = useState('');
@@ -33,7 +33,7 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
         if (!alive) return;
         setScan(s);
         setInclude(new Set(s.files.filter((f) => f.referenced).map((f) => f.path)));
-        setDesc(s.description ?? '');
+        setNotesFrom(s.description && !(existing && existing.notes.trim()) ? s.description : '');
         setExt(Object.fromEntries(s.external.map((u) => [u, true])));
         if (!existing) setTitle((t) => t || s.title || s.name);
         if (s.htmls.length > 1) setLabel(s.entry);
@@ -68,12 +68,12 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
       const r = await api.packFolder({
         dir: scan.dir,
         entry: scan.entry,
-        include: [...include].filter((p) => p !== desc),
-        description: desc || undefined,
+        include: [...include].filter((p) => p !== notesFrom),
+        notesFrom: notesFrom || undefined,
         external: scan.external.map((url) => ({ url, excluded: !ext[url] })),
         viewport: { w, h, fit: 'contain' },
       });
-      applyImport(target, r, { title: title.trim() || scan.name, label: label.trim() || undefined, viewport: { w, h, fit: 'contain' }, moveAnnotations: move });
+      applyImport(target.screenId, r, { title: title.trim() || scan.name, label: label.trim() || undefined, moveAnnotations: move });
       importing.value = null;
     } catch (err) {
       setBusy(null);
@@ -127,15 +127,17 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
               <ul class="file-list">
                 {scan.files.map((f) => {
                   const isEntry = f.path === scan.entry;
-                  const isDesc = f.path === desc;
+                  const isNotes = f.path === notesFrom;
+                  const on = isEntry || include.has(f.path);
                   return (
-                    <li key={f.path} class={!include.has(f.path) && !isEntry ? 'is-off' : ''}>
+                    <li key={f.path} class={on || isNotes ? '' : 'is-off'}>
                       <label class="row">
-                        <input type="checkbox" checked={isEntry || isDesc || include.has(f.path)} disabled={isEntry || isDesc} onChange={() => toggle(f.path)} />
+                        <input type="checkbox" checked={on} disabled={isEntry || isNotes} onChange={() => toggle(f.path)} />
                         <span class="mono grow ellipsis">{f.path}</span>
-                        {isEntry && <span class="chip st-doing">엔트리</span>}
-                        {isDesc && <span class="chip st-done">설명</span>}
-                        {!f.referenced && !isEntry && !isDesc && <span class="chip st-hold" title="다른 파일에서 이름이 언급되지 않습니다. 화면이 실제로 쓰는지 확인 후 포함하세요.">미참조 추정</span>}
+                        {isEntry && <span class="chip chip-accent">시작 파일</span>}
+                        {isNotes && <span class="chip chip-ok">개요로 가져옴</span>}
+                        {!f.referenced && !isEntry && !isNotes && <span class="chip chip-hint" title="다른 파일에서 이 이름이 나오지 않아, 화면이 쓰지 않는 파일로 보입니다. 쓰는 파일이면 체크하세요.">참조 없음</span>}
+                        {!on && !isNotes && <span class="chip">제외</span>}
                         <span class="muted small">{formatBytes(f.size)}</span>
                       </label>
                     </li>
@@ -144,9 +146,9 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
               </ul>
               {scan.files.some((f) => /\.md$/i.test(f.path)) && (
                 <label class="field">
-                  <span>화면 설명 문서 (Manna 의 설명 탭)</span>
-                  <select class="input" value={desc} onChange={(e) => setDesc(e.currentTarget.value)}>
-                    <option value="">없음</option>
+                  <span>개요로 가져올 마크다운 — 한 번 복사되고, 그 뒤로는 문서 안에서 고칩니다{existing?.notes.trim() ? ' (지금 개요를 덮어씁니다)' : ''}</span>
+                  <select class="input" value={notesFrom} onChange={(e) => setNotesFrom(e.currentTarget.value)}>
+                    <option value="">가져오지 않음</option>
                     {scan.files.filter((f) => /\.md$/i.test(f.path)).map((f) => <option key={f.path}>{f.path}</option>)}
                   </select>
                 </label>
@@ -163,7 +165,7 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
                         <input type="checkbox" checked={!!ext[u]} onChange={() => setExt({ ...ext, [u]: !ext[u] })} />
                         <Globe {...ICON} />
                         <span class="mono grow ellipsis" title={u}>{u}</span>
-                        {!ext[u] && <span class="chip st-hold">링크 유지 · 오프라인에서 달라질 수 있음</span>}
+                        {!ext[u] && <span class="chip chip-hint">링크 유지 · 오프라인에서 달라질 수 있음</span>}
                       </label>
                     </li>
                   ))}
@@ -174,7 +176,7 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
             {existing && existing.annotations.some((a) => a.version === existing.versions[existing.versions.length - 1].v) && (
               <label class="row">
                 <input type="checkbox" checked={move} onChange={() => setMove(!move)} />
-                <span>기존 어노테이션을 새 버전으로 옮기기 <span class="muted">— 요소 지문으로 새 화면에서 다시 찾습니다</span></span>
+                <span>기존 Comment 를 새 버전으로 옮기기<span class="muted">— 요소 지문으로 새 화면에서 다시 찾습니다</span></span>
               </label>
             )}
           </>

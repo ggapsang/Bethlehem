@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { decodeBlob, encFor, encodeBlob, sha256, typeFor } from './codec';
-import { displayNo, newDoc, nextAnnotationNo, nextScreenId, setField } from './doc';
+import { displayNo, moveAnnotation, newDoc, nextScreenId, setField } from './doc';
 import { isManna, parseManna, referencedShas, scriptSafeJs, serializeManna } from './manna-file';
-import type { Annotation, BlobStore, Screen } from './types';
-import { absolutize, buildIndex, cssRefs, lookup, pkgPath, pkgUrl, rewriteCss, rewriteSrcset } from './vfs';
+import type { Annotation, BlobStore, Screen, ScreenVersion } from './types';
+import { absolutize, buildIndex, cssRefs, entryUrlOf, lookup, pkgPath, pkgUrl, rewriteCss, rewriteSrcset } from './vfs';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -80,14 +80,16 @@ describe('codec', () => {
   });
 });
 
-function annotation(no: number | null, extra: Partial<Annotation> = {}): Annotation {
+function annotation(extra: Partial<Annotation> = {}): Annotation {
   return {
-    id: crypto.randomUUID(), no, version: 1, kind: '설명', status: '열림', body: 'b', author: 'a',
+    id: crypto.randomUUID(), version: 1, body: 'b', author: 'a',
     createdAt: new Date().toISOString(), updatedAt: '', replies: [], history: [],
     anchor: { fp: { selector: 'div', tag: 'div', classes: [], attrs: {}, ancestry: [] }, trail: [] },
     ...extra,
   };
 }
+
+const V1 = (sha: string, size = 1): ScreenVersion => ({ v: 1, createdAt: '', entry: 'index.html', viewport: { w: 1920, h: 1080, fit: 'contain' }, files: { 'index.html': { sha, size, type: 'text/html' } }, external: [] });
 
 describe('manna-file', () => {
   it('직렬화한 문서를 다시 읽으면 같다', async () => {
@@ -95,28 +97,34 @@ describe('manna-file', () => {
     const blobs: BlobStore = new Map();
     const html = enc.encode('<!doctype html><script>alert("</script>")</script>');
     const sha = await sha256(html);
+    const clip = enc.encode('webm');
+    const clipSha = await sha256(clip);
     blobs.set(sha, await encodeBlob(html, 'gz64'));
+    blobs.set(clipSha, await encodeBlob(clip, 'b64'));
     blobs.set('f'.repeat(64), { enc: 'b64', data: 'AAAA' }); // 쓰이지 않는 블롭은 저장하지 않는다
+    const lineSep = String.fromCharCode(0x2028);
     const screen: Screen = {
-      id: 'SCR-001', title: '화면', annotations: [annotation(1, { body: '줄 바꿈 </script><b>' })],
-      versions: [{ v: 1, createdAt: '', entry: 'index.html', viewport: { w: 1920, h: 1080, fit: 'contain' }, files: { 'index.html': { sha, size: html.length, type: 'text/html' } }, external: [] }],
+      id: 'SCR-001', title: '화면', notes: '# 개요\n- [ ] 할 일 </script>',
+      annotations: [annotation({ body: `**줄**${lineSep}바꿈 </script><b>`, clips: [{ id: 'c', sha: clipSha, type: 'video/webm', ms: 1000, w: 10, h: 10, author: 'a', at: '' }] })],
+      versions: [V1(sha, html.length)],
     };
     doc.screens.push(screen);
     const out = serializeManna(doc, blobs, { js: 'console.log("</script>")', css: 'a{}' });
 
-    expect(out.match(/<\/script>/g)!.length).toBe(1 + 1 + 1); // doc · blob 하나 · 런타임 — 나머지는 이스케이프
+    expect(out.match(/<\/script>/g)!.length).toBe(1 + 2 + 1); // doc · 블롭 둘 · 런타임 — 나머지는 이스케이프
     expect(out).not.toContain('f'.repeat(64));
+    expect(out).not.toContain(lineSep);
     expect(isManna(out)).toBe(true);
     const back = parseManna(out);
     expect(back.doc).toEqual(doc);
-    expect(back.blobs.size).toBe(1);
+    expect(back.blobs.size).toBe(2);
     expect(dec.decode(await decodeBlob(back.blobs.get(sha)!))).toBe(dec.decode(html));
-    expect([...referencedShas(doc)]).toEqual([sha]);
+    expect(new Set(referencedShas(doc))).toEqual(new Set([sha, clipSha]));
   });
 
   it('없는 블롭을 참조하면 저장을 멈춘다', () => {
     const doc = newDoc();
-    doc.screens.push({ id: 'S', title: 's', annotations: [], versions: [{ v: 1, createdAt: '', entry: 'i.html', viewport: { w: 1, h: 1, fit: 'contain' }, files: { 'i.html': { sha: 'nope', size: 1, type: 'text/html' } }, external: [] }] });
+    doc.screens.push({ id: 'S', title: 's', notes: '', annotations: [], versions: [V1('nope')] });
     expect(() => serializeManna(doc, new Map(), { js: '', css: '' })).toThrow(/블롭이 없습니다/);
   });
 
@@ -131,24 +139,38 @@ describe('manna-file', () => {
 });
 
 describe('doc', () => {
-  it('화면 ID 와 어노테이션 번호', () => {
+  it('화면 ID', () => {
     const d = newDoc();
     expect(nextScreenId(d)).toBe('SCR-001');
-    d.screens.push({ id: 'SCR-007', title: '', versions: [], annotations: [] });
+    d.screens.push({ id: 'SCR-007', title: '', notes: '', versions: [], annotations: [] });
     expect(nextScreenId(d)).toBe('SCR-008');
-    const s = d.screens[0];
-    s.annotations.push(annotation(3), annotation(null), annotation(null));
-    expect(nextAnnotationNo(s)).toBe(4);
-    expect(displayNo(s, s.annotations[0])).toBe('3');
-    expect(displayNo(s, s.annotations[2])).toBe('새 2');
+  });
+
+  it('번호는 버전 안의 순서이고, 끌어서 옮기면 바뀐다', () => {
+    const s: Screen = { id: 'S', title: '', notes: '', versions: [], annotations: [] };
+    const [a, b, c] = [annotation({ body: 'a' }), annotation({ body: 'b' }), annotation({ body: 'c' })];
+    const old = annotation({ body: 'old', version: 0 });
+    s.annotations.push(a, old, b, c);
+    expect([a, b, c].map((x) => displayNo(s, x))).toEqual([1, 2, 3]);
+    expect(displayNo(s, old)).toBe(1); // 다른 버전은 따로 센다
+    moveAnnotation(s, c.id, 0);
+    expect(s.annotations.filter((x) => x.version === 1).map((x) => x.body)).toEqual(['c', 'a', 'b']);
+    expect(s.annotations[1]).toBe(old); // 다른 버전 항목의 자리는 그대로
+    moveAnnotation(s, c.id, 99);
+    expect(s.annotations.filter((x) => x.version === 1).map((x) => x.body)).toEqual(['a', 'b', 'c']);
   });
 
   it('필드 변경을 기록한다', () => {
-    const a = annotation(1);
-    setField(a, 'status', '완료', '홍길동');
-    setField(a, 'status', '완료', '홍길동'); // 같은 값은 기록하지 않는다
-    expect(a.status).toBe('완료');
+    const a = annotation();
+    setField(a, 'body', '- [x] 완료', '홍길동');
+    setField(a, 'body', '- [x] 완료', '홍길동'); // 같은 값은 기록하지 않는다
+    expect(a.body).toBe('- [x] 완료');
     expect(a.history).toHaveLength(1);
-    expect(a.history[0]).toMatchObject({ by: '홍길동', field: 'status', from: '열림', to: '완료' });
+    expect(a.history[0]).toMatchObject({ by: '홍길동', field: 'body', from: 'b', to: '- [x] 완료' });
+  });
+
+  it('URL 스냅샷 엔트리는 원래 주소 그대로', () => {
+    expect(entryUrlOf({ entry: 'index.html' })).toBe('https://pkg.manna/index.html');
+    expect(entryUrlOf({ entry: 'https://example.com/app?x=1' })).toBe('https://example.com/app?x=1');
   });
 });

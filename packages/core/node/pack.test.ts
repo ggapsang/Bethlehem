@@ -24,7 +24,7 @@ beforeAll(async () => {
   await writeFile(join(dir, 'data/ops.js'), 'window.OPS="1,2,3"');
   await writeFile(join(dir, 'data/vib.js'), 'window.VIB="4,5,6"');
   await writeFile(join(dir, 'assets/unused.png'), new Uint8Array([137, 80, 78, 71]));
-  await writeFile(join(dir, 'README.md'), '# 설명');
+  await writeFile(join(dir, 'README.md'), '# 설명\r\n줄');
   await writeFile(join(dir, '.git/HEAD'), 'ref');
 });
 
@@ -72,11 +72,12 @@ describe('packFolder', () => {
     };
     const s = await scanFolder(dir);
     const r = await packFolder(
-      { dir, entry: s.entry, include: ['data/ops.js', 'data/vib.js'], description: 'README.md', external: s.external.map((url) => ({ url })), viewport: { w: 1920, h: 1080, fit: 'contain' } },
+      { dir, entry: s.entry, include: ['data/ops.js', 'data/vib.js'], notesFrom: 'README.md', external: s.external.map((url) => ({ url })), viewport: { w: 1920, h: 1080, fit: 'contain' } },
       fetcher,
     );
     expect(Object.keys(r.version.files).sort()).toEqual(['data/ops.js', 'data/vib.js', 'index.html']);
-    expect(r.description?.name).toBe('README.md');
+    expect(r.notes).toBe('# 설명\n줄'); // CRLF 는 LF 로
+    expect(Object.keys(r.version.files)).not.toContain('README.md');
     const [css, font] = r.version.external;
     expect(css.note).toMatch(/단일 variable woff2/);
     expect(font.url).toBe('https://cdn.example.com/pkg/woff2/PretendardVariable.woff2');
@@ -94,5 +95,17 @@ describe('packFolder', () => {
       async () => ({ ok: false, status: 503, bytes: new Uint8Array() }),
     );
     expect(r.version.external[0]).toMatchObject({ excluded: true, error: expect.stringContaining('503') });
+  });
+});
+
+describe('toUtf8', () => {
+  it('EUC-KR 페이지를 UTF-8 로 바꾸고 meta charset 도 고친다', async () => {
+    const { toUtf8 } = await import('./charset');
+    // '<meta charset="euc-kr">한글' — 한 = C7 D1, 글 = B1 DB
+    const head = Array.from(new TextEncoder().encode('<meta charset="euc-kr">'));
+    const bytes = new Uint8Array([...head, 0xc7, 0xd1, 0xb1, 0xdb]);
+    expect(new TextDecoder().decode(toUtf8(bytes, 'text/html', 'EUC-KR'))).toBe('<meta charset="utf-8">한글');
+    expect(toUtf8(bytes, 'image/png', 'euc-kr')).toBe(bytes);
+    expect(toUtf8(bytes, 'text/html', 'utf-8')).toBe(bytes);
   });
 });

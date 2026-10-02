@@ -14,11 +14,24 @@ export interface Host {
 
 const safe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '_').trim();
 
+/** 테라리움 문서 확장자 — 브라우저가 바로 여는 .html 앞에 .terr 를 붙인다 */
+export const EXT = '.terr.html';
+
+const HTML_EXT = /(\.terr)?\.html?$/i;
+
+export function withExt(name: string): string {
+  return name.replace(HTML_EXT, '') + EXT;
+}
+
 export function suggestedName(host: Host): string {
-  if (fileName.value) return fileName.value;
   const d = doc.value;
   const base = `${safe(d.meta.title)}_v${safe(d.meta.version)}`;
-  return host.kind === 'manna' && user.value ? `${base}_${safe(user.value)}.html` : `${base}.html`;
+  if (host.kind === 'manna') {
+    // 받은 문서는 원래 이름 뒤에 내 이름을 붙여 돌려보낸다
+    const from = fileName.value ? fileName.value.replace(HTML_EXT, '') : base;
+    return user.value && !from.endsWith(`_${safe(user.value)}`) ? `${from}_${safe(user.value)}${EXT}` : `${from}${EXT}`;
+  }
+  return fileName.value ? withExt(fileName.value) : `${base}${EXT}`;
 }
 
 export async function save(host: Host, saveAs = false): Promise<boolean> {
@@ -70,7 +83,7 @@ export const browserHost: Host = {
     if (picker) {
       try {
         if (!handle || saveAs) {
-          handle = await picker({ suggestedName: name, types: [{ description: 'Manna 문서', accept: { 'text/html': ['.html'] } }] });
+          handle = await picker({ suggestedName: name, types: [{ description: '테라리움 문서', accept: { 'text/html': ['.html'] } }] });
         }
         const w = await handle.createWritable();
         await w.write(html);

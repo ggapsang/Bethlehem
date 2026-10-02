@@ -1,37 +1,16 @@
 /* Bethlehem 전용 — Manna 스타일(@manna/styles.css)의 토큰을 그대로 쓴다 */
-.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
-/* ── 화면 목록 ── */
-.sidebar {
-  display: flex; flex-direction: column; gap: var(--unit-2); min-height: 0; overflow: auto;
-  padding: var(--unit-3); background: var(--bg-panel); border-right: 1px solid var(--border);
-}
-.sb-actions { display: flex; gap: var(--unit-1); }
-.sb-actions .btn { flex: 1; justify-content: center; padding: 0 var(--unit-2); }
-.sb-file { color: var(--text-tertiary); padding: 0 var(--unit-1); }
-.sb-title { display: flex; align-items: center; gap: var(--unit-1); margin-top: var(--unit-2); }
-.sb-screens { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--unit-1); }
-.sb-screen { border-radius: var(--unit-2); padding: var(--unit-1); border: 1px solid transparent; }
-.sb-screen.is-active { background: var(--bg-hover); border-color: var(--border); }
-.sb-screen-head {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 0; width: 100%;
-  border: 0; background: transparent; text-align: left; padding: var(--unit-1) var(--unit-2);
-  border-radius: var(--unit-1-5); font-weight: 600;
-}
-.sb-screen-head .mono { color: var(--text-tertiary); font-weight: 500; }
-.sb-screen-head:hover { background: var(--bg-hover); }
-.sb-versions { display: flex; align-items: center; gap: var(--unit-1); padding: var(--unit-1) var(--unit-2); }
-.sb-ver {
-  display: inline-flex; align-items: center; justify-content: center;
-  height: var(--unit-6); min-width: var(--unit-8); padding: 0 var(--unit-1-5);
-  border: 1px solid var(--border-strong); border-radius: var(--unit-1); background: var(--bg-panel);
-  font-size: var(--text-xs); color: var(--text-secondary);
-}
-.sb-ver.is-active { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); font-weight: 600; }
-.sb-add { min-width: var(--unit-6); border-style: dashed; }
-.btn-xs { width: var(--unit-6); height: var(--unit-6); }
-.sb-add-screen { justify-content: center; margin-top: var(--unit-2); }
-.sb-hint { text-align: center; margin: 0; }
+/* ── 툴바 메뉴 ── */
+.btn-menu { gap: var(--unit-1); padding: 0 var(--unit-2); color: var(--text-secondary); }
+.btn-menu:hover { color: var(--text-primary); }
+.popover-left { left: 0; right: auto; min-width: 280px; max-width: 420px; }
+.popover-sep { height: 1px; background: var(--border); margin: var(--unit-1) 0; }
+.popover-label { display: flex; align-items: center; gap: var(--unit-1); padding: var(--unit-1) var(--unit-2); font-size: var(--text-xs); color: var(--text-tertiary); font-weight: 600; }
+.popover-empty { padding: var(--unit-1) var(--unit-2) var(--unit-2); margin: 0; }
+.popover-recent { flex-direction: column; align-items: flex-start; gap: 0; }
+.popover-recent > * { max-width: 100%; }
+.chip-accent { background: var(--accent-soft); color: var(--accent-text); }
+.chip-ok { background: var(--st-done-soft); color: var(--st-done-text); }
 
 /* ── 첫 화면 ── */
 .welcome {
@@ -39,14 +18,15 @@
   overflow: hidden; box-shadow: var(--shadow); text-align: left;
 }
 .welcome-art { display: block; width: 100%; aspect-ratio: 1030 / 588; object-fit: cover; }
-.welcome-body { padding: var(--unit-6) var(--unit-8) var(--unit-8); display: flex; flex-direction: column; gap: var(--unit-3); }
-.welcome-body h2 { margin: 0; font-size: var(--text-lg); line-height: var(--lh-lg); }
+.welcome-body { padding: var(--unit-5) var(--unit-6) var(--unit-6); display: flex; flex-direction: column; gap: var(--unit-3); }
 .welcome-body p { margin: 0; }
+.welcome-actions { flex-wrap: wrap; }
 
 /* ── 화면 등록 ── */
 .modal-wide { width: min(800px, calc(100vw - var(--unit-12))); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--unit-3); }
-.form-grid .field .input { padding: var(--unit-2) var(--unit-3); }
+.field { display: flex; flex-direction: column; gap: var(--unit-1); font-size: var(--text-xs); color: var(--text-secondary); }
+.field .input { color: var(--text-primary); font-size: var(--text-sm); padding: var(--unit-2) var(--unit-3); }
 .section-title { margin: 0 0 var(--unit-2); font-size: var(--text-sm); display: flex; gap: var(--unit-2); align-items: baseline; }
 .section-title .muted { font-weight: 400; font-size: var(--text-xs); }
 .file-list {
@@ -55,7 +35,8 @@
 }
 .file-list li { padding: var(--unit-1) var(--unit-2); border-radius: var(--unit-1); }
 .file-list li:hover { background: var(--bg-hover); }
-.file-list li.is-off .mono { color: var(--text-tertiary); text-decoration: line-through; }
+/* 빠지는 파일은 흐리게만 — 취소선은 쓰지 않는다 */
+.file-list li.is-off .mono { color: var(--text-tertiary); }
 .file-list label { cursor: pointer; }
 .callout { padding: var(--unit-3) var(--unit-4); border-radius: var(--unit-2); border-left: 4px solid; }
 .callout-error { background: var(--issue-soft); border-color: var(--issue); color: var(--issue-text); }
@@ -67,6 +48,14 @@
   display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: var(--unit-3);
   background: rgb(248 101 23 / 0.08); color: var(--accent-text); font-size: var(--text-lg); font-weight: 600;
 }
-.sidebar { overflow-x: hidden; }
-.sb-screen-head { min-width: 0; }
-.sb-screen-head > * { max-width: 100%; }
+
+/* ── URL 담기 창의 막대 ── */
+.snap-body { overflow: hidden; }
+.snap-bar {
+  display: flex; align-items: center; gap: var(--unit-2); height: var(--unit-14); padding: 0 var(--unit-3);
+  background: var(--bg-panel); border-bottom: 1px solid var(--border);
+}
+.snap-url { flex: 1; min-width: 0; }
+.snap-url .input { height: var(--unit-9); padding: 0 var(--unit-3); }
+.snap-count { white-space: nowrap; }
+.snap-error { color: var(--issue-text); font-size: var(--text-xs); max-width: 320px; }

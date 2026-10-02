@@ -1,22 +1,23 @@
-/* Bethlehem 렌더러 — Manna 화면 틀에 작성 기능(화면 목록·등록·열기)을 끼운다 */
+/* Bethlehem 렌더러 — Manna 화면 틀에 작성 기능(문서 열기·화면 등록·URL 담기)을 끼운다 */
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import 'pretendard/dist/web/variable/pretendardvariable.css';
 import '@manna/styles.css';
 import './bethlehem.css';
 import { App } from '@manna/App';
-import { askName, dirty, fileName, user } from '@manna/store';
 import icon from '@manna/assets/favicon.png';
+import { askName, dirty, fileName, user } from '@manna/store';
 import { ImportDialog } from './ImportDialog';
-import { handleDrop, host, importing } from './session';
-import { Sidebar } from './Sidebar';
+import { handleDrop, host, importing, urlAsk } from './session';
+import { DocTools, ScreenTools } from './Tools';
+import { UrlDialog } from './UrlDialog';
 import { Welcome } from './Welcome';
 
 function Bethlehem() {
   const [dropping, setDropping] = useState(false);
 
   useEffect(() => {
-    window.bethlehem.setState({ title: `${fileName.value ?? '새 문서'}${dirty.value ? ' •' : ''} — Bethlehem`, dirty: dirty.value });
+    window.bethlehem.setState({ title: `${fileName.value ?? '새 문서'}${dirty.value ? ' •' : ''} — 테라리움`, dirty: dirty.value });
   }, [fileName.value, dirty.value]);
 
   useEffect(() => {
@@ -44,9 +45,10 @@ function Bethlehem() {
 
   return (
     <>
-      <App host={host} sidebar={<Sidebar />} empty={<Welcome />} />
+      <App host={host} start={<DocTools />} screenTools={<ScreenTools />} empty={<Welcome />} />
       {importing.value && <ImportDialog key={importing.value.dir + importing.value.screenId} target={importing.value} />}
-      {dropping && <div class="drop-veil">화면 폴더나 Manna 문서를 놓으세요</div>}
+      {urlAsk.value && <UrlDialog screenId={urlAsk.value.screenId} />}
+      {dropping && <div class="drop-veil">화면 폴더나 테라리움 문서를 놓으세요</div>}
     </>
   );
 }

@@ -43,7 +43,10 @@ export interface ScreenVersion {
   v: number;
   label?: string;
   createdAt: string;
+  /** 시작 파일. 패키지 경로('index.html') 또는 URL 스냅샷이면 원래 페이지 URL */
   entry: string;
+  /** URL 로 담은 화면이면 어떻게 담았는지 */
+  source?: { url: string; mode: 'live' | 'static'; at: string };
   viewport: Viewport;
   files: Record<string, FileEntry>;
   external: ExternalEntry[];
@@ -52,16 +55,11 @@ export interface ScreenVersion {
 export interface Screen {
   id: string;
   title: string;
-  description?: { sha: string; name: string };
+  /** 화면 설명 — 마크다운. README 를 가져오면 한 번 복사된 뒤로는 문서의 텍스트다 */
+  notes: string;
   versions: ScreenVersion[];
   annotations: Annotation[];
 }
-
-export const KINDS = ['설명', '요청', '질문', '이슈'] as const;
-export type Kind = (typeof KINDS)[number];
-
-export const STATUSES = ['열림', '진행 중', '완료', '보류'] as const;
-export type Status = (typeof STATUSES)[number];
 
 export interface Fingerprint {
   id?: string;
@@ -88,12 +86,34 @@ export interface Anchor {
   trail: string[];
   /** 계산된 스타일 (개발자용) */
   props?: Record<string, string>;
+  /** 화면을 연 뒤 달기 전까지의 클릭 — 다른 화면 상태에 있는 대상으로 돌아갈 때 다시 누른다 */
+  path?: Step[];
+}
+
+/** 화면 위 클릭 한 번 — 요소 지문과 요소 안의 상대 위치(0~1). 캔버스 위 클릭도 다시 낼 수 있다 */
+export interface Step {
+  fp: Fingerprint;
+  x: number;
+  y: number;
+}
+
+/** 녹화한 움직임 클립 (webm) */
+export interface Clip {
+  id: string;
+  sha: string;
+  type: string;
+  ms: number;
+  w: number;
+  h: number;
+  author: string;
+  at: string;
 }
 
 export interface Reply {
   id: string;
   author: string;
   at: string;
+  /** 마크다운 */
   body: string;
 }
 
@@ -107,20 +127,22 @@ export interface Change {
 
 export interface Annotation {
   id: string;
-  /** 표시 번호. 수신자가 새로 단 항목은 null — 병합 때 번호를 받는다 */
-  no: number | null;
+  /** 번호는 따로 두지 않는다 — 화면 버전 안에서의 순서가 곧 번호다 (끌어서 바꾼다) */
   version: number;
-  anchor: Anchor;
-  kind: Kind;
-  status: Status;
-  assignee?: string;
+  /** 없으면 화면 전체에 단 Comment (녹화 클립 등) */
+  anchor?: Anchor;
+  /** 마크다운. 할 일은 - [ ] 체크박스로 */
   body: string;
+  clips?: Clip[];
   author: string;
   createdAt: string;
   updatedAt: string;
   replies: Reply[];
   history: Change[];
 }
+
+export const MARKER_COLORS = ['auto', 'brand', 'black', 'white', 'blue', 'amber', 'red'] as const;
+export type MarkerColor = (typeof MARKER_COLORS)[number];
 
 export interface Participant {
   name: string;
@@ -136,6 +158,8 @@ export interface MannaDoc {
     version: string;
     createdAt: string;
     updatedAt: string;
+    /** 마커 색. 기본 auto — 마커 아래 배경 밝기에 따라 어둡게/밝게 */
+    marker?: MarkerColor;
   };
   changelog: { version: string; date: string; author: string; note: string }[];
   participants: Participant[];
