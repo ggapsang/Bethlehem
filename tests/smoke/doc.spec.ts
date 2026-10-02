@@ -175,7 +175,7 @@ export const docSpecs: Spec[] = [
   {
     name: 'doc-save',
     kind: 'doc',
-    files: [/^packages\/manna\/src\/(host|idb)\.ts$/, /^packages\/core\/src\/(manna-file|merge)\.ts$/],
+    files: [/^packages\/manna\/src\/(host|idb|store)\.ts$/, /^packages\/manna\/src\/stage\/ScreenTabs\.tsx$/, /^packages\/core\/src\/(manna-file|merge)\.ts$/],
     async run() {
       const { page, f } = await openDoc();
       await ctrlPick(page, await pagePoint(page, f, '#tabB'));
@@ -195,6 +195,7 @@ export const docSpecs: Spec[] = [
       const { doc: nd, blobs } = parseManna(readFileSync(DOC, 'utf8'));
       nd.meta.updatedAt = new Date(Date.parse(nd.meta.updatedAt) + 1000).toISOString();
       const t = nd.meta.updatedAt;
+      nd.screens.push({ ...JSON.parse(JSON.stringify(nd.screens[0])), id: 'SCR-002', title: '새 판에 더한 화면', annotations: [] });
       nd.screens[0].annotations.push({ id: 'author-new', version: nd.screens[0].versions.at(-1)!.v, title: '작성자 새 Comment', body: '', author: '기획자', createdAt: t, updatedAt: t, replies: [], history: [] });
       const newer = join(OUT, 'smoke-newer.terr.html');
       writeFileSync(newer, serializeManna(nd, blobs, { js: readFileSync('out/manna/manna-runtime.js', 'utf8'), css: readFileSync('out/manna/manna-runtime.css', 'utf8') }));
@@ -203,6 +204,8 @@ export const docSpecs: Spec[] = [
       await screenFrame(p2);
       await p2.waitForTimeout(1500);
       const names = await p2.$$eval('.card .card-name', (els) => els.map((e) => e.textContent ?? ''));
+      const tabIds = await p2.$$eval('.tabs .tab', (t) => t.map((x) => (x as HTMLElement).dataset.id));
+      check('새 판에 더해진 화면은 저절로 탭으로 열린다 (이 브라우저가 기억한 탭에 없어도)', tabIds.includes('SCR-002'), JSON.stringify(tabIds));
       check('새 판을 열면 작성자의 새 Comment 가 보이고, 이 브라우저에서 단 것도 합쳐진다', names.includes('작성자 새 Comment') && names.some((n) => n.includes('저장 확인')), JSON.stringify(names));
     },
   },

@@ -249,15 +249,26 @@ export function loadDocument(d: MannaDoc, b: BlobStore, name: string | null = nu
   doc.value = d;
   fileName.value = name;
   lastVer.clear();
+  /* 열어 둔 탭 — 이 브라우저에 { open, known } 로 기억한다.
+     지난번에 없던 화면(작성자가 새 판에 더한 화면)은 저절로 탭으로 연다. 기억이 없으면 모든 화면 */
   let tabs: string[] = [];
+  let known: string[] | null = null;
   try {
-    tabs = (JSON.parse(lsGet(LS.tabs(d.id)) ?? '[]') as string[]).filter((id) => d.screens.some((s) => s.id === id));
+    const saved = JSON.parse(lsGet(LS.tabs(d.id)) ?? 'null') as string[] | { open: string[]; known: string[] } | null;
+    if (Array.isArray(saved)) tabs = saved; // 예전 형식 — 무엇을 알았는지 몰라 모든 화면을 새로 친다
+    else if (saved) {
+      tabs = saved.open;
+      known = saved.known;
+    }
   } catch {
-    /* 기록이 깨졌다 — 첫 화면만 */
+    /* 기록이 깨졌다 — 처음처럼 */
   }
+  tabs = tabs.filter((id) => d.screens.some((s) => s.id === id));
+  const fresh = d.screens.map((s) => s.id).filter((id) => !tabs.includes(id) && (!known || !known.includes(id)));
+  tabs = [...tabs, ...fresh];
   const first = d.screens.find((s) => s.id === tabs[0]) ?? d.screens[0];
-  // 처음 여는 문서면 모든 화면을 탭으로 — 받은 사람이 어떤 화면이 있는지 바로 본다
-  openTabs.value = tabs.length ? tabs : d.screens.map((s) => s.id);
+  openTabs.value = tabs;
+  if (d.screens.length) saveTabs();
   screenId.value = first?.id ?? null;
   versionNo.value = first ? latest(first).v : null;
   zoom.value = null;
@@ -279,7 +290,7 @@ export function addBlobs(entries: Iterable<[string, EncodedBlob]>): void {
 const lastVer = new Map<string, number>();
 
 function saveTabs(): void {
-  lsSet(LS.tabs(doc.peek().id), JSON.stringify(openTabs.peek()));
+  lsSet(LS.tabs(doc.peek().id), JSON.stringify({ open: openTabs.peek(), known: doc.peek().screens.map((s) => s.id) }));
 }
 
 export function selectScreen(id: string, v?: number): void {

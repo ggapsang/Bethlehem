@@ -120,10 +120,11 @@ function ScreenList({ openIds }: { openIds: string[] }) {
         aria-haspopup="true"
         aria-expanded={open}
         aria-label="화면 목록"
-        title={`화면 목록 (${screens.length})`}
+        title={`화면 목록 (${screens.length})${screens.length > openIds.length ? ` — 탭으로 안 연 화면 ${screens.length - openIds.length}` : ''}`}
         onClick={() => setOpen(!open)}
       >
         <ChevronDown {...ICON} />
+        {screens.length > openIds.length && <span class="tab-more">+{screens.length - openIds.length}</span>}
       </button>
       {open && (
         <div class="popover" role="menu" aria-label="화면 목록">
