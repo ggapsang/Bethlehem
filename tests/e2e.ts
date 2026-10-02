@@ -139,7 +139,9 @@ async function main() {
   await page.mouse.move(b.x, b.y, { steps: 4 });
   await page.mouse.up();
   await page.waitForSelector('.composer');
-  check('드래그는 영역으로 잡힌다', ((await page.textContent('.composer .mono')) ?? '') === '영역');
+  const regionLabel = (await page.textContent('.composer .mono')) ?? '';
+  check('드래그는 캔버스 안의 영역으로 잡힌다', regionLabel === 'canvas#fabCv 안의 영역', regionLabel);
+  check('작성 창이 대상 옆 팝업으로 뜬다', !!(await page.$('.popover-card .composer')) && !(await page.$('.panel .composer')));
   await typeComposer(page, 'BAY-4 구역 — **경고 색** 대비가 약함');
   await page.click('.composer .btn-primary');
   await page.waitForTimeout(400);
@@ -183,10 +185,11 @@ async function main() {
 
   console.log('\n[6] 체크박스');
   await page.click('.cards > .card:nth-child(2) .card-title');
-  await page.waitForSelector('.cards > .card:nth-child(2) .detail .cm-task');
-  await page.click('.cards > .card:nth-child(2) .detail .cm-task');
+  await page.waitForSelector('.popover-card .detail .cm-task');
+  await page.click('.popover-card .detail .cm-task');
   await page.waitForTimeout(200);
-  check('체크박스를 누르면 [x] 로 바뀐다', await page.$eval('.cards > .card:nth-child(2) .detail .cm-task', (el) => (el as HTMLInputElement).checked));
+  check('팝업의 체크박스를 누르면 [x] 로 바뀐다', await page.$eval('.popover-card .detail .cm-task', (el) => (el as HTMLInputElement).checked));
+  check('패널 카드에도 반영된다', await page.$eval('.cards > .card:nth-child(2) .card-body .cm-task', (el) => (el as HTMLInputElement).checked));
 
   console.log('\n[7] 다른 화면 상태로 이동');
   await f.click('#tabB');
@@ -222,8 +225,8 @@ async function main() {
   await page.waitForSelector('.btn-icon.is-rec');
   await page.waitForTimeout(1500);
   await page.click('button[aria-label="녹화 멈추기"]');
-  await page.waitForSelector('.card.is-sel .clip video', { timeout: 10000 }).catch(() => {});
-  const dur = await page.$eval('.card.is-sel .clip video', async (v) => {
+  await page.waitForSelector('.popover-card .clip video', { timeout: 10000 }).catch(() => {});
+  const dur = await page.$eval('.popover-card .clip video', async (v) => {
     const el = v as HTMLVideoElement;
     if (el.readyState < 1) await new Promise((r) => el.addEventListener('loadedmetadata', r, { once: true }));
     return el.videoWidth;
@@ -278,6 +281,15 @@ async function main() {
   await page2.waitForTimeout(100);
   check('다크 테마로 바뀐다', (await page2.getAttribute('html', 'data-theme')) === 'dark');
   await page2.screenshot({ path: resolve(OUT, '4-dark-v1.png') });
+
+  console.log('\n[12] 라이브 문서 — 저장을 누르지 않아도');
+  const page3 = await ctx.newPage();
+  await page3.goto(pathToFileURL(DOC).href); // 처음 받은 원본을 다시 연다
+  await screenFrame(page3);
+  await page3.waitForTimeout(1500);
+  check('이 브라우저에 남은 변경이 이어서 열린다 (Comment 3개)', (await cardCount(page3)) === 3, `${await cardCount(page3)}개`);
+  check('자동 저장 상태가 보인다', ((await page3.textContent('.save-status')) ?? '').length > 0, (await page3.textContent('.save-status')) ?? '');
+  check('저장과 다른 이름으로 저장이 따로 있다', !!(await page3.$('.split-main')) && !!(await page3.$('button[aria-label="다른 이름으로 저장"]')));
 
   const real = errors.filter((e) => !/favicon|ERR_FILE_NOT_FOUND/.test(e));
   check('페이지 오류가 없다', real.length === 0, real.slice(0, 3).join(' | '));

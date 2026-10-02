@@ -37,7 +37,10 @@ export function scriptSafeJs(js: string): string {
 export function referencedShas(doc: MannaDoc): Set<string> {
   const used = new Set<string>();
   for (const s of doc.screens) {
-    for (const a of s.annotations) for (const c of a.clips ?? []) used.add(c.sha);
+    for (const a of s.annotations) {
+      for (const c of a.clips ?? []) used.add(c.sha);
+      if (a.shot) used.add(a.shot.sha);
+    }
     for (const v of s.versions) {
       for (const f of Object.values(v.files)) used.add(f.sha);
       for (const e of v.external) if (e.sha && !e.excluded) used.add(e.sha);

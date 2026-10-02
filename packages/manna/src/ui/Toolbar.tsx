@@ -1,16 +1,17 @@
 /* 툴바 — 문서·화면·버전, 피커, 일시정지, 녹화, 마커 색, 되돌리기, 패널·전체화면, 테마, 저장 */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
-  Circle, Crosshair, Maximize2, Moon, MousePointer2, PanelRight, Pause, Play, Redo2, Save, Square, Sun, Undo2, UserRound,
+  Circle, Crosshair, FilePlus2, Maximize2, Moon, MousePointer2, PanelRight, Pause, Play, Redo2, Save, Square, Sun, Undo2, UserRound,
 } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
 import type { MarkerColor } from '@core';
 import { MARKER_COLORS } from '@core';
 import { setMarkerColor, toggleRecording } from '../actions';
 import type { Host } from '../host';
-import { save } from '../host';
+import { canConnectFile, connectFile, save } from '../host';
+import { ago } from './labels';
 import {
-  askName, canRedo, canUndo, dirty, doc, rev, draft, mode, mutate, panelOpen, paused, recording, redo, screen, selectScreen,
+  askName, canRedo, canUndo, dirty, doc, rev, saveState, draft, mode, mutate, panelOpen, paused, recording, redo, screen, selectScreen,
   setTheme, theme, togglePanel, undo, user, version,
 } from '../store';
 import { Logo } from './Logo';
@@ -127,11 +128,41 @@ export function Toolbar({ host, start, screenTools }: ToolbarProps) {
         <button type="button" class="btn btn-ghost tb-user" onClick={() => (askName.value = true)} title="내 이름 바꾸기">
           <UserRound {...ICON} size={16} /> {user.value ?? '이름 입력'}
         </button>
-        <button type="button" class="btn btn-primary" onClick={() => save(host)} title="저장 (Ctrl+S)">
-          <Save {...ICON} size={16} /> 저장{dirty.value && <span class="dirty-dot" aria-label="저장 안 된 변경 있음" />}
-        </button>
+        <SaveStatus host={host} />
+        <div class="split">
+          <button type="button" class="btn btn-primary split-main" onClick={() => save(host, false)} title="저장 (Ctrl+S) — 고치면 자동으로도 저장됩니다">
+            <Save {...ICON} size={16} /> 저장
+          </button>
+          <button type="button" class="btn btn-primary split-more" onClick={() => save(host, true)} title="다른 이름으로 저장 (Ctrl+Shift+S)" aria-label="다른 이름으로 저장">
+            <FilePlus2 {...ICON} size={16} />
+          </button>
+        </div>
       </div>
     </header>
+  );
+}
+
+/** 자동 저장 상태 — 어디까지 저장됐는지 */
+function SaveStatus({ host }: { host: Host }) {
+  const st = saveState.value;
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
+  const when = st.at ? ago(new Date(st.at).toISOString()) : '';
+  let text = '';
+  if (st.kind === 'pending' || st.kind === 'saving' || dirty.value) text = '저장하는 중…';
+  else if (st.kind === 'saved') text = `자동 저장됨${when ? ` · ${when}` : ''}`;
+  else if (st.kind === 'local') text = '이 브라우저에 저장됨';
+  else if (st.kind === 'error') text = '저장하지 못함';
+  return (
+    <span class={`save-status st-${st.kind}`} title={st.message ?? st.where ?? ''}>
+      {text}
+      {host.kind === 'manna' && st.kind === 'local' && canConnectFile() && (
+        <button type="button" class="link-btn" onClick={() => connectFile()} title="이 문서 파일을 한 번 지정하면 그 뒤로는 파일에도 자동으로 저장됩니다">파일에도 자동 저장</button>
+      )}
+    </span>
   );
 }
 

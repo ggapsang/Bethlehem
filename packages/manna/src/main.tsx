@@ -4,8 +4,8 @@ import type { BlobEnc, BlobStore, MannaDoc } from '@core';
 import { decodeBlob } from '@core';
 import { App } from './App';
 import favicon from './assets/favicon.png';
-import { browserHost } from './host';
-import { askName, loadDocument, notify, user } from './store';
+import { browserHost, browserResume } from './host';
+import { askName, blobs as liveBlobs, dirty, loadDocument, notify, user } from './store';
 import './styles.css';
 
 function readDocument(): { doc: MannaDoc; blobs: BlobStore } {
@@ -49,6 +49,13 @@ function boot(): void {
     const own = location.protocol === 'file:' ? decodeURIComponent(location.pathname.split('/').pop() ?? '') : '';
     loadDocument(doc, blobs, own || null);
     render(<App host={browserHost} />, root);
+    // 이 브라우저에 남은 초안이 더 새것이면 이어서 연다
+    browserResume((d, extra) => {
+      const b = new Map(liveBlobs);
+      for (const [sha, v] of extra) b.set(sha, v);
+      loadDocument(d, b, own || null);
+      dirty.value = true;
+    }).catch(() => {});
     if (!user.value) askName.value = true;
     adoptPretendard(doc, blobs).catch(() => {});
   } catch (e) {

@@ -49,13 +49,7 @@
   background: rgb(248 101 23 / 0.08); color: var(--accent-text); font-size: var(--text-lg); font-weight: 600;
 }
 
-/* ── URL 담기 창의 막대 ── */
-.snap-body { overflow: hidden; }
-.snap-bar {
-  display: flex; align-items: center; gap: var(--unit-2); height: var(--unit-14); padding: 0 var(--unit-3);
-  background: var(--bg-panel); border-bottom: 1px solid var(--border);
-}
-.snap-url { flex: 1; min-width: 0; }
-.snap-url .input { height: var(--unit-9); padding: 0 var(--unit-3); }
-.snap-count { white-space: nowrap; }
-.snap-error { color: var(--issue-text); font-size: var(--text-xs); max-width: 320px; }
+.tb-place { max-width: 220px; font-weight: 600; color: var(--text-primary); }
+.tb-returned { color: var(--accent-text); background: var(--accent-soft); }
+.popover-returned { gap: var(--unit-3); align-items: center; cursor: default; }
+.popover-returned > .grow { display: flex; flex-direction: column; min-width: 0; }

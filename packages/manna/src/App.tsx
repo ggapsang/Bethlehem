@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { Crosshair, Minimize2, MousePointer2, PanelRight, Pause, Play } from 'lucide-preact';
 import type { Host } from './host';
+import { flushAutosave, scheduleAutosave } from './host';
 import { onKeyDown, onKeyUp, setKeyHost } from './keys';
 import { Stage } from './stage/Stage';
 import {
@@ -33,22 +34,40 @@ export function App({ host, start, screenTools, empty }: AppProps) {
     setKeyHost(host);
     const down = (e: KeyboardEvent) => onKeyDown(e);
     const blur = () => (holdPick.value = false);
+    // Ctrl 을 뗀 신호를 놓쳐도(포커스가 화면과 오가는 사이) 마우스가 Ctrl 없이 움직이면 피커를 끈다
+    const mods = (e: PointerEvent) => holdPick.peek() && !e.ctrlKey && !e.metaKey && !e.buttons && (holdPick.value = false);
     const onLeave = (e: BeforeUnloadEvent) => {
-      if (host.kind === 'manna' && dirty.peek()) e.preventDefault();
+      if (host.kind === 'manna' && dirty.peek()) {
+        flushAutosave(host);
+        e.preventDefault();
+      }
     };
     const onFs = () => (fullscreen.value = !!document.fullscreenElement);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', blur);
+    window.addEventListener('pointermove', mods, true);
     window.addEventListener('beforeunload', onLeave);
     document.addEventListener('fullscreenchange', onFs);
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', blur);
+      window.removeEventListener('pointermove', mods, true);
       window.removeEventListener('beforeunload', onLeave);
       document.removeEventListener('fullscreenchange', onFs);
     };
+  }, [host]);
+
+  /* 라이브 문서 — 고치면 잠시 뒤 저장한다 */
+  const r = rev.value;
+  useEffect(() => {
+    if (dirty.peek()) scheduleAutosave(host);
+  }, [r]);
+  useEffect(() => {
+    const hide = () => document.visibilityState === 'hidden' && flushAutosave(host);
+    document.addEventListener('visibilitychange', hide);
+    return () => document.removeEventListener('visibilitychange', hide);
   }, [host]);
 
   const full = fullscreen.value;
@@ -60,7 +79,7 @@ export function App({ host, start, screenTools, empty }: AppProps) {
       {!full && <Toolbar host={host} start={start} screenTools={screenTools} />}
       <div class="workspace" style={{ gridTemplateColumns: showPanel ? `1fr auto ${width}px` : '1fr' }}>
         <main class="main">
-          <Stage empty={empty ?? <p class="muted">이 문서에는 아직 화면이 없습니다.</p>} />
+          <Stage host={host} empty={empty ?? <p class="muted">이 문서에는 아직 화면이 없습니다.</p>} />
           {full && <FloatingBar />}
         </main>
         {showPanel && <Splitter />}
@@ -69,7 +88,20 @@ export function App({ host, start, screenTools, empty }: AppProps) {
       {askName.value && <NameDialog host={host} />}
       {toast.value && (
         <div class={`toast toast-${toast.value.tone}`} role={toast.value.tone === 'error' ? 'alert' : 'status'}>
-          {toast.value.text}
+          <span>{toast.value.text}</span>
+          {toast.value.action && (
+            <button
+              type="button"
+              class="toast-btn"
+              onClick={() => {
+                const a = toast.value?.action;
+                toast.value = null;
+                a?.run();
+              }}
+            >
+              {toast.value.action.label}
+            </button>
+          )}
         </div>
       )}
     </div>

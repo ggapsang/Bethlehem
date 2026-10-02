@@ -1,29 +1,27 @@
 /* 오른쪽 패널 — 위에 화면 개요(마크다운), 아래에 Comment 목록. 한 스크롤로 이어진다 */
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { ChevronDown, ChevronRight, EyeOff, Film, GripVertical, MessageSquare, Plus, Trash2, X } from 'lucide-preact';
-import type { Annotation, Clip, Screen } from '@core';
-import { decodeBlob, displayNo } from '@core';
-import {
-  addFromDraft, addReply, addScreenComment, editBody, editNotes, editReply, removeClip, removeComment, reorder,
-} from '../actions';
+import { Camera, ChevronDown, ChevronRight, EyeOff, Film, GripVertical, MessageSquare, Plus } from 'lucide-preact';
+import type { Annotation, Screen } from '@core';
+import { displayNo } from '@core';
+import { addScreenComment, editBody, editNotes, reorder } from '../actions';
 import type { Host } from '../host';
 import {
-  annotations, blobs, draft, hovered, notesOpen, requestReveal, rev, screen, selected, toggleNotes, user, visible,
+  annotations, hovered, notesOpen, requestReveal, rev, screen, selected, toggleNotes, visible,
 } from '../store';
 import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
-import { ago, anchorLabel } from './labels';
+import { ago } from './labels';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
-export function Panel({ host }: { host: Host }) {
+export function Panel(_props: { host: Host }) {
   const scr = screen.value;
   if (!scr) return <aside class="panel" aria-label="개요와 Comment" />;
   return (
     <aside class="panel" aria-label="개요와 Comment">
       <div class="panel-scroll">
         <Notes scr={scr} />
-        <Comments scr={scr} host={host} />
+        <Comments scr={scr} />
       </div>
     </aside>
   );
@@ -55,7 +53,7 @@ function Notes({ scr }: { scr: Screen }) {
   );
 }
 
-function Comments({ scr, host }: { scr: Screen; host: Host }) {
+function Comments({ scr }: { scr: Screen }) {
   const list = annotations.value;
   const listRef = useRef<HTMLOListElement>(null);
   const [drag, setDrag] = useState<{ id: string; to: number; y: number } | null>(null);
@@ -100,15 +98,14 @@ function Comments({ scr, host }: { scr: Screen; host: Host }) {
           <Plus {...ICON} />
         </button>
       </div>
-      {draft.value && <Composer key="composer" />}
-      {!list.length && !draft.value && (
+      {!list.length && (
         <p class="panel-empty muted">Ctrl 을 누른 채 화면의 요소를 클릭하거나, 드래그해 영역을 잡으세요.</p>
       )}
       <ol class="cards" ref={listRef}>
         {list.map((a) => (
           <Fragment key={a.id}>
             {lineBefore === a.id && <li class="drop-line" aria-hidden="true" />}
-            <Card a={a} scr={scr} host={host} onGrip={startDrag} dragging={drag?.id === a.id} />
+            <Card a={a} scr={scr} onGrip={startDrag} dragging={drag?.id === a.id} />
           </Fragment>
         ))}
         {drag && drag.to >= others.length && <li class="drop-line" aria-hidden="true" />}
@@ -122,7 +119,7 @@ function Comments({ scr, host }: { scr: Screen; host: Host }) {
   );
 }
 
-function Card({ a, scr, host, onGrip, dragging }: { a: Annotation; scr: Screen; host: Host; onGrip: (e: PointerEvent, id: string) => void; dragging?: boolean }) {
+function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip: (e: PointerEvent, id: string) => void; dragging?: boolean }) {
   rev.value;
   const sel = selected.value === a.id;
   const shown = !a.anchor || visible.value.has(a.id);
@@ -154,6 +151,7 @@ function Card({ a, scr, host, onGrip, dragging }: { a: Annotation; scr: Screen; 
           {!a.anchor && <span class="chip">화면 전체</span>}
           {!shown && <span class="chip chip-hint" title="다른 화면 상태에 있습니다. 누르면 그 상태로 이동합니다."><EyeOff {...ICON} size={12} /> 다른 상태</span>}
           <span class="grow" />
+          {a.shot && <span class="badge-icon" title="달 때의 화면이 함께 저장되어 있습니다"><Camera {...ICON} size={14} /></span>}
           {(a.clips?.length ?? 0) > 0 && <span class="badge-icon"><Film {...ICON} size={14} /> {a.clips!.length}</span>}
           {a.replies.length > 0 && <span class="badge-icon"><MessageSquare {...ICON} size={14} /> {a.replies.length}</span>}
         </button>
@@ -163,140 +161,11 @@ function Card({ a, scr, host, onGrip, dragging }: { a: Annotation; scr: Screen; 
           <span class="clamp">{plainText(a.body)}</span>
         </button>
       )}
-      {sel && <Detail a={a} host={host} />}
-    </li>
-  );
-}
-
-function Detail({ a, host }: { a: Annotation; host: Host }) {
-  rev.value; // 문서는 제자리에서 고치므로 props 가 같아도 다시 그려야 한다 (signals 의 얕은 비교를 피한다)
-  const me = user.value ?? '';
-  const mine = a.author === me || host.author;
-  const reply = useRef('');
-  const [replyKey, setReplyKey] = useState(0);
-
-  const send = () => {
-    if (!reply.current.trim()) return;
-    addReply(a, reply.current);
-    reply.current = '';
-    setReplyKey((k) => k + 1);
-  };
-
-  return (
-    <div class="detail">
-      <MarkdownEditor
-        key={a.id}
-        value={a.body}
-        editable={mine}
-        allowCheck
-        minRows={6}
-        autoFocus={mine && !a.body}
-        onChange={(t) => editBody(a, t)}
-        placeholder={mine ? 'Comment — 마크다운' : ''}
-        label={`${a.id} Comment 본문`}
-        class="body-editor"
-      />
-      {(a.clips ?? []).map((c) => <ClipView key={c.id} clip={c} canRemove={c.author === me || host.author} onRemove={() => removeClip(a, c.id)} />)}
-      {a.anchor && (
-        <p class="muted small ellipsis" title={a.anchor.fp.selector}>
-          <code>{anchorLabel(a.anchor.fp, false)}</code>{a.anchor.region ? ' 안의 영역' : ''}
-        </p>
-      )}
-      {a.replies.length > 0 && (
-        <ol class="replies">
-          {a.replies.map((r) => (
-            <li key={r.id} class="reply">
-              <span class="reply-meta">{r.author} · {ago(r.at)}</span>
-              <MarkdownEditor
-                value={r.body}
-                editable={r.author === me}
-                allowCheck
-                onChange={(t) => editReply(a, r.id, t)}
-                label="답글"
-              />
-            </li>
-          ))}
-        </ol>
-      )}
-      <div class="reply-box">
-        <MarkdownEditor
-          key={replyKey}
-          value=""
-          minRows={2}
-          onChange={(t) => (reply.current = t)}
-          onSubmit={send}
-          placeholder="답글 — 마크다운 (Ctrl+Enter)"
-          label="답글 쓰기"
-          class="reply-editor"
-        />
-        <div class="row">
-          {mine && (
-            <button type="button" class="btn btn-ghost btn-danger" onClick={() => confirm('이 Comment 를 지울까요? 답글도 함께 지워집니다. (Ctrl+Z 로 되돌릴 수 있습니다)') && removeComment(a)}>
-              <Trash2 {...ICON} /> 삭제
-            </button>
-          )}
-          <span class="grow" />
-          <button type="button" class="btn btn-secondary" onClick={send}>답글</button>
+      {sel && a.body && (
+        <div class="card-body">
+          <MarkdownEditor value={a.body} editable={false} allowCheck onChange={(t) => editBody(a, t)} label="Comment 본문" />
         </div>
-      </div>
-    </div>
-  );
-}
-
-const clipUrls = new Map<string, string>();
-
-function ClipView({ clip, canRemove, onRemove }: { clip: Clip; canRemove: boolean; onRemove: () => void }) {
-  const [src, setSrc] = useState<string | null>(clipUrls.get(clip.sha) ?? null);
-  useEffect(() => {
-    if (src) return;
-    const b = blobs.get(clip.sha);
-    if (!b) return;
-    decodeBlob(b).then((bytes) => {
-      const u = URL.createObjectURL(new Blob([bytes as BlobPart], { type: clip.type }));
-      clipUrls.set(clip.sha, u);
-      setSrc(u);
-    });
-  }, [clip.sha]);
-  return (
-    <figure class="clip">
-      {src ? <video src={src} controls loop muted playsInline style={{ aspectRatio: `${clip.w} / ${clip.h}` }} /> : <div class="clip-missing">클립을 불러오는 중…</div>}
-      <figcaption class="row muted small">
-        <Film {...ICON} size={14} /> {(clip.ms / 1000).toFixed(1)}초 · {clip.author}
-        <span class="grow" />
-        {canRemove && <button type="button" class="btn-icon btn-xs" aria-label="클립 지우기" onClick={onRemove}><X {...ICON} size={14} /></button>}
-      </figcaption>
-    </figure>
-  );
-}
-
-function Composer() {
-  const d = draft.value!;
-  const text = useRef('');
-  const add = () => addFromDraft(text.current);
-  return (
-    <div class="composer" role="form" aria-label="새 Comment">
-      <div class="row">
-        <strong>새 Comment</strong>
-        <span class="muted mono ellipsis">{d.region ? '영역' : d.el.tagName.toLowerCase()}</span>
-        <span class="grow" />
-        <button type="button" class="btn-icon btn-xs" aria-label="취소" onClick={() => (draft.value = null)}><X {...ICON} /></button>
-      </div>
-      <MarkdownEditor
-        value=""
-        minRows={6}
-        autoFocus
-        onChange={(t) => (text.current = t)}
-        onSubmit={add}
-        onEscape={() => (draft.value = null)}
-        placeholder="마크다운 — Ctrl+Enter 로 추가, Esc 취소"
-        label="새 Comment 본문"
-        class="body-editor"
-      />
-      <div class="row">
-        <span class="grow" />
-        <button type="button" class="btn btn-ghost" onClick={() => (draft.value = null)}>취소</button>
-        <button type="button" class="btn btn-primary" onClick={add}>추가</button>
-      </div>
-    </div>
+      )}
+    </li>
   );
 }

@@ -18,9 +18,9 @@ export default defineConfig({
   },
   preload: {
     build: {
-      // 메인 창(index)과 URL 담기 창의 막대(snapshot). sandbox 라 cjs 여야 한다
+      // 메인 창(index)과 URL 화면 webview(site). sandbox 라 cjs 여야 한다
       rollupOptions: {
-        input: { index: r('apps/bethlehem/preload/index.ts'), snapshot: r('apps/bethlehem/preload/snapshot.ts') },
+        input: { index: r('apps/bethlehem/preload/index.ts'), site: r('apps/bethlehem/preload/site.ts') },
         output: { format: 'cjs', entryFileNames: '[name].cjs' },
       },
     },
@@ -29,10 +29,6 @@ export default defineConfig({
     root: r('apps/bethlehem/renderer'),
     resolve: { alias },
     plugins: [preact()],
-    build: {
-      rollupOptions: {
-        input: { index: r('apps/bethlehem/renderer/index.html'), snapshot: r('apps/bethlehem/renderer/snapshot.html') },
-      },
-    },
+    build: { rollupOptions: { input: r('apps/bethlehem/renderer/index.html') } },
   },
 });

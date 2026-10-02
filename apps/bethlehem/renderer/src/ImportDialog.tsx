@@ -12,7 +12,7 @@ const api = window.bethlehem;
 export function ImportDialog({ target }: { target: ImportTarget }) {
   const existing = target.screenId ? doc.value.screens.find((s) => s.id === target.screenId) : undefined;
   const [scan, setScan] = useState<ScanResult | null>(null);
-  const [entry, setEntry] = useState<string | undefined>(undefined);
+  const [entry, setEntry] = useState<string | undefined>(target.entry);
   const [include, setInclude] = useState<Set<string>>(new Set());
   const [notesFrom, setNotesFrom] = useState<string>('');
   const [ext, setExt] = useState<Record<string, boolean>>({});
@@ -65,15 +65,17 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
     if (!scan) return;
     setBusy(Object.values(ext).some(Boolean) ? '굽는 중… 외부 리소스를 내려받고 있습니다' : '굽는 중…');
     try {
-      const r = await api.packFolder({
+      const opts = {
         dir: scan.dir,
         entry: scan.entry,
         include: [...include].filter((p) => p !== notesFrom),
         notesFrom: notesFrom || undefined,
         external: scan.external.map((url) => ({ url, excluded: !ext[url] })),
-        viewport: { w, h, fit: 'contain' },
-      });
-      applyImport(target.screenId, r, { title: title.trim() || scan.name, label: label.trim() || undefined, moveAnnotations: move });
+        viewport: { w, h, fit: 'contain' as const },
+      };
+      const r = await api.packFolder(opts);
+      // 원본 폴더와 계속 연결해 둔다 — 바뀌면 새 버전 등록을 권한다
+      applyImport(target.screenId, r, { title: title.trim() || scan.name, label: label.trim() || undefined, moveAnnotations: move }, opts);
       importing.value = null;
     } catch (err) {
       setBusy(null);

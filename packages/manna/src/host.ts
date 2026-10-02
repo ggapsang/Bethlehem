@@ -1,22 +1,38 @@
-/* 문서를 품은 쪽 — 브라우저(Manna)인지 Bethlehem 인지에 따라 저장 방식이 다르다 (docs/ARCHITECTURE.md §7.1) */
-import type { Runtime } from '@core';
-import { serializeManna } from '@core';
-import { blobs, dirty, doc, fileName, notify, user } from './store';
+/* 문서를 품은 쪽 — 브라우저(받은 문서)인지 Bethlehem 인지에 따라 저장 방식이 다르다 (docs/ARCHITECTURE.md §8)
+ * 저장은 둘 다 "라이브 문서"다 — 고치면 잠시 뒤 자동으로 저장된다. 저장 버튼은 지금 바로, 다른 이름으로는 사본.
+ */
+import type { EncodedBlob, ExternalEntry, MannaDoc, Runtime } from '@core';
+import { referencedShas, serializeManna } from '@core';
+import { idbGet, idbPut } from './idb';
+import { blobs, dirty, doc, fileName, notify, rev, saveState, user } from './store';
+
+export interface SiteSnap {
+  entry: string;
+  external: ExternalEntry[];
+  blobs: [string, EncodedBlob][];
+}
 
 export interface Host {
   kind: 'manna' | 'bethlehem';
-  /** 작성자 권한 — 번호 부여, 문서 정보 편집, 남의 항목 삭제 */
+  /** 작성자 권한 — 문서 정보 편집, 남의 항목 삭제 */
   author: boolean;
   runtime(): Promise<Runtime>;
-  /** 저장. 저장한 파일 이름을 돌려주고, 취소하면 null */
-  write(html: string, suggestedName: string, saveAs: boolean): Promise<string | null>;
+  /** 사용자가 누른 저장. saveAs 면 다른 이름으로 */
+  save(saveAs: boolean): Promise<boolean>;
+  /** 고친 뒤 잠시 후 자동으로 불린다 */
+  autosave(): Promise<void>;
+  /** 창 안의 영역을 그림으로 (Bethlehem: capturePage). 없으면 피커 멈춤 그림과 Comment shot 이 없다 */
+  capture?(rect: { x: number; y: number; width: number; height: number }): Promise<{ bytes: Uint8Array; w: number; h: number } | null>;
+  /** URL 화면을 실시간으로 띄울 수 있으면 (Bethlehem 의 webview). 없으면 담아 둔 사본을 띄운다 */
+  site?: { partition: string };
+  /** 실시간 사이트의 지금 모습을 보낸 파일용 사본으로 */
+  snapshotSite?(guestId: number): Promise<SiteSnap | null>;
 }
 
 const safe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '_').trim();
 
 /** 테라리움 문서 확장자 — 브라우저가 바로 여는 .html 앞에 .terr 를 붙인다 */
 export const EXT = '.terr.html';
-
 const HTML_EXT = /(\.terr)?\.html?$/i;
 
 export function withExt(name: string): string {
@@ -34,29 +50,67 @@ export function suggestedName(host: Host): string {
   return fileName.value ? withExt(fileName.value) : `${base}${EXT}`;
 }
 
+export async function buildHtml(host: Host): Promise<string> {
+  const d = doc.value;
+  if (host.kind === 'manna' && user.value) d.origin = { by: user.value, at: new Date().toISOString(), baseUpdatedAt: d.origin?.baseUpdatedAt ?? d.meta.updatedAt };
+  return serializeManna(d, blobs, await host.runtime());
+}
+
+/** 사용자가 누른 저장 — 결과를 알린다 */
 export async function save(host: Host, saveAs = false): Promise<boolean> {
   try {
-    const d = doc.value;
-    if (host.kind === 'manna' && user.value) d.origin = { by: user.value, at: new Date().toISOString(), baseUpdatedAt: d.origin?.baseUpdatedAt ?? d.meta.updatedAt };
-    const html = serializeManna(d, blobs, await host.runtime());
-    const name = await host.write(html, suggestedName(host), saveAs);
-    if (!name) return false;
-    fileName.value = name;
-    dirty.value = false;
-    notify(`저장했습니다 — ${name}`);
-    return true;
+    const ok = await host.save(saveAs);
+    return ok;
   } catch (e) {
+    saveState.value = { kind: 'error', message: (e as Error).message };
     notify(`저장하지 못했습니다: ${(e as Error).message}`, 'error');
     return false;
   }
 }
 
-/* ── 브라우저에서 연 Manna ─────────────────────────────────────────────── */
+/** 자동 저장 — 고친 뒤 조용해지면 (App 이 rev 를 보고 부른다) */
+let timer: ReturnType<typeof setTimeout> | undefined;
+let running: Promise<void> | null = null;
+export function scheduleAutosave(host: Host, delay = 1200): void {
+  clearTimeout(timer);
+  saveState.value = { ...saveState.value, kind: 'pending' };
+  timer = setTimeout(() => flushAutosave(host), delay);
+}
+export async function flushAutosave(host: Host): Promise<void> {
+  clearTimeout(timer);
+  if (running) await running;
+  if (!dirty.peek()) return;
+  const at = rev.peek();
+  running = (async () => {
+    try {
+      saveState.value = { ...saveState.value, kind: 'saving' };
+      await host.autosave();
+      if (rev.peek() === at) dirty.value = false;
+    } catch (e) {
+      saveState.value = { kind: 'error', message: (e as Error).message };
+    } finally {
+      running = null;
+    }
+  })();
+  await running;
+}
 
-type SaveHandle = { name: string; createWritable(): Promise<{ write(d: string): Promise<void>; close(): Promise<void> }> };
-type Picker = (o: object) => Promise<SaveHandle>;
+/* ── 브라우저에서 연 문서 ─────────────────────────────────────────────
+ * 브라우저는 열린 파일에 마음대로 쓸 수 없다. 그래서
+ *   1) 고칠 때마다 이 브라우저의 저장소(IndexedDB)에 초안을 남긴다 — 다시 열면 이어진다.
+ *   2) 파일을 한 번 지정하면(Chrome·Edge) 그 뒤로는 그 파일에도 자동으로 쓴다. 핸들도 기억해 다음에는 허용만 누르면 된다.
+ */
+type Writable = { write(d: string): Promise<void>; close(): Promise<void> };
+type FileHandle = {
+  name: string;
+  createWritable(): Promise<Writable>;
+  queryPermission?(o: object): Promise<string>;
+  requestPermission?(o: object): Promise<string>;
+};
+type Picker = (o: object) => Promise<FileHandle>;
 
-let handle: SaveHandle | null = null;
+let handle: FileHandle | null = null;
+let baseShas = new Set<string>();
 
 function download(html: string, name: string): void {
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
@@ -69,6 +123,62 @@ function download(html: string, name: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
+const picker = () => (window as unknown as { showSaveFilePicker?: Picker }).showSaveFilePicker;
+
+async function writeHandle(h: FileHandle, html: string): Promise<void> {
+  const w = await h.createWritable();
+  await w.write(html);
+  await w.close();
+}
+
+interface Draft {
+  doc: MannaDoc;
+  blobs: [string, EncodedBlob][];
+  savedAt: string;
+}
+
+/** 문서를 열 때 — 이 브라우저에 더 새 초안이 있으면 이어서, 기억한 파일 핸들이 있으면 다시 쓴다 */
+export async function browserResume(apply: (d: MannaDoc, extra: [string, EncodedBlob][]) => void): Promise<void> {
+  baseShas = new Set(blobs.keys());
+  const d = doc.peek();
+  const draft = await idbGet<Draft>('drafts', d.id);
+  if (draft && draft.doc.meta.updatedAt > d.meta.updatedAt) {
+    apply(draft.doc, draft.blobs);
+    notify(`이 브라우저에 남아 있던 변경(${new Date(draft.savedAt).toLocaleString('ko-KR')})을 이어서 엽니다.`);
+  }
+  const h = await idbGet<FileHandle>('handles', d.id);
+  if (h) {
+    const perm = await h.queryPermission?.({ mode: 'readwrite' }).catch(() => 'denied');
+    if (perm === 'granted') handle = h;
+    else {
+      handle = null;
+      pendingHandle = h;
+    }
+  }
+  saveState.value = { kind: handle ? 'saved' : 'local', where: handle?.name };
+}
+
+let pendingHandle: FileHandle | null = null;
+
+/** 저장 상태 표시의 "파일에도 저장" — 사용자가 누를 때만 권한을 물을 수 있다 */
+export async function connectFile(): Promise<void> {
+  if (pendingHandle?.requestPermission) {
+    const perm = await pendingHandle.requestPermission({ mode: 'readwrite' }).catch(() => 'denied');
+    if (perm === 'granted') {
+      handle = pendingHandle;
+      pendingHandle = null;
+      dirty.value = true;
+      await browserHost.autosave();
+      return;
+    }
+  }
+  await browserHost.save(true);
+}
+
+export function canConnectFile(): boolean {
+  return !!picker();
+}
+
 export const browserHost: Host = {
   kind: 'manna',
   author: false,
@@ -78,23 +188,45 @@ export const browserHost: Host = {
       css: document.getElementById('manna-style')?.textContent ?? '',
     };
   },
-  async write(html, name, saveAs) {
-    const picker = (window as unknown as { showSaveFilePicker?: Picker }).showSaveFilePicker;
-    if (picker) {
+  async autosave() {
+    const d = doc.peek();
+    const used = referencedShas(d);
+    const extra = [...blobs].filter(([sha]) => !baseShas.has(sha) && used.has(sha));
+    await idbPut('drafts', d.id, { doc: JSON.parse(JSON.stringify(d)), blobs: extra, savedAt: new Date().toISOString() } satisfies Draft);
+    if (handle) {
+      await writeHandle(handle, await buildHtml(browserHost));
+      saveState.value = { kind: 'saved', where: handle.name, at: Date.now() };
+    } else {
+      saveState.value = { kind: 'local', at: Date.now() };
+    }
+  },
+  async save(saveAs) {
+    const html = await buildHtml(browserHost);
+    const name = suggestedName(browserHost);
+    const pick = picker();
+    if (pick) {
       try {
         if (!handle || saveAs) {
-          handle = await picker({ suggestedName: name, types: [{ description: '테라리움 문서', accept: { 'text/html': ['.html'] } }] });
+          const h = await pick({ suggestedName: name, types: [{ description: '테라리움 문서', accept: { 'text/html': ['.html'] } }] });
+          handle = h;
+          await idbPut('handles', doc.peek().id, h);
         }
-        const w = await handle.createWritable();
-        await w.write(html);
-        await w.close();
-        return handle.name;
+        await writeHandle(handle, html);
+        fileName.value = handle.name;
+        dirty.value = false;
+        saveState.value = { kind: 'saved', where: handle.name, at: Date.now() };
+        notify(`저장했습니다 — ${handle.name}. 이제부터 이 파일에 자동으로 저장됩니다.`);
+        return true;
       } catch (e) {
-        if ((e as Error).name === 'AbortError') return null;
+        if ((e as Error).name === 'AbortError') return false;
         handle = null; // 권한이 막혔으면 다운로드로 넘어간다
       }
     }
     download(html, name);
-    return name;
+    fileName.value = name;
+    dirty.value = false;
+    saveState.value = { kind: 'local', where: name, at: Date.now() };
+    notify(`내려받았습니다 — ${name}`);
+    return true;
   },
 };

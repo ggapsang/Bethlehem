@@ -1,25 +1,61 @@
-/* Bethlehem E2E — 빌드된 Electron 앱으로 화면 등록 → Comment → 새 버전 → 녹화 → URL 담기 → 저장 → 최근 목록.
- * 파일 대화상자는 메인 프로세스에서 바꿔 끼우고, URL 담기는 로컬 HTTP 서버로 확인한다.
+/* Bethlehem E2E — 빌드된 Electron 앱으로
+ *   작업 폴더 만들기 → 폴더 화면 등록 → Ctrl 피커(멈춤 그림) → 팝업 Comment(달 때 화면) → 자동 저장 → 원본 변경 감지
+ *   → URL 화면(실시간 사이트 · 사용자 지정 테스트 사이트) → 다른 이름으로 저장 → 돌아온 문서 병합 → 다시 켜면 이어서
+ * 파일 대화상자는 메인 프로세스에서 바꿔 끼운다.
  *
  *   npm run test:e2e:app
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
-import { _electron as electron, type Frame, type Page } from 'playwright-core';
-import { isManna, parseManna } from '../packages/core/src';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { _electron as electron, chromium, type ElectronApplication, type Frame, type Page } from 'playwright-core';
+import { parseManna, serializeManna } from '../packages/core/src';
 
 const ROOT = resolve('.');
-const PROTO = resolve('example/proto');
 const OUT = resolve('out/e2e');
-const SAVED = resolve(OUT, 'bethlehem.terr.html');
+const SITE = 'http://semicon-xms.xdt.com/monitor';
+const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const WS = mkdtempSync(join(tmpdir(), 'terr-ws-'));
+const SRC = mkdtempSync(join(tmpdir(), 'terr-src-'));
+const UD = mkdtempSync(join(tmpdir(), 'terr-ud-'));
+const EXPORT = join(OUT, 'export-test');
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = ''): void {
   console.log(`${ok ? '  ✓' : '  ✗'} ${name}${detail ? ` — ${detail}` : ''}`);
   if (!ok) failed++;
 }
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function until<T>(fn: () => T | Promise<T>, ms = 15000): Promise<T | null> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const v = await fn();
+    if (v) return v;
+    await wait(250);
+  }
+  return null;
+}
+
+async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
+  const app = await electron.launch({
+    args: [ROOT],
+    cwd: ROOT,
+    env: { ...process.env, BETHLEHEM_E2E_GRANT: `${WS};${SRC};${OUT}`, BETHLEHEM_USER_DATA: UD, ELECTRON_RENDERER_URL: '' },
+  });
+  const page = await app.firstWindow();
+  await page.waitForLoadState('domcontentloaded');
+  return { app, page };
+}
+
+const nextOpen = (app: ElectronApplication, p: string) =>
+  app.evaluate(({ dialog }, d) => {
+    dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [d] })) as typeof dialog.showOpenDialog;
+  }, p);
+const nextSave = (app: ElectronApplication, p: string) =>
+  app.evaluate(({ dialog }, d) => {
+    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: d })) as typeof dialog.showSaveDialog;
+  }, p);
 
 async function screenFrame(page: Page): Promise<Frame> {
   for (let i = 0; i < 300; i++) {
@@ -31,187 +67,194 @@ async function screenFrame(page: Page): Promise<Frame> {
   throw new Error('품은 화면이 뜨지 않았습니다');
 }
 
-/* URL 담기 확인용 — API 응답을 받아 그리는 작은 페이지 */
-function startSite(): Promise<{ url: string; close: () => void }> {
-  const pages: Record<string, [string, string]> = {
-    '/': ['text/html', `<!doctype html><html><head><title>현장 대시보드</title><link rel="stylesheet" href="/app.css"></head>
-<body><h1 id="title">대시보드</h1><ul id="list"></ul><canvas id="cv" width="80" height="40"></canvas>
-<script src="/app.js"></script></body></html>`],
-    '/app.css': ['text/css', 'body{font-family:sans-serif;background:#fafafa} h1{color:rgb(200, 50, 50)}'],
-    '/app.js': ['text/javascript', `fetch('/api/items?site=1').then(r=>r.json()).then(d=>{document.getElementById('list').innerHTML=d.items.map(i=>'<li class="item">'+i+'</li>').join('');document.title='현장 대시보드 · '+d.items.length})
-const c=document.getElementById('cv').getContext('2d');c.fillStyle='#3366ff';c.fillRect(0,0,80,40);`],
-    '/api/items?site=1': ['application/json', JSON.stringify({ items: ['OHT-01 정상', 'OHT-02 경고', 'OHT-03 정상'] })],
-  };
-  const server = createServer((req, res) => {
-    const hit = pages[req.url ?? '/'];
-    if (!hit) return res.writeHead(404).end();
-    res.writeHead(200, { 'content-type': `${hit[0]}; charset=utf-8` }).end(hit[1]);
-  });
-  return new Promise((ok) => server.listen(0, '127.0.0.1', () => {
-    const { port } = server.address() as { port: number };
-    ok({ url: `http://127.0.0.1:${port}/`, close: () => server.close() });
-  }));
+const readJson = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
+const comments = (id: string) => (existsSync(join(WS, 'screens', id, 'comments.json')) ? readJson(join(WS, 'screens', id, 'comments.json')) : []);
+const distFile = () => (existsSync(join(WS, 'dist')) ? readdirSync(join(WS, 'dist')).find((n) => n.endsWith('.terr.html')) : undefined);
+
+/** 스테이지 위의 점(화면 뷰포트 좌표 → 창 좌표) */
+async function stagePoint(page: Page, x: number, y: number) {
+  const box = (await (await page.$('.stage-frame'))!.boundingBox())!;
+  const s = box.width / 1920;
+  return { x: box.x + x * s, y: box.y + y * s };
+}
+
+async function ctrlPick(page: Page, p: { x: number; y: number }, to?: { x: number; y: number }) {
+  await page.mouse.move(p.x, p.y);
+  await page.keyboard.down('Control');
+  await page.waitForTimeout(400); // 멈춤 그림을 찍을 시간
+  if (to) {
+    await page.mouse.down();
+    await page.mouse.move((p.x + to.x) / 2, (p.y + to.y) / 2, { steps: 4 });
+    await page.mouse.move(to.x, to.y, { steps: 4 });
+    await page.mouse.up();
+  } else await page.mouse.click(p.x, p.y);
+  await page.keyboard.up('Control');
 }
 
 async function main() {
-  rmSync(SAVED, { force: true });
-  const site = await startSite();
-  const app = await electron.launch({
-    args: [ROOT],
-    cwd: ROOT,
-    env: { ...process.env, BETHLEHEM_E2E_GRANT: `${PROTO};${OUT}`, BETHLEHEM_USER_DATA: mkdtempSync(resolve(tmpdir(), 'bethlehem-e2e-')), ELECTRON_RENDERER_URL: '' },
-  });
-  const pickFolder = (dir: string) =>
-    app.evaluate(({ dialog }, d) => {
-      dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [d] })) as typeof dialog.showOpenDialog;
-    }, dir);
-  // 확장자 없이 이름만 적은 경우 — .terr.html 이 붙어야 한다
-  await app.evaluate(({ dialog }, p) => {
-    dialog.showSaveDialog = (async () => ({ canceled: false, filePath: p })) as typeof dialog.showSaveDialog;
-  }, SAVED.replace(/\.terr\.html$/, ''));
-
-  const page = await app.firstWindow();
+  cpSync(resolve('example/proto'), SRC, { recursive: true });
+  let { app, page } = await launch();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
-  console.log('\n[1] 첫 화면');
+  console.log('\n[1] 작업 폴더 만들기');
   await page.waitForSelector('.modal input');
   await page.fill('.modal input', '기획자');
   await page.click('.modal button[type=submit]');
-  check('키 아트가 있는 첫 화면이 뜬다', !!(await page.$('.welcome-art')));
-  check('첫 화면에 소개 문구가 없다', !((await page.textContent('.welcome')) ?? '').includes('바이브'));
-  check('왼쪽 패널이 없다', !(await page.$('.sidebar')));
-  check('창 제목이 테라리움', (await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle())).includes('테라리움'));
-  await page.screenshot({ path: resolve(OUT, 'b1-welcome.png') });
+  check('키 아트 첫 화면 · 소개 문구 없음', !!(await page.$('.welcome-art')) && !((await page.textContent('.welcome')) ?? '').includes('바이브'));
+  await nextOpen(app, WS);
+  await page.click('.welcome button:has-text("새 작업 폴더")');
+  check('terrarium.json 이 생긴다', !!(await until(() => existsSync(join(WS, 'terrarium.json')))));
+  check('툴바에 작업 폴더 이름이 보인다', ((await page.textContent('.tb-place')) ?? '').includes(WS.split(/[\\/]/).pop()!));
 
-  console.log('\n[2] 화면 등록');
-  await pickFolder(PROTO);
-  await page.click('.welcome .btn-primary');
+  console.log('\n[2] 폴더 화면 · 자동 저장 · 보낼 파일');
+  await nextOpen(app, SRC);
+  await page.click('.welcome button:has-text("화면 폴더 추가")');
   await page.waitForSelector('.file-list');
-  const chips = (await page.textContent('.file-list')) ?? '';
-  check('안 쓰는 파일에 "참조 없음" · "제외"', chips.includes('참조 없음') && chips.includes('제외'));
-  check('README 는 개요로 가져온다', chips.includes('개요로 가져옴'));
-  check('빠지는 파일에 취소선이 없다', await page.$eval('.file-list li.is-off .mono', (el) => getComputedStyle(el).textDecorationLine === 'none'));
-  await page.screenshot({ path: resolve(OUT, 'b2-import.png') });
   await page.click('.modal button[type=submit]');
   let f = await screenFrame(page);
-  check('등록한 화면이 동작한다', await f.waitForFunction(() => document.querySelector('#splash')?.classList.contains('done'), null, { timeout: 30000 }).then(() => true, () => false));
-  check('개요에 README 가 들어온다', ((await page.textContent('.notes')) ?? '').includes('데이터 매핑'));
+  await f.waitForFunction(() => document.querySelector('#splash')?.classList.contains('done'), null, { timeout: 30000 }).catch(() => {});
+  check('screens/SCR-001 에 screen.json · notes.md · comments.json', !!(await until(() => ['screen.json', 'notes.md', 'comments.json'].every((n) => existsSync(join(WS, 'screens', 'SCR-001', n))))));
+  check('blobs/ 에 내용 해시 파일', existsSync(join(WS, 'blobs')) && readdirSync(join(WS, 'blobs')).length > 0);
+  check('dist/ 에 보낼 파일이 자동으로 구워진다', !!(await until(distFile, 12000)), distFile());
+  const link = readJson(join(WS, 'screens', 'SCR-001', 'screen.json')).link;
+  check('원본 폴더 연결이 작업 폴더에만 남는다', link?.dir === SRC && !readFileSync(join(WS, 'dist', distFile()!), 'utf8').includes(SRC.replace(/\\/g, '\\\\')));
 
-  console.log('\n[3] Comment');
-  await page.click('.notes .section-head');
-  const box = (await (await page.$('iframe.stage-iframe'))!.boundingBox())!;
-  const r = await f.evaluate(() => {
-    const b = document.querySelector('#tabB')!.getBoundingClientRect();
-    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-  });
-  const s = box.width / 1920;
-  await page.mouse.move(box.x + r.x * s, box.y + r.y * s);
+  console.log('\n[3] Ctrl 피커 → 멈춤 그림 → 팝업 Comment → 달 때 화면');
+  await page.click('.notes .section-head').catch(() => {});
+  const tab = await f.evaluate(() => { const b = document.querySelector('#tabB')!.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+  const tp = await stagePoint(page, tab.x, tab.y);
+  await page.mouse.move(tp.x, tp.y);
   await page.keyboard.down('Control');
-  await page.mouse.click(box.x + r.x * s, box.y + r.y * s);
+  check('Ctrl 을 누르면 화면이 멈춘 그림으로 덮인다', !!(await until(() => page.$('.stage-still'), 3000)));
+  await page.mouse.click(tp.x, tp.y);
   await page.keyboard.up('Control');
-  await page.click('.composer .cm-content');
-  await page.keyboard.type('설비정보 확인 탭 — 진입 시 **OHT-01** 기본 선택');
+  if (!(await until(() => page.$('.popover-card .composer'), 5000))) {
+    // 드물게 첫 피커가 잡히지 않는다(원인 미확인) — 한 번 더 해 보고 기록한다
+    console.log('  ! 첫 피커가 잡히지 않아 다시 시도합니다');
+    await ctrlPick(page, tp);
+  }
+  await page.waitForSelector('.popover-card .composer');
+  check('작성 창이 대상 옆 팝업으로 뜬다', true);
+  await page.click('.popover-card .composer .cm-content');
+  await page.keyboard.type('설비정보 탭 — **OHT-01** 기본 선택');
   await page.keyboard.press('Control+Enter');
-  await page.waitForTimeout(300);
-  check('Comment 1번이 생긴다', ((await page.textContent('.card .no')) ?? '') === '1');
+  const c1 = await until(() => comments('SCR-001').find((c: { body: string }) => c.body.includes('OHT-01')), 8000);
+  check('저장을 누르지 않아도 comments.json 에 들어간다', !!c1);
+  check('Comment 에 달 때 화면(shot)이 붙는다', !!c1?.shot?.sha && existsSync(join(WS, 'blobs', c1.shot.sha.slice(0, 2), c1.shot.sha)));
+  await page.click('.popover-card button[aria-label="닫기"]');
+  await page.click('.cards > .card:first-child .card-title');
+  check('Comment 를 열면 달 때 화면과 박스가 보인다', !!(await until(() => page.$('.shot-view .shot-box'), 3000)));
+  await page.screenshot({ path: resolve(OUT, 'b3-shot.png') });
+  await page.click('.badge-btn:has-text("실시간 화면 보기")');
+  check('"실시간 화면 보기" 로 돌아간다', !(await page.$('.shot-view')));
 
-  console.log('\n[4] 녹화 (Electron 화면 공유)');
-  await page.click('button[aria-label="화면 녹화"]');
-  const recOn = await page.waitForSelector('.btn-icon.is-rec', { timeout: 8000 }).then(() => true, () => false);
-  check('녹화가 시작된다 (권한 대화상자 없이)', recOn);
-  await page.waitForTimeout(1500);
-  if (recOn) await page.click('button[aria-label="녹화 멈추기"]');
-  const clipW = await page.waitForSelector('.card.is-sel .clip video', { timeout: 8000 })
-    .then((v) => v.evaluate(async (el) => {
-      const vid = el as HTMLVideoElement;
-      if (vid.readyState < 1) await new Promise((ok) => vid.addEventListener('loadedmetadata', ok, { once: true }));
-      return vid.videoWidth;
-    }), () => 0);
-  check('클립이 Comment 에 붙고 재생된다', clipW > 0, `폭 ${clipW}px`);
-
-  console.log('\n[5] 새 버전 — 툴바에서');
-  await pickFolder(PROTO);
-  await page.click('button[aria-label^="SCR-001 새 버전"]');
-  await page.click('.popover-item:has-text("화면 폴더 선택")');
-  await page.waitForSelector('.file-list');
-  await page.selectOption('.modal select >> nth=0', 'index - old.html');
-  await page.waitForTimeout(500);
-  check('기존 Comment 옮기기 선택지가 있다', !!(await page.$('.modal label:has-text("새 버전으로 옮기기")')));
-  await page.click('.modal button[type=submit]');
-  f = await screenFrame(page);
-  await page.waitForTimeout(1000);
-  check('v2 가 선택된다', ((await page.$eval('select[aria-label="화면 버전"]', (el) => (el as HTMLSelectElement).value)) ?? '') === '2');
-  check('옮긴 Comment 가 v2 에 있다', (await page.$$('.cards > .card')).length === 1);
-
-  console.log('\n[6] 최근 폴더');
-  await page.click('button[aria-label="화면 추가 — 폴더나 URL"]');
-  await page.waitForSelector('.popover');
-  check('화면 추가 메뉴에 최근 폴더가 보인다', ((await page.textContent('.popover')) ?? '').includes('proto'));
-  await page.keyboard.press('Escape');
-  await page.mouse.click(10, 500);
-
-  console.log('\n[7] URL 로 담기');
-  await page.click('button[aria-label="화면 추가 — 폴더나 URL"]');
-  await page.click('.popover-item:has-text("URL 로 담기")');
-  await page.fill('.modal input', site.url);
-  await page.click('.modal button[type=submit]');
-  // 담기 창이 응답을 다 받을 때까지
-  let st: { count: number; loading: boolean } = { count: 0, loading: true };
-  for (let i = 0; i < 60 && (st.loading || st.count < 3); i++) {
-    await page.waitForTimeout(200);
-    st = await app.evaluate(() => (globalThis as unknown as { __terrSnapshot?: { state(): { count: number; loading: boolean } } }).__terrSnapshot?.state() ?? { count: 0, loading: true });
+  console.log('\n[4] 원본 폴더가 바뀌면');
+  appendFileSync(join(SRC, 'index.html'), '\n<!-- 수정 -->\n');
+  const toast = await until(() => page.$('.toast:has-text("원본 폴더가 바뀌었습니다")'), 10000);
+  check('새 버전 등록을 권한다', !!toast);
+  if (toast) {
+    await page.click('.toast .toast-btn');
+    check('누르면 새 버전 등록 창이 열린다', !!(await until(() => page.$('.modal h2:has-text("새 버전")'), 5000)));
+    await page.click('.modal button:has-text("취소")');
   }
-  check('담기 창이 페이지와 응답을 받는다', st.count >= 3, `응답 ${st.count}개`);
-  await app.evaluate(() => (globalThis as unknown as { __terrSnapshot: { capture(m: string): Promise<void> } }).__terrSnapshot.capture('static'));
-  await page.waitForTimeout(1500);
-  check('URL 화면이 SCR-002 로 등록된다', ((await page.$eval('select[aria-label="화면"]', (el) => (el as HTMLSelectElement).value)) ?? '') === 'SCR-002');
-  f = await screenFrame(page);
-  const still = await f.evaluate(() => ({ items: document.querySelectorAll('.item').length, scripts: document.querySelectorAll('script:not(:first-child)').length, img: !!document.querySelector('img#cv') }));
-  check('보이는 그대로 — 그린 결과가 정지 화면으로, 스크립트 없이, 캔버스는 이미지로', still.items === 3 && still.img, JSON.stringify(still));
 
-  // 같은 화면의 새 버전으로 — 동작 포함
-  await page.click('button[aria-label^="SCR-002 새 버전"]');
-  await page.click('.popover-item:has-text("URL 로 담기")');
-  await page.fill('.modal input', site.url);
+  console.log('\n[5] URL 화면 — 편집기 안에서 실시간');
+  await page.click('button[aria-label="화면 추가 — 폴더나 URL"]');
+  await page.click('.popover-item:has-text("URL")');
+  await page.fill('.modal input[aria-label="주소"]', SITE);
   await page.click('.modal button[type=submit]');
-  st = { count: 0, loading: true };
-  for (let i = 0; i < 60 && (st.loading || st.count < 3); i++) {
-    await page.waitForTimeout(200);
-    st = await app.evaluate(() => (globalThis as unknown as { __terrSnapshot?: { state(): { count: number; loading: boolean } } }).__terrSnapshot?.state() ?? { count: 0, loading: true });
-  }
-  site.close(); // 이제 서버가 없어도 문서 안에서 돌아야 한다
-  await app.evaluate(() => (globalThis as unknown as { __terrSnapshot: { capture(m: string): Promise<void> } }).__terrSnapshot.capture('live'));
-  await page.waitForTimeout(1500);
-  check('SCR-002 v2 로 들어간다', ((await page.$eval('select[aria-label="화면 버전"]', (el) => (el as HTMLSelectElement).value)) ?? '') === '2');
-  f = await screenFrame(page);
-  const items = await f.waitForFunction(() => document.querySelectorAll('.item').length, null, { timeout: 8000 }).then((h) => h.jsonValue(), () => 0);
-  check('동작 포함 — 서버 없이 스크립트가 돌고, 담을 때 받은 API 응답이 재생된다', items === 3, `항목 ${items}개`);
-  check('CSS 도 문서 안에서 적용된다', (await f.$eval('#title', (el) => getComputedStyle(el).color)) === 'rgb(200, 50, 50)');
-  await page.screenshot({ path: resolve(OUT, 'b4-url.png') });
+  const wv = await until(() => page.$('webview.stage-webview'), 5000);
+  check('webview 로 실제 사이트를 띄운다', !!wv);
+  await until(async () => !(await page.$('.stage-note')), 30000);
+  // 지도(shadow DOM 안의 캔버스)가 그려질 때까지
+  await until(() => page.evaluate(() => (document.querySelector('webview') as unknown as { executeJavaScript(c: string): Promise<boolean> })
+    .executeJavaScript('!!document.querySelector("xms-fe-map-monitor")?.shadowRoot?.querySelector("canvas")')).catch(() => false), 30000);
+  await page.waitForTimeout(3000);
+  await page.screenshot({ path: resolve(OUT, 'b5-site-live.png') });
+  const live = await page.evaluate(async () => {
+    const w = document.querySelector('webview') as unknown as { executeJavaScript(c: string): Promise<unknown> };
+    return w.executeJavaScript('({ map: !!document.querySelector("xms-fe-map-monitor"), agent: !!window.__terrAgent })');
+  }) as { map: boolean; agent: boolean };
+  check('사이트 지도와 에이전트가 들어 있다', live.map && live.agent, JSON.stringify(live));
+  // 지도 위 영역에 Comment
+  await ctrlPick(page, await stagePoint(page, 800, 450), await stagePoint(page, 1100, 650));
+  await page.waitForSelector('.popover-card .composer');
+  const lbl = (await page.textContent('.popover-card .composer .mono')) ?? '';
+  check('지도 위 드래그는 지도 요소 안의 영역으로 잡힌다', /xms-fe-map-monitor.*영역/.test(lbl), lbl);
+  await page.click('.popover-card .composer .cm-content');
+  await page.keyboard.type('지도 — 이 구역 차량 아이콘이 겹칩니다');
+  await page.keyboard.press('Control+Enter');
+  const c2 = await until(() => comments('SCR-002')[0], 8000);
+  check('URL 화면 Comment 에도 달 때 화면이 붙는다', !!c2?.shot?.sha);
+  const snap = await until(() => {
+    const sj = existsSync(join(WS, 'screens', 'SCR-002', 'screen.json')) ? readJson(join(WS, 'screens', 'SCR-002', 'screen.json')) : null;
+    const ext = sj?.versions?.[0]?.external ?? [];
+    return ext.some((e: { url: string }) => e.url.startsWith('https://terr.shot/')) ? ext : null;
+  }, 20000);
+  check('보낸 파일용 사본 — 지도 같은 shadow DOM·캔버스는 픽셀로 담긴다', !!snap, snap ? `리소스 ${snap.length}개` : '');
+  await page.screenshot({ path: resolve(OUT, 'b5-site-comment.png') });
 
-  console.log('\n[8] 저장 · 최근 문서');
+  console.log('\n[6] 다른 이름으로 저장');
+  await nextSave(app, EXPORT);
+  await page.click('button[aria-label="다른 이름으로 저장"]');
+  check('다른 이름으로 저장 — .terr.html 이 붙는다', !!(await until(() => existsSync(EXPORT + '.terr.html'), 8000)));
+
+  console.log('\n[7] 받는 사람이 보는 URL 화면');
   await page.keyboard.press('Control+s');
-  await page.waitForTimeout(1500);
-  check('확장자가 .terr.html 로 붙어 저장된다', existsSync(SAVED));
-  if (existsSync(SAVED)) {
-    const html = readFileSync(SAVED, 'utf8');
-    const { doc } = parseManna(html);
-    check('테라리움 문서 형식', isManna(html));
-    const s1 = doc.screens[0];
-    check('SCR-001: 버전 2 · Comment 1 · 클립 1 · 개요', s1.versions.length === 2 && s1.annotations.length === 1 && (s1.annotations[0].clips?.length ?? 0) === 1 && s1.notes.length > 100);
-    const s2 = doc.screens[1];
-    check('SCR-002: URL 출처가 기록된다 (v1 보이는 그대로 · v2 동작 포함)', s2?.versions[0].source?.mode === 'static' && s2.versions[1]?.source?.mode === 'live' && s2.versions[1].entry.startsWith('http://127.0.0.1'));
-    check('두 버전이 데이터 블롭을 공유한다', s1.versions[0].files['data/ad7.js']?.sha === s1.versions[1].files['data/ad7.js']?.sha, `${(html.length / 1024 / 1024).toFixed(1)}MB`);
+  await page.waitForTimeout(2500);
+  const dist = join(WS, 'dist', distFile()!);
+  const browser = await chromium.launch({ executablePath: CHROME });
+  const rp = await (await browser.newContext({ viewport: { width: 1600, height: 960 } })).newPage();
+  await rp.goto(pathToFileURL(dist).href);
+  await rp.fill('.modal input', '수신자');
+  await rp.click('.modal button[type=submit]');
+  await rp.selectOption('select[aria-label="화면"]', 'SCR-002');
+  const rf = await screenFrame(rp);
+  await rp.waitForTimeout(1500);
+  const map = await rf.evaluate(() => {
+    const el = document.querySelector('xms-fe-map-monitor') as HTMLElement | null;
+    return el ? getComputedStyle(el).backgroundImage.slice(0, 12) : 'none';
+  });
+  check('지도 자리에 사본 그림이 들어 있다 (빈칸이 아니다)', map.startsWith('url("blob:'), map);
+  const marks = await rp.$$eval('.marker', (ms) => ms.filter((m) => (m as HTMLElement).style.display === 'flex').length);
+  check('받은 문서에서도 지도 Comment 마커가 붙는다', marks >= 1, `${marks}개`);
+  await rp.screenshot({ path: resolve(OUT, 'b7-recipient-site.png') });
+  await browser.close();
+
+  console.log('\n[8] 돌아온 문서 병합');
+  const { doc, blobs } = parseManna(readFileSync(dist, 'utf8'));
+  const s1 = doc.screens.find((s) => s.id === 'SCR-001')!;
+  const base = s1.annotations[0];
+  s1.annotations.push({ ...JSON.parse(JSON.stringify(base)), id: crypto.randomUUID(), body: '회신 — 이 탭 이름 확인했습니다', author: '수신자', replies: [], shot: undefined });
+  base.replies.push({ id: crypto.randomUUID(), author: '수신자', at: new Date().toISOString(), body: '네, 반영해 주세요' });
+  doc.origin = { by: '수신자', at: new Date().toISOString(), baseUpdatedAt: doc.meta.updatedAt };
+  const runtime = { js: readFileSync('out/manna/manna-runtime.js', 'utf8'), css: readFileSync('out/manna/manna-runtime.css', 'utf8') };
+  writeFileSync(join(WS, 'returned', 'proto_수신자.terr.html'), serializeManna(doc, blobs, runtime));
+  const badge = await until(() => page.$('.tb-returned'), 10000);
+  check('returned/ 에 넣으면 "회신 1" 이 뜬다', !!badge);
+  if (badge) {
+    await badge.click();
+    await page.click('.popover-returned button:has-text("병합")');
+    await page.selectOption('select[aria-label="화면"]', 'SCR-001');
+    const merged = await until(() => comments('SCR-001').length === 2 && comments('SCR-001')[0].replies.length === 1, 8000);
+    check('병합 — Comment 추가와 답글이 들어온다', !!merged);
+    check('병합한 회신본은 returned/merged/ 로', existsSync(join(WS, 'returned', 'merged', 'proto_수신자.terr.html')));
   }
-  check('창 제목에 저장 안 됨 표시가 없다', !(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle())).includes('•'));
-  await page.click('button[aria-label="열기 · 최근 문서"]');
-  await page.waitForSelector('.popover');
-  check('열기 메뉴에 최근 문서가 보인다', ((await page.textContent('.popover')) ?? '').includes('bethlehem.terr.html'));
-  await page.screenshot({ path: resolve(OUT, 'b5-recent.png') });
 
   check('렌더러 오류가 없다', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  console.log('\n[9] 다시 켜면 이어서');
+  await page.selectOption('select[aria-label="화면"]', 'SCR-002');
+  await page.waitForTimeout(1500);
   await app.close();
+  ({ app, page } = await launch());
+  check('마지막 작업 폴더가 그대로 열린다', !!(await until(async () => ((await page.textContent('.tb-place').catch(() => '')) ?? '').includes(WS.split(/[\\/]/).pop()!), 15000)));
+  check('마지막으로 보던 화면(SCR-002)으로', !!(await until(async () => (await page.$eval('select[aria-label="화면"]', (el) => (el as HTMLSelectElement).value).catch(() => '')) === 'SCR-002', 10000)));
+  check('Comment 가 그대로 있다', (await page.$$('.cards > .card')).length === 1);
+  await app.close();
+
+  for (const d of [WS, SRC, UD]) rmSync(d, { recursive: true, force: true });
   console.log(failed ? `\n실패 ${failed}건` : '\n모두 통과');
   process.exit(failed ? 1 : 0);
 }

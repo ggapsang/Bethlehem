@@ -3,15 +3,24 @@
  * 되돌리기는 고치기 직전 문서의 JSON 스냅숏을 쌓는다 (블롭은 덧붙기만 하므로 함께 되돌릴 필요가 없다).
  */
 import { computed, signal } from '@preact/signals';
-import type { BlobStore, EncodedBlob, MannaDoc, Region } from '@core';
+import type { BlobStore, EncodedBlob, MannaDoc } from '@core';
+import type { Picked } from './agent/protocol';
 import { latest, newDoc, now } from '@core';
 
 export type Mode = 'view' | 'annotate';
 export type Theme = 'light' | 'dark';
 
+/** 피커로 잡은 대상 — 에이전트가 화면 안에서 만든 지문·영역·경로 */
 export interface Draft {
-  el: Element;
-  region?: Region;
+  picked: Picked;
+}
+
+/** 피커를 켤 때 찍어 둔 스테이지 그림 — 고르는 동안 화면을 멈춰 보이고, Comment 의 shot 이 된다 */
+export interface Still {
+  url: string;
+  bytes: Uint8Array;
+  w: number;
+  h: number;
 }
 
 export interface Miss {
@@ -52,12 +61,23 @@ export const recording = signal<{ startedAt: number } | null>(null);
 export const selected = signal<string | null>(null);
 export const hovered = signal<string | null>(null);
 export const draft = signal<Draft | null>(null);
+export const still = signal<Still | null>(null);
+/** 선택한 Comment 의 '달 때 화면'을 스테이지에 덮어 보일지 */
+export const shotView = signal(true);
 export const visible = signal<ReadonlySet<string>>(new Set());
 export const misses = signal<Miss[]>([]);
 export const theme = signal<Theme>(lsGet(LS.theme) === 'dark' ? 'dark' : 'light');
 export const user = signal<string | null>(lsGet(LS.user));
 export const askName = signal(false);
-export const toast = signal<{ text: string; tone: 'info' | 'error' } | null>(null);
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+export const toast = signal<{ text: string; tone: 'info' | 'error'; action?: ToastAction } | null>(null);
+
+/** 저장 상태 — 자동 저장이 어디까지 됐는지 툴바에 보인다 */
+export type SaveKind = 'idle' | 'pending' | 'saving' | 'saved' | 'local' | 'error';
+export const saveState = signal<{ kind: SaveKind; where?: string; at?: number; message?: string }>({ kind: 'idle' });
 export const fullscreen = signal(false);
 export const panelOpen = signal(lsGet(LS.panel) !== '0');
 export const panelWidth = signal(Number(lsGet(LS.panelW)) || 400);
@@ -82,6 +102,8 @@ export const versionKey = computed(() => {
   const s = screen.value;
   const v = version.value;
   if (!s || !v) return '';
+  // URL 화면은 사본이 바뀌어도 다시 불러오지 않는다 (편집기에서는 실시간 사이트가 돈다)
+  if (v.source?.mode === 'site') return `${s.id}|${v.v}|site|${v.source.url}`;
   const entry = v.files[v.entry]?.sha ?? v.external.find((e) => e.url === v.entry)?.sha ?? '';
   return `${s.id}|${v.v}|${v.entry}|${entry}`;
 });
@@ -117,18 +139,22 @@ export interface MutateOptions {
   label?: string;
   /** 같은 열쇠의 연속 변경(타이핑 등)은 2초 안이면 한 단계로 묶는다 */
   merge?: string;
+  /** false 면 되돌리기 단계를 남기지 않는다 (URL 화면 사본 갱신처럼 사용자가 한 일이 아닌 것) */
+  undoable?: boolean;
 }
 
 /** 문서를 고친다. 되돌리기 단계를 남기고, 다시 그리고, 저장 안 됨으로 표시한다 */
 export function mutate(fn: (d: MannaDoc) => void, opts: MutateOptions = {}): void {
   const t = Date.now();
   const top = undoStack[undoStack.length - 1];
-  if (opts.merge && top?.merge === opts.merge && t - top.at < 2000) top.at = t;
+  if (opts.undoable === false) {
+    /* 되돌리기 없이 */
+  } else if (opts.merge && top?.merge === opts.merge && t - top.at < 2000) top.at = t;
   else {
     undoStack.push({ snap: JSON.stringify(doc.value), label: opts.label ?? '변경', merge: opts.merge, at: t });
     if (undoStack.length > MAX_STEPS) undoStack.shift();
   }
-  redoStack.length = 0;
+  if (opts.undoable !== false) redoStack.length = 0;
   fn(doc.value);
   doc.value.meta.updatedAt = now();
   dirty.value = true;
@@ -231,10 +257,10 @@ export function toggleNotes(open = !notesOpen.value): void {
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
-export function notify(text: string, tone: 'info' | 'error' = 'info'): void {
-  toast.value = { text, tone };
+export function notify(text: string, tone: 'info' | 'error' = 'info', action?: ToastAction): void {
+  toast.value = { text, tone, ...(action ? { action } : {}) };
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (toast.value = null), tone === 'error' ? 8000 : 3000);
+  toastTimer = setTimeout(() => (toast.value = null), action ? 15000 : tone === 'error' ? 8000 : 3000);
 }
 
 /* ── 다른 화면 상태에 있는 Comment 로 이동 요청 (패널 → 스테이지) ─────── */

@@ -1,5 +1,5 @@
 /* 품은 화면 안에서 가장 먼저 실행되는 shim — docs/ARCHITECTURE.md §5.2, §5.4
- * 이 파일은 번들되지 않고 문자열 그대로(?raw) iframe <head> 맨 앞에 들어간다.
+ * 이 파일은 번들되지 않고 문자열 그대로(?raw) iframe <head> 맨 앞에 들어간다. 바로 뒤에 에이전트가 이어진다.
  * 함수 하나로 끝나야 하며 바깥 변수에 의존하지 않는다.
  *   map  : 가상 절대 URL → Blob URL
  *   base : 엔트리 문서의 가상 URL (https://pkg.manna/index.html)
@@ -80,70 +80,6 @@
     window.Worker.prototype = NativeWorker.prototype;
   }
 
-  /* ── 일시정지 (§5.4) — rAF 보류, 시계 정지, CSS 애니메이션 정지 ───────────────── */
-  var perf = window.performance;
-  var nativeNow = perf.now.bind(perf);
-  var nativeDateNow = Date.now;
-  var nativeRaf = window.requestAnimationFrame.bind(window);
-  var nativeCaf = window.cancelAnimationFrame.bind(window);
-  var paused = false;
-  var pausedAt = 0;
-  var offset = 0;
-  var seq = 0;
-  var pending = {};
-  var held = [];
-  var frozen = [];
-
-  perf.now = function () { return (paused ? pausedAt : nativeNow()) - offset; };
-  Date.now = function () { return nativeDateNow() - offset - (paused ? nativeNow() - pausedAt : 0); };
-
-  function schedule(id, cb) {
-    pending[id] = nativeRaf(function (ts) {
-      delete pending[id];
-      if (paused) { held.push([id, cb]); return; }
-      cb(ts - offset);
-    });
-  }
-  window.requestAnimationFrame = function (cb) {
-    var id = ++seq;
-    if (paused) held.push([id, cb]);
-    else schedule(id, cb);
-    return id;
-  };
-  window.cancelAnimationFrame = function (id) {
-    if (pending[id] != null) { nativeCaf(pending[id]); delete pending[id]; }
-    for (var i = 0; i < held.length; i++) if (held[i][0] === id) { held.splice(i, 1); break; }
-  };
-
-  function pause() {
-    if (paused) return;
-    paused = true;
-    pausedAt = nativeNow();
-    frozen = [];
-    if (document.getAnimations) {
-      document.getAnimations().forEach(function (a) {
-        if (a.playState === 'running') { a.pause(); frozen.push(a); }
-      });
-    }
-  }
-  function resume() {
-    if (!paused) return;
-    offset += nativeNow() - pausedAt;
-    paused = false;
-    var h = held;
-    held = [];
-    h.forEach(function (x) { schedule(x[0], x[1]); });
-    frozen.forEach(function (a) { try { a.play(); } catch (e) { /* 이미 끝난 애니메이션 */ } });
-    frozen = [];
-  }
-
-  Object.defineProperty(window, '__manna', {
-    value: {
-      resolve: resolve,
-      misses: misses,
-      pause: pause,
-      resume: resume,
-      isPaused: function () { return paused; },
-    },
-  });
+  // 일시정지(시계)는 에이전트(agent.ts)가 맡는다
+  window.__manna = { resolve: resolve, misses: misses };
 })

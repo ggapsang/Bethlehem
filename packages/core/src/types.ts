@@ -46,7 +46,8 @@ export interface ScreenVersion {
   /** 시작 파일. 패키지 경로('index.html') 또는 URL 스냅샷이면 원래 페이지 URL */
   entry: string;
   /** URL 로 담은 화면이면 어떻게 담았는지 */
-  source?: { url: string; mode: 'live' | 'static'; at: string };
+  /** URL 화면 — site: 편집기에서는 실시간 사이트, 보낸 파일에는 마지막 사본 / live·static: 예전 담기 방식 */
+  source?: { url: string; mode: 'site' | 'live' | 'static'; at: string };
   viewport: Viewport;
   files: Record<string, FileEntry>;
   external: ExternalEntry[];
@@ -97,6 +98,14 @@ export interface Step {
   y: number;
 }
 
+/** Comment 를 달던 순간의 스테이지 그림 (JPEG). box 는 그림 안의 대상 위치(0~1) */
+export interface Shot {
+  sha: string;
+  w: number;
+  h: number;
+  box?: Region;
+}
+
 /** 녹화한 움직임 클립 (webm) */
 export interface Clip {
   id: string;
@@ -134,6 +143,8 @@ export interface Annotation {
   /** 마크다운. 할 일은 - [ ] 체크박스로 */
   body: string;
   clips?: Clip[];
+  /** 달 때의 화면 전체 — 나중에 이 Comment 를 열면 이 그림과 박스가 보인다 */
+  shot?: Shot;
   author: string;
   createdAt: string;
   updatedAt: string;

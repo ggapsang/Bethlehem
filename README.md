@@ -17,9 +17,10 @@ npm install
 npm start          # 문서 런타임을 빌드하고 테라리움 작성 프로그램을 개발 모드로 띄운다
 ```
 
-- **화면 추가** — 툴바의 화면 추가(또는 첫 화면)에서 폴더(`example/proto`)를 고르거나 창에 끌어다 놓는다. **URL 로 담기**도 된다.
-- **Comment** — `Ctrl` 을 누른 채 요소를 클릭하거나 드래그해 영역을 잡는다. 본문과 답글은 마크다운, 할 일은 `- [ ]`.
-- **저장** — `Ctrl+S`. `.terr.html` 한 장이 된다. 받은 사람은 브라우저로 열어 Comment·답글을 달고 저장해 돌려보낸다.
+- **작업 폴더** — 처음에 "새 작업 폴더" 로 폴더를 하나 정한다. 다음부터는 켜면 마지막 작업 폴더와 화면이 그대로 열린다. 보낼 파일은 `dist/` 에 늘 최신으로 구워져 있다.
+- **화면 추가** — 툴바의 화면 추가에서 폴더(`example/proto`)를 고르거나 창에 끌어다 놓는다. **URL** 을 넣으면 편집기 안에서 실제 사이트가 그대로 돈다.
+- **Comment** — `Ctrl` 을 누른 채 요소를 클릭하거나 드래그한다. 화면이 멈춘 그림으로 덮이고, 대상 옆 팝업에 마크다운으로 쓴다. 그 순간의 화면이 Comment 에 함께 남는다.
+- **저장** — 고치면 자동으로 저장된다. 받은 사람은 브라우저로 열어 Comment·답글을 달고 돌려보낸다. 돌아온 파일을 작업 폴더의 `returned/` 에 넣으면 "회신" 이 떠서 병합한다.
 
 명령줄로 굽기:
 
@@ -33,10 +34,10 @@ npm run bake -- example/proto out/proto.terr.html --entry "index - old.html,inde
 npm run typecheck
 npm test               # 코어 단위 테스트
 npm run test:e2e       # 구운 문서를 설치된 Chrome 에서 file:// 로 열어 확인
-npm run test:e2e:app   # 작성 프로그램(Electron) — 등록 · Comment · 녹화 · 새 버전 · URL 담기 · 저장
+npm run test:e2e:app   # 작성 프로그램(Electron) — 작업 폴더 · Comment · URL 화면 · 병합 · 다시 켜기
 ```
 
-E2E 는 설치된 Chrome(없으면 Edge)을 쓴다. 다른 위치라면 `CHROME_PATH` 로 지정한다. 스크린샷은 `out/e2e/` 에 남는다.
+E2E 는 설치된 Chrome(없으면 Edge)을 쓴다. URL 화면 테스트는 `http://semicon-xms.xdt.com/monitor` 에 접속할 수 있어야 한다. 다른 위치라면 `CHROME_PATH` 로 지정한다. 스크린샷은 `out/e2e/` 에 남는다.
 
 ## 구조
 

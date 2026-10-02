@@ -1,7 +1,10 @@
 /* 렌더러에 노출하는 Bethlehem API — preload 와 렌더러가 같이 쓰는 타입 */
-import type { Runtime } from '@core';
+import type { EncodedBlob, MannaDoc, Runtime } from '@core';
 import type { PackOptions, PackResult, ScanResult } from '@core/node/pack';
-import type { SnapshotResult } from '../main/snapshot';
+import type { SiteSnapshot } from '../main/site';
+import type { Returned, SourceLink, WorkspaceData } from '../main/workspace';
+
+export type { Returned, SiteSnapshot, SourceLink };
 
 export interface OpenedFile {
   path: string;
@@ -13,6 +16,7 @@ export interface Granted {
   path: string;
   name: string;
   isDir: boolean;
+  isWorkspace: boolean;
 }
 
 export interface RecentItem {
@@ -23,22 +27,37 @@ export interface RecentItem {
 
 export interface BethlehemApi {
   runtime(): Promise<Runtime>;
-  recent(): Promise<{ files: RecentItem[]; folders: RecentItem[] }>;
+  recent(): Promise<{ files: RecentItem[]; folders: RecentItem[]; workspaces: RecentItem[] }>;
+  /* 단일 문서 */
   openFile(): Promise<OpenedFile | null>;
   openPath(path: string): Promise<OpenedFile>;
   saveFile(o: { html: string; path: string | null; suggestedName: string; saveAs: boolean }): Promise<string | null>;
+  exportAs(o: { html: string; suggestedName: string }): Promise<string | null>;
+  /* 화면 폴더 */
   pickFolder(): Promise<string | null>;
-  /** 최근 폴더를 다시 쓴다 (허용 목록 확인 + 최근 목록 갱신) */
   useFolder(path: string): Promise<string>;
-  /** 끌어다 놓은 파일·폴더의 경로. 사용자가 놓은 것만 열 수 있도록 메인 프로세스에 등록한다 */
   grantDropped(file: File): Promise<Granted | null>;
   scanFolder(dir: string, entry?: string): Promise<ScanResult>;
   packFolder(opts: PackOptions): Promise<PackResult>;
-  /** URL 담기 창을 연다. 다 담으면 onSnapshot 으로 결과가 온다 */
-  openSnapshot(o: { url?: string; screenId?: string }): void;
-  onSnapshot(cb: (r: { screenId?: string; result: SnapshotResult | null }) => void): void;
+  /* 작업 폴더 */
+  wsPick(mode: 'open' | 'create'): Promise<string | null>;
+  wsOpen(dir: string): Promise<WorkspaceData & { last: { screen: string; version: number } | null }>;
+  wsLast(): Promise<string | null>;
+  wsSave(o: { dir: string; doc: MannaDoc; blobs: [string, EncodedBlob][]; links: Record<string, SourceLink> }): Promise<boolean>;
+  wsBake(o: { dir: string; title: string; html: string }): Promise<string>;
+  wsReturned(): Promise<Returned[]>;
+  wsReadReturned(name: string): Promise<string | null>;
+  wsMarkMerged(name: string): Promise<void>;
+  wsReveal(what: 'dist' | 'returned' | 'root'): Promise<void>;
+  wsRememberScreen(o: { dir: string; screen: string; version: number }): void;
+  wsClose(): void;
+  onReturnedChanged(cb: () => void): void;
+  onSourceChanged(cb: (o: { screenId: string; file: string }) => void): void;
+  /* 화면 */
+  capture(rect: { x: number; y: number; width: number; height: number }): Promise<{ bytes: Uint8Array; w: number; h: number } | null>;
+  siteSnapshot(guestId: number): Promise<SiteSnapshot>;
+  /* 창 */
   setState(s: { title: string; dirty: boolean }): void;
-  /** 창을 닫으려는데 저장 안 된 변경이 있을 때 — 저장하고 닫기를 요청받는다 */
   onRequestSave(cb: () => void): void;
   closeNow(): void;
 }

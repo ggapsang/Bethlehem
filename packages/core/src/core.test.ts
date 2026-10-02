@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { decodeBlob, encFor, encodeBlob, sha256, typeFor } from './codec';
 import { displayNo, moveAnnotation, newDoc, nextScreenId, setField } from './doc';
 import { isManna, parseManna, referencedShas, scriptSafeJs, serializeManna } from './manna-file';
-import type { Annotation, BlobStore, Screen, ScreenVersion } from './types';
+import type { Annotation, BlobStore, MannaDoc, Screen, ScreenVersion } from './types';
 import { absolutize, buildIndex, cssRefs, entryUrlOf, lookup, pkgPath, pkgUrl, rewriteCss, rewriteSrcset } from './vfs';
 
 const enc = new TextEncoder();
@@ -172,5 +172,52 @@ describe('doc', () => {
   it('URL 스냅샷 엔트리는 원래 주소 그대로', () => {
     expect(entryUrlOf({ entry: 'index.html' })).toBe('https://pkg.manna/index.html');
     expect(entryUrlOf({ entry: 'https://example.com/app?x=1' })).toBe('https://example.com/app?x=1');
+  });
+});
+
+describe('merge', () => {
+  const mk = () => {
+    const d = newDoc();
+    d.meta.updatedAt = '2026-10-01T00:00:00.000Z';
+    const a = annotation({ body: '원본', updatedAt: '2026-10-01T00:00:00.000Z' });
+    d.screens.push({ id: 'S', title: '', notes: '개요', versions: [V1('x')], annotations: [a] });
+    return d;
+  };
+
+  it('회신본의 새 Comment·답글을 덧붙이고, 원본이 그대로면 본문을 바꾼다', async () => {
+    const { mergeDoc } = await import('./merge');
+    const base = mk();
+    const inc: MannaDoc = JSON.parse(JSON.stringify(base));
+    inc.origin = { by: '수신자', at: '2026-10-02T00:00:00.000Z', baseUpdatedAt: base.meta.updatedAt };
+    const ia = inc.screens[0].annotations[0];
+    ia.body = '수신자가 고침';
+    ia.updatedAt = '2026-10-02T00:00:00.000Z';
+    ia.replies.push({ id: 'r1', author: '수신자', at: '2026-10-02T00:00:00.000Z', body: '확인' });
+    inc.screens[0].annotations.push(annotation({ id: 'n1', body: '새 Comment', author: '수신자' }));
+    inc.screens[0].notes = '수신자 개요';
+    const r = mergeDoc(base, inc, new Map(), new Map());
+    expect(r).toMatchObject({ added: 1, updated: 1, replies: 1, notes: 1, conflicts: [] });
+    expect(base.screens[0].annotations.map((a) => a.body)).toEqual(['수신자가 고침', '새 Comment']);
+    expect(base.screens[0].notes).toBe('수신자 개요');
+  });
+
+  it('양쪽이 고쳤으면 원본을 두고 회신본 본문을 답글로 남긴다', async () => {
+    const { mergeDoc } = await import('./merge');
+    const base = mk();
+    const inc: MannaDoc = JSON.parse(JSON.stringify(base));
+    inc.origin = { by: '수신자', at: '2026-10-02T00:00:00.000Z', baseUpdatedAt: base.meta.updatedAt };
+    inc.screens[0].annotations[0].body = '수신자 본문';
+    base.screens[0].annotations[0].body = '작성자가 다시 고침';
+    base.screens[0].annotations[0].updatedAt = '2026-10-03T00:00:00.000Z';
+    base.meta.updatedAt = '2026-10-03T00:00:00.000Z';
+    const r = mergeDoc(base, inc, new Map(), new Map());
+    expect(r.conflicts).toHaveLength(1);
+    expect(base.screens[0].annotations[0].body).toBe('작성자가 다시 고침');
+    expect(base.screens[0].annotations[0].replies.at(-1)!.body).toContain('수신자 본문');
+  });
+
+  it('다른 문서는 합치지 않는다', async () => {
+    const { mergeDoc } = await import('./merge');
+    expect(() => mergeDoc(mk(), mk(), new Map(), new Map())).toThrow(/다른 문서/);
   });
 });

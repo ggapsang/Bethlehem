@@ -1,10 +1,10 @@
 /* 문서를 고치는 동작들 — 패널·툴바·스테이지가 같이 쓴다. 모두 mutate 를 거치므로 되돌릴 수 있다 */
-import type { Annotation, Clip, MarkerColor } from '@core';
-import { fingerprint, moveAnnotation, now, setField, sha256, styleProps, toBase64, touchParticipant, trailOf, uid } from '@core';
+import type { Annotation, Clip, MarkerColor, Shot } from '@core';
+import { moveAnnotation, now, setField, sha256, toBase64, touchParticipant, uid } from '@core';
+import type { SiteSnap } from './host';
 import { startRecording, type Recorder } from './stage/record';
-import { pathLog } from './stage/path';
 import {
-  askName, blobs, draft, mutate, notify, recording, screen, selected, stageRef, user, version,
+  addBlobs, askName, blobs, draft, mutate, notify, recording, screen, selected, stageRef, still, user, version,
 } from './store';
 
 export function needName(): boolean {
@@ -18,20 +18,25 @@ function blank(body: string): Annotation {
   return { id: uid(), version: version.peek()!.v, body, author: user.value!, createdAt: t, updatedAt: t, replies: [], history: [] };
 }
 
-/** 지금 잡은 대상(draft)에 Comment 를 단다 */
-export function addFromDraft(body: string): string | null {
+/** 지금 잡은 대상(draft)에 Comment 를 단다. 피커를 켤 때 찍어 둔 화면(still)은 이 Comment 의 shot 이 된다 */
+export async function addFromDraft(body: string): Promise<string | null> {
   const d = draft.peek();
   const s = screen.peek();
-  if (!d || !s || !body.trim() || needName()) return null;
+  const v = version.peek();
+  if (!d || !s || !v || !body.trim() || needName()) return null;
+  const p = d.picked;
+  let shot: Shot | undefined;
+  const st = still.peek();
+  if (st) {
+    const sha = await shaOf(st.bytes);
+    blobs.set(sha, { enc: 'b64', data: toBase64(st.bytes) });
+    const { w, h } = v.viewport;
+    shot = { sha, w: st.w, h: st.h, box: { x: p.rect[0] / w, y: p.rect[1] / h, w: p.rect[2] / w, h: p.rect[3] / h } };
+  }
   const a: Annotation = {
     ...blank(body),
-    anchor: {
-      fp: fingerprint(d.el),
-      ...(d.region ? { region: d.region } : {}),
-      trail: trailOf(d.el.ownerDocument),
-      props: styleProps(d.el),
-      path: pathLog.map((p) => ({ ...p })),
-    },
+    anchor: { fp: p.fp, ...(p.region ? { region: p.region } : {}), trail: p.trail, props: p.props, path: p.path },
+    ...(shot ? { shot } : {}),
   };
   mutate((x) => {
     s.annotations.push(a);
@@ -157,6 +162,17 @@ export async function stopRecording(): Promise<void> {
 
 export function removeClip(a: Annotation, clipId: string): void {
   mutate(() => (a.clips = (a.clips ?? []).filter((c) => c.id !== clipId)), { label: '클립 삭제' });
+}
+
+/** URL 화면의 사본을 바꾼다 — 사용자가 한 일이 아니므로 되돌리기에 남기지 않는다 */
+export function applySiteSnapshot(screenId: string, v: number, snap: SiteSnap): void {
+  addBlobs(snap.blobs);
+  mutate((d) => {
+    const ver = d.screens.find((s) => s.id === screenId)?.versions.find((x) => x.v === v);
+    if (!ver) return;
+    ver.entry = snap.entry;
+    ver.external = snap.external;
+  }, { undoable: false });
 }
 
 export function setMarkerColor(c: MarkerColor): void {

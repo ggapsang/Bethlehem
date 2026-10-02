@@ -2,6 +2,8 @@
 import type { BlobStore, ScreenVersion } from '@core';
 import { absolutize, buildIndex, decodeBlob, entryUrlOf, lookup, pkgUrl, rewriteCss, rewriteSrcset } from '@core';
 import shimSource from './shim.js?raw';
+// 에이전트는 먼저 단독으로 빌드된다 (npm run build:agent) — 화면 안에 문자열로 넣는다
+import agentSource from '../../../../out/agent/agent.js?raw';
 
 export interface Prepared {
   srcdoc: string;
@@ -108,7 +110,9 @@ export async function prepareScreen(version: ScreenVersion, blobs: BlobStore): P
   for (const [k, v] of urls) map[k] = v;
   const shim = dom.createElement('script');
   shim.textContent = `(${shimSource.trim().replace(/;?\s*$/, '')})(${JSON.stringify(map)}, ${JSON.stringify(docBase)});`;
-  dom.head.prepend(shim);
+  const agent = dom.createElement('script');
+  agent.textContent = agentSource;
+  dom.head.prepend(shim, agent);
 
   const doctype = dom.doctype ? `<!DOCTYPE ${dom.doctype.name}>` : '';
   return {
