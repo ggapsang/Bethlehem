@@ -1,6 +1,7 @@
 /* Bethlehem 세션 — 작업 폴더(기본) 또는 테라리움 문서 하나를 연다. 고치면 자동으로 저장한다.
  *   작업 폴더: 화면별 JSON·블롭으로 풀어 두고, dist/ 에 보낼 파일을 자동으로 구워 둔다. 원본 폴더·returned/ 를 감시한다.
- *   문서 하나: 그 .terr.html 에 바로 저장한다. 열 때 "작업 폴더로 풀기"를 권한다.
+ *   문서 하나: 그 .terr.html 에 바로 저장한다. 열 때 "작업 폴더로 풀기"를 권한다 (그 문서가 든 폴더도 된다).
+ *   폴더 열기: 비어 있지 않아도 된다 — 작업 폴더면 열고, 테라리움 문서가 들었으면 풀어서, 화면(HTML)이 들었으면 등록까지.
  */
 import { signal } from '@preact/signals';
 import type { EncodedBlob, MannaDoc, Screen, ScreenVersion } from '@core';
@@ -122,12 +123,11 @@ function afterLoad(): void {
   refreshReturned();
 }
 
-export async function openWorkspace(dir?: string): Promise<boolean> {
+/** 작업 폴더를 그대로 연다 */
+export async function openWorkspace(dir: string): Promise<boolean> {
   try {
-    const target = dir ?? (await api.wsPick('open'));
-    if (!target) return false;
     await flushAutosave(host).catch(() => {});
-    const data = await api.wsOpen(target);
+    const data = await api.wsOpen(dir);
     loadDocument(data.doc, new Map(data.blobs), null);
     saved = new Set(data.blobs.map(([sha]) => sha));
     links.value = data.links;
@@ -141,19 +141,33 @@ export async function openWorkspace(dir?: string): Promise<boolean> {
   }
 }
 
-/** 지금 문서를 새 작업 폴더에 풀어 두고 이어서 작업한다 */
-export async function createWorkspace(): Promise<boolean> {
+/** 여러 테라리움 문서가 든 폴더 — 어느 것을 풀지 고른다 */
+export const docAsk = signal<{ dir: string; docs: { path: string; name: string; at: string; title?: string }[] } | null>(null);
+
+/** 폴더 열기 — 무엇이 들었든 그 폴더를 작업 폴더로 쓴다.
+ *   작업 폴더 → 그대로 연다 · 테라리움 문서가 있으면 → 그 문서를 풀어서 · 화면(HTML)이 있으면 → 새 작업 폴더 + 화면 등록 · 그 밖 → 새 작업 폴더
+ */
+export async function openFolder(dir?: string): Promise<boolean> {
   try {
-    const dir = await api.wsPick('create');
-    if (!dir) return false;
-    saved = new Set();
-    mode.value = { kind: 'workspace', dir };
-    fileName.value = null;
-    await writeWorkspace(dir);
-    await bake(dir);
-    dirty.value = false;
-    afterLoad();
-    notify(`작업 폴더를 만들었습니다 — ${basename(dir)}. 이제 고치면 자동으로 저장되고, 보낼 파일은 dist/ 에 늘 최신으로 있습니다.`);
+    const target = dir ?? (await api.wsPick());
+    if (!target) return false;
+    const info = await api.wsInspect(target);
+    if (info.isWorkspace) return openWorkspace(target);
+    if (info.docs.length > 1) {
+      docAsk.value = { dir: target, docs: info.docs };
+      return false;
+    }
+    if (info.docs.length === 1) return unpackInto(target, info.docs[0]!.path);
+    await flushAutosave(host).catch(() => {});
+    const keep = { d: doc.peek(), b: blobs, m: mode.peek(), f: fileName.peek() };
+    loadDocument(newDoc(), new Map(), null);
+    links.value = {};
+    if (!(await createWorkspace(target))) {
+      loadDocument(keep.d, keep.b, keep.f);
+      mode.value = keep.m;
+      return false;
+    }
+    if (info.prototype) importing.value = { dir: await api.useFolder(target) };
     return true;
   } catch (e) {
     notify(clean((e as Error).message), 'error');
@@ -161,16 +175,48 @@ export async function createWorkspace(): Promise<boolean> {
   }
 }
 
-/** 새 문서 — 새 작업 폴더에서 시작한다 */
-export async function newWorkspace(): Promise<void> {
-  await flushAutosave(host).catch(() => {});
-  const keep = { d: doc.peek(), b: blobs, m: mode.peek(), f: fileName.peek() };
-  loadDocument(newDoc(), new Map(), null);
-  links.value = {};
-  if (!(await createWorkspace())) {
-    // 취소 — 하던 문서로 돌아간다
-    loadDocument(keep.d, keep.b, keep.f);
-    mode.value = keep.m;
+/** 테라리움 문서를 그 폴더(또는 고른 폴더)에 풀어 작업 폴더로 만든다 */
+export async function unpackInto(dir: string, docPath: string): Promise<boolean> {
+  docAsk.value = null;
+  try {
+    await flushAutosave(host).catch(() => {});
+    const f = await api.openPath(docPath);
+    if (!isManna(f.html)) throw new Error(`${f.name} 은 테라리움 문서가 아닙니다.`);
+    const { doc: d, blobs: b } = parseManna(f.html);
+    loadDocument(d, b, null);
+    links.value = {};
+    return createWorkspace(dir);
+  } catch (e) {
+    notify(clean((e as Error).message), 'error');
+    return false;
+  }
+}
+
+/** 지금 문서를 작업 폴더에 풀어 두고 이어서 작업한다. 폴더는 비어 있지 않아도 된다 */
+export async function createWorkspace(dir?: string): Promise<boolean> {
+  try {
+    const m = mode.peek();
+    const target = dir ?? (await api.wsPick({
+      title: '작업 폴더로 쓸 폴더',
+      ...(m.kind === 'file' ? { defaultPath: m.path.replace(/[\\/][^\\/]*$/, '') } : {}),
+    }));
+    if (!target) return false;
+    if ((await api.wsInspect(target)).isWorkspace) {
+      notify(`${basename(target)} 은 이미 작업 폴더입니다.`, 'error', { label: '그 폴더 열기', run: () => openWorkspace(target) });
+      return false;
+    }
+    saved = new Set();
+    mode.value = { kind: 'workspace', dir: target };
+    fileName.value = null;
+    await writeWorkspace(target);
+    await bake(target);
+    dirty.value = false;
+    afterLoad();
+    notify(`작업 폴더 — ${basename(target)}`);
+    return true;
+  } catch (e) {
+    notify(clean((e as Error).message), 'error');
+    return false;
   }
 }
 
@@ -180,7 +226,6 @@ export function closeToStart(): void {
 
 async function ensurePlace(): Promise<boolean> {
   if (mode.peek().kind !== 'none') return true;
-  notify('먼저 작업 폴더를 정합니다 — 화면과 Comment 가 그 폴더에 자동으로 저장됩니다.');
   return createWorkspace();
 }
 
@@ -197,7 +242,7 @@ export function openHtml(path: string, name: string, html: string): void {
   saved = new Set();
   mode.value = { kind: 'file', path };
   afterLoad();
-  notify(`${name} 을 열었습니다. 이 파일에 바로 자동 저장됩니다.`, 'info', { label: '작업 폴더로 풀기', run: () => createWorkspace() });
+  notify(name, 'info', { label: '작업 폴더로 풀기', run: () => createWorkspace() });
 }
 
 export async function openDocument(path?: string): Promise<void> {
@@ -235,11 +280,30 @@ export async function handleDrop(files: FileList): Promise<void> {
   if (!g) return notify('끌어다 놓은 항목의 경로를 알 수 없습니다.', 'error');
   if (g.isWorkspace) await openWorkspace(g.path);
   else if (g.isDir) {
-    if (!(await ensurePlace())) return;
+    if (mode.peek().kind === 'none') return void (await openFolder(g.path));
     importing.value = { dir: g.path };
     refreshRecent();
   } else if (/\.html?$/i.test(g.name)) await openDocument(g.path);
-  else notify('작업 폴더, 화면 폴더(index.html 이 든 폴더), 테라리움 문서(.terr.html) 중 하나를 끌어다 놓아 주세요.', 'error');
+  else if (IMAGE_RE.test(g.name)) {
+    const more = await Promise.all([...files].slice(1).map((f) => api.grantDropped(f)));
+    await addImageScreen(undefined, [g, ...more].filter((x): x is NonNullable<typeof x> => !!x && IMAGE_RE.test(x.name)).map((x) => x.path));
+  } else notify('폴더, 테라리움 문서(.terr.html), 그림(png · jpg) 중 하나를 끌어다 놓아 주세요.', 'error');
+}
+
+const IMAGE_RE = /\.(png|jpe?g|webp|gif|bmp)$/i;
+
+/** 그림 화면 — 요소가 없으니 Comment 는 영역 박스로만 단다 */
+export async function addImageScreen(screenId?: string, paths?: string[]): Promise<void> {
+  try {
+    if (!(await ensurePlace())) return;
+    const list = paths ?? (await api.pickImage());
+    for (const p of list) {
+      const r = await api.packImage(p);
+      applyImport(screenId, { version: r.version, blobs: r.blobs }, { title: r.title, label: '그림', moveAnnotations: true });
+    }
+  } catch (e) {
+    notify(`그림을 열지 못했습니다: ${clean((e as Error).message)}`, 'error');
+  }
 }
 
 export interface Imported {

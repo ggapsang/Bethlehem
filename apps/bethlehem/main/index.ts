@@ -12,6 +12,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { EncodedBlob, MannaDoc } from '@core';
 import { packFolder, scanFolder, type Fetcher, type PackOptions } from '@core/node/pack';
+import { IMAGE_EXT, packImage } from './image';
 import { SITE_PARTITION, snapshotSite, watchSite } from './site';
 import {
   bakeDist, isWorkspace, listReturned, markMerged, readReturned, readWorkspace, watchDir, writeWorkspace, type SourceLink,
@@ -112,6 +113,8 @@ const withExt = (p: string) => (/\.terr\.html$/i.test(p) ? p : p.replace(/\.html
 /* ── 작업 폴더 감시 ────────────────────────────────────────────────── */
 
 let current: { dir: string; docId: string; links: Record<string, SourceLink> } | null = null;
+/** 작업 폴더가 만드는 것들 — 원본 폴더와 같은 곳이어도 화면 파일로 보지 않는다 */
+const WS_NAMES = new Set(['terrarium.json', 'screens', 'blobs', 'dist', 'returned']);
 let unwatch: (() => void)[] = [];
 
 function watchWorkspace(): void {
@@ -122,7 +125,11 @@ function watchWorkspace(): void {
   unwatch.push(watchDir(join(dir, 'returned'), () => win?.webContents.send('returned-changed'), { delay: 800 }));
   for (const [id, link] of Object.entries(current.links)) {
     if (!existsSync(link.dir)) continue;
-    unwatch.push(watchDir(link.dir, (file) => win?.webContents.send('source-changed', { screenId: id, file }), { recursive: true, delay: 2000 }));
+    unwatch.push(watchDir(link.dir, (file) => {
+      const first = file.split(/[\\/]/)[0];
+      if (WS_NAMES.has(first) || file.endsWith('.terr.html') || file.endsWith('.tmp')) return;
+      win?.webContents.send('source-changed', { screenId: id, file });
+    }, { recursive: true, delay: 2000 }));
   }
 }
 
@@ -284,20 +291,45 @@ ipcMain.handle('scan-folder', async (_e, dir: string, entry?: string) => scanFol
 ipcMain.handle('pack-folder', async (_e, opts: PackOptions) => packFolder({ ...opts, dir: guard(opts.dir) }, fetcher));
 
 /* 작업 폴더 */
-ipcMain.handle('ws-pick', async (_e, mode: 'open' | 'create') => {
+/* 그림 화면 */
+ipcMain.handle('pick-image', async () => {
   const r = await dialog.showOpenDialog(win!, {
-    title: mode === 'open' ? '작업 폴더 열기' : '새 작업 폴더 — 비어 있는 폴더를 고르거나 새로 만드세요',
-    defaultPath: settings.lastWorkspace ? dirname(settings.lastWorkspace) : app.getPath('documents'),
+    title: '그림 열기 (png · jpg)',
+    defaultPath: settings.lastFolderDir,
+    filters: [{ name: '그림', extensions: IMAGE_EXT }],
+    properties: ['openFile', 'multiSelections'],
+  });
+  if (r.canceled || !r.filePaths.length) return [];
+  return r.filePaths.map((f) => grant(f));
+});
+ipcMain.handle('pack-image', async (_e, path: string) => packImage(guard(path)));
+
+/** 폴더 고르기 — 비어 있지 않아도 된다. 무엇이 들었는지는 ws-inspect 로 본다 */
+ipcMain.handle('ws-pick', async (_e, o: { title?: string; defaultPath?: string } = {}) => {
+  const r = await dialog.showOpenDialog(win!, {
+    title: o.title ?? '폴더 열기 — 작업 폴더, 테라리움 문서가 든 폴더, 화면 폴더, 빈 폴더',
+    defaultPath: o.defaultPath ?? (settings.lastWorkspace ? dirname(settings.lastWorkspace) : app.getPath('documents')),
     properties: ['openDirectory', 'createDirectory'],
   });
   if (r.canceled || !r.filePaths[0]) return null;
-  const dir = grant(r.filePaths[0]);
-  if (mode === 'open' && !isWorkspace(dir)) throw new Error(`테라리움 작업 폴더가 아닙니다 (terrarium.json 이 없습니다): ${dir}`);
-  if (mode === 'create' && !isWorkspace(dir)) {
-    const names = (await readdir(dir)).filter((n) => !n.startsWith('.'));
-    if (names.length) throw new Error(`비어 있는 폴더를 골라 주세요. 이 폴더에는 이미 파일이 ${names.length}개 있습니다: ${dir}`);
+  return grant(r.filePaths[0]);
+});
+
+/** 폴더에 무엇이 들었나 — 작업 폴더인지, 테라리움 문서가 있는지, 화면(HTML)이 있는지 */
+ipcMain.handle('ws-inspect', async (_e, dir: string) => {
+  const abs = guard(dir);
+  const names = (await readdir(abs).catch(() => [] as string[])).filter((n) => !n.startsWith('.'));
+  const docs: { path: string; name: string; at: string; title?: string }[] = [];
+  for (const n of names.filter((x) => /\.html?$/i.test(x))) {
+    const fp = join(abs, n);
+    const head = (await readFile(fp, 'utf8').catch(() => '')).slice(0, 4000);
+    if (!head.includes('id="manna-doc"') && !head.includes('Terrarium Manna')) continue;
+    const title = /<title>([^<]*)<\/title>/i.exec(head)?.[1];
+    docs.push({ path: fp, name: n, at: (await stat(fp)).mtime.toISOString(), ...(title ? { title } : {}) });
   }
-  return dir;
+  docs.sort((x, y) => y.at.localeCompare(x.at));
+  const prototype = names.some((n) => /\.html?$/i.test(n) && !/\.terr\.html$/i.test(n) && !docs.some((d) => d.name === n));
+  return { isWorkspace: isWorkspace(abs), docs, prototype, empty: names.length === 0 };
 });
 
 ipcMain.handle('ws-open', async (_e, dir: string) => {

@@ -5,7 +5,8 @@
  */
 import type { Host } from './host';
 import { save } from './host';
-import { draft, fullscreen, holdPick, mode, redo, undo } from './store';
+import { removeComment } from './actions';
+import { annotations, draft, fullscreen, holdPick, mode, notify, redo, selected, undo, user } from './store';
 
 let host: Host | null = null;
 export function setKeyHost(h: Host): void {
@@ -40,8 +41,22 @@ export function onKeyDown(e: KeyboardEvent, inScreen = false): void {
     }
     return;
   }
+  // Delete — 고른 Comment 를 지운다 (되돌릴 수 있다)
+  if (e.key === 'Delete' && !isTyping(e) && !e.altKey && !e.shiftKey) {
+    const a = annotations.peek().find((x) => x.id === selected.peek());
+    if (!a) return;
+    if (!(host?.author || a.author === user.peek())) {
+      notify('다른 사람이 단 Comment 는 지울 수 없습니다.', 'error');
+      return;
+    }
+    e.preventDefault();
+    removeComment(a);
+    notify('Comment 를 지웠습니다.', 'info', { label: '되돌리기', run: undo });
+    return;
+  }
   if (e.key === 'Escape' && !isTyping(e)) {
     if (draft.peek()) draft.value = null;
+    else if (selected.peek()) selected.value = null;
     else if (mode.peek() === 'annotate') mode.value = 'view';
     else if (fullscreen.peek() && !inScreen) document.exitFullscreen?.().catch(() => {});
   }

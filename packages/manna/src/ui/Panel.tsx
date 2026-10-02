@@ -44,7 +44,7 @@ function Notes({ scr }: { scr: Screen }) {
           onChange={editNotes}
           allowCheck
           minRows={3}
-          placeholder="이 화면의 개요 — 마크다운으로 적습니다"
+          placeholder="개요"
           label="화면 개요"
           class="notes-editor"
         />
@@ -98,9 +98,6 @@ function Comments({ scr }: { scr: Screen }) {
           <Plus {...ICON} />
         </button>
       </div>
-      {!list.length && (
-        <p class="panel-empty muted">Ctrl 을 누른 채 화면의 요소를 클릭하거나, 드래그해 영역을 잡으세요.</p>
-      )}
       <ol class="cards" ref={listRef}>
         {list.map((a) => (
           <Fragment key={a.id}>

@@ -66,7 +66,8 @@ export const still = signal<Still | null>(null);
 export const shotView = signal(true);
 export const visible = signal<ReadonlySet<string>>(new Set());
 export const misses = signal<Miss[]>([]);
-export const theme = signal<Theme>(lsGet(LS.theme) === 'dark' ? 'dark' : 'light');
+/** 기본은 다크 — 사용자가 라이트로 바꾸면 그 브라우저에 기억한다 */
+export const theme = signal<Theme>(lsGet(LS.theme) === 'light' ? 'light' : 'dark');
 export const user = signal<string | null>(lsGet(LS.user));
 export const askName = signal(false);
 export interface ToastAction {
@@ -269,6 +270,9 @@ export const revealing = signal(false);
 export function requestReveal(id: string): void {
   reveal.value = { id, nonce: Date.now() };
 }
+
+/** 스테이지가 지금 보고 있는 페이지 (패키지 경로 또는 사이트 주소) — Comment 에 함께 적는다 */
+export const stagePage = signal('');
 
 /** 녹화 대상 — 스테이지 프레임 요소 */
 export const stageRef: { frame: HTMLElement | null } = { frame: null };

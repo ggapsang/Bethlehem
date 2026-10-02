@@ -27,9 +27,6 @@ export function UrlDialog({ screenId }: { screenId?: string }) {
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && (urlAsk.value = null)}>
       <form class="modal" onSubmit={submit} aria-labelledby="url-title">
         <h2 id="url-title">{target ? `${target.id} 새 버전 — URL` : 'URL 로 화면 추가'}</h2>
-        <p class="muted">
-          편집 화면 안에서 실제 사이트가 그대로 돕니다. 로그인이 필요하면 그 안에서 하세요. Comment 를 달 때만 화면이 멈추고, 받는 사람에게는 마지막 모습이 사본으로 갑니다.
-        </p>
         <label class="field">
           <span>주소</span>
           <input ref={input} class="input" type="text" inputMode="url" placeholder="https://" aria-label="주소" onInput={() => setError(null)} />

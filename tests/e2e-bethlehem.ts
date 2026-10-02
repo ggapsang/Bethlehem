@@ -1,11 +1,13 @@
 /* Bethlehem E2E — 빌드된 Electron 앱으로
- *   작업 폴더 만들기 → 폴더 화면 등록 → Ctrl 피커(멈춤 그림) → 팝업 Comment(달 때 화면) → 자동 저장 → 원본 변경 감지
- *   → URL 화면(실시간 사이트 · 사용자 지정 테스트 사이트) → 다른 이름으로 저장 → 돌아온 문서 병합 → 다시 켜면 이어서
+ *   폴더 열기(비어 있지 않은 폴더) → 폴더 화면 등록 → Ctrl 피커(멈춤 그림) → 팝업 Comment(달 때 화면) → 자동 저장
+ *   → FAB 조망 → BAY-4 상세 맵 Comment 로 찾아가기 → 원본 변경 감지 → URL 화면(실시간 사이트 · 사용자 지정 테스트 사이트)
+ *   → 여러 페이지 화면(index.html → detail.html) → 그림 화면 → 다른 이름으로 저장 → 돌아온 문서 병합 → 다시 켜면 이어서
+ *   → 테라리움 문서가 든 폴더를 열면 풀어서 작업 폴더로
  * 파일 대화상자는 메인 프로세스에서 바꿔 끼운다.
  *
  *   npm run test:e2e:app
  */
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -20,6 +22,9 @@ const WS = mkdtempSync(join(tmpdir(), 'terr-ws-'));
 const SRC = mkdtempSync(join(tmpdir(), 'terr-src-'));
 const UD = mkdtempSync(join(tmpdir(), 'terr-ud-'));
 const EXPORT = join(OUT, 'export-test');
+const MULTI = join(OUT, 'multi-src');
+const IMG = join(OUT, 'img-src', 'icon.png');
+const UNPACK = join(OUT, 'unpack-ws');
 
 let failed = 0;
 function check(name: string, ok: boolean, detail = ''): void {
@@ -93,18 +98,29 @@ async function ctrlPick(page: Page, p: { x: number; y: number }, to?: { x: numbe
 
 async function main() {
   cpSync(resolve('example/proto'), SRC, { recursive: true });
+  writeFileSync(join(WS, '메모.txt'), '작업 폴더는 비어 있지 않아도 된다');
+  for (const d of [MULTI, UNPACK, join(OUT, 'img-src')]) rmSync(d, { recursive: true, force: true });
+  mkdirSync(MULTI, { recursive: true });
+  mkdirSync(join(OUT, 'img-src'), { recursive: true });
+  cpSync(resolve('docs/icon.png'), IMG);
+  const PAGE = (title: string, body: string) =>
+    `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${title}</title><style>body{margin:0;font:16px sans-serif;background:#f5f5f4}a{display:inline-block;margin:40px;font-size:32px}#detailBox{margin:40px;width:600px;height:300px;background:#fb923c}</style></head><body>${body}</body></html>`;
+  writeFileSync(join(MULTI, 'index.html'), PAGE('목록', '<h1>목록</h1><a id="toDetail" href="detail.html">상세로</a>'));
+  writeFileSync(join(MULTI, 'detail.html'), PAGE('상세', '<h1>상세</h1><a id="toHome" href="index.html">목록으로</a><div id="detailBox"></div>'));
   let { app, page } = await launch();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
-  console.log('\n[1] 작업 폴더 만들기');
+  console.log('\n[1] 폴더 열기 — 비어 있지 않은 폴더도 작업 폴더가 된다');
   await page.waitForSelector('.modal input');
   await page.fill('.modal input', '기획자');
   await page.click('.modal button[type=submit]');
   check('키 아트 첫 화면 · 소개 문구 없음', !!(await page.$('.welcome-art')) && !((await page.textContent('.welcome')) ?? '').includes('바이브'));
   await nextOpen(app, WS);
-  await page.click('.welcome button:has-text("새 작업 폴더")');
+  await page.click('.welcome button:has-text("폴더 열기")');
   check('terrarium.json 이 생긴다', !!(await until(() => existsSync(join(WS, 'terrarium.json')))));
+  check('원래 있던 파일은 그대로 둔다', existsSync(join(WS, '메모.txt')));
+  check('다크 테마가 기본이다', (await page.getAttribute('html', 'data-theme')) === 'dark');
   check('툴바에 작업 폴더 이름이 보인다', ((await page.textContent('.tb-place')) ?? '').includes(WS.split(/[\\/]/).pop()!));
 
   console.log('\n[2] 폴더 화면 · 자동 저장 · 보낼 파일');
@@ -149,6 +165,43 @@ async function main() {
   await page.click('.badge-btn:has-text("실시간 화면 보기")');
   check('"실시간 화면 보기" 로 돌아간다', !(await page.$('.shot-view')));
 
+  console.log('\n[3b] FAB 조망 → BAY-4 상세 맵 Comment — 누르면 그 화면으로');
+  await page.keyboard.press('Escape');
+  f = await screenFrame(page);
+  const fabAt = await until(() => f.evaluate(() => {
+    const h = (0, eval)('typeof FB !== "undefined" ? FB.hit : null') as { x: number; y: number }[] | null;
+    const r = document.querySelector('#fabStage')!.getBoundingClientRect();
+    return h && { x: r.left + h.reduce((a, q) => a + q.x, 0) / h.length, y: r.top + h.reduce((a, q) => a + q.y, 0) / h.length };
+  }).catch(() => null), 10000);
+  check('BAY-4 구역을 찾는다', !!fabAt);
+  if (fabAt) {
+    const inA = () => f.evaluate(() => !document.querySelector('#viewA')?.hasAttribute('hidden')).catch(() => false);
+    const fp = await stagePoint(page, fabAt.x, fabAt.y);
+    await page.mouse.move(fp.x, fp.y);
+    await page.mouse.click(fp.x, fp.y);
+    check('BAY-4 를 누르면 상세 맵', !!(await until(inA, 3000)));
+    const iso = await f.evaluate(() => { const b = document.querySelector('#iso')!.getBoundingClientRect(); return { x: b.x + b.width * 0.45, y: b.y + b.height * 0.45 }; });
+    await ctrlPick(page, await stagePoint(page, iso.x, iso.y));
+    await page.waitForSelector('.popover-card .composer');
+    await page.click('.popover-card .composer .cm-content');
+    await page.keyboard.type('상세 맵 — 차량 라벨이 겹칩니다');
+    await page.keyboard.press('Control+Enter');
+    const cIso = await until(() => comments('SCR-001').find((c: { body: string }) => c.body.includes('상세 맵')), 8000);
+    check('상세 맵 Comment 에 FAB 클릭 경로가 남는다', !!cIso?.anchor?.path?.some((st: { fp: { id?: string } }) => st.fp.id === 'fabCv'), JSON.stringify(cIso?.anchor?.path?.map((st: { fp: { id?: string } }) => st.fp.id)));
+    await page.keyboard.press('Escape');
+    await f.click('#backFab');
+    check('FAB 로 돌아왔다', !!(await until(async () => !(await inA()), 3000)));
+    await page.click('.cards > .card:nth-child(2) .card-title');
+    const back = await until(async () => {
+      f = await screenFrame(page);
+      return (await inA()) && !(await page.$('.stage-note'));
+    }, 30000);
+    const marks = await page.$$eval('.marker', (ms) => ms.filter((m) => (m as HTMLElement).style.display === 'flex').map((m) => m.textContent));
+    check('Comment 를 누르면 FAB → BAY-4 를 다시 눌러 상세 맵으로 간다', !!back && marks.includes('2'), JSON.stringify(marks));
+    await page.screenshot({ path: resolve(OUT, 'b3b-bay4.png') });
+    await page.keyboard.press('Escape');
+  }
+
   console.log('\n[4] 원본 폴더가 바뀌면');
   appendFileSync(join(SRC, 'index.html'), '\n<!-- 수정 -->\n');
   const toast = await until(() => page.$('.toast:has-text("원본 폴더가 바뀌었습니다")'), 10000);
@@ -160,7 +213,7 @@ async function main() {
   }
 
   console.log('\n[5] URL 화면 — 편집기 안에서 실시간');
-  await page.click('button[aria-label="화면 추가 — 폴더나 URL"]');
+  await page.click('button[aria-label="화면 추가"]');
   await page.click('.popover-item:has-text("URL")');
   await page.fill('.modal input[aria-label="주소"]', SITE);
   await page.click('.modal button[type=submit]');
@@ -180,13 +233,12 @@ async function main() {
   // 지도 위 영역에 Comment
   await ctrlPick(page, await stagePoint(page, 800, 450), await stagePoint(page, 1100, 650));
   await page.waitForSelector('.popover-card .composer');
-  const lbl = (await page.textContent('.popover-card .composer .mono')) ?? '';
-  check('지도 위 드래그는 지도 요소 안의 영역으로 잡힌다', /xms-fe-map-monitor.*영역/.test(lbl), lbl);
   await page.click('.popover-card .composer .cm-content');
   await page.keyboard.type('지도 — 이 구역 차량 아이콘이 겹칩니다');
   await page.keyboard.press('Control+Enter');
   const c2 = await until(() => comments('SCR-002')[0], 8000);
   check('URL 화면 Comment 에도 달 때 화면이 붙는다', !!c2?.shot?.sha);
+  check('지도 위 드래그는 지도 요소 안의 영역으로 잡힌다', !!c2?.anchor?.region && /xms-fe-map-monitor/i.test(c2?.anchor?.fp?.tag ?? ''), c2?.anchor?.fp?.tag);
   const snap = await until(() => {
     const sj = existsSync(join(WS, 'screens', 'SCR-002', 'screen.json')) ? readJson(join(WS, 'screens', 'SCR-002', 'screen.json')) : null;
     const ext = sj?.versions?.[0]?.external ?? [];
@@ -194,6 +246,68 @@ async function main() {
   }, 20000);
   check('보낸 파일용 사본 — 지도 같은 shadow DOM·캔버스는 픽셀로 담긴다', !!snap, snap ? `리소스 ${snap.length}개` : '');
   await page.screenshot({ path: resolve(OUT, 'b5-site-comment.png') });
+
+  console.log('\n[5b] 여러 페이지 화면 — index.html → detail.html');
+  await nextOpen(app, MULTI);
+  await page.click('button[aria-label="화면 추가"]');
+  await page.click('.popover-item:has-text("화면 폴더 선택")');
+  await page.waitForSelector('.file-list');
+  await page.click('.modal button[type=submit]');
+  f = await screenFrame(page);
+  await f.waitForSelector('#toDetail');
+  await f.click('#toDetail');
+  const onDetail = await until(async () => {
+    const fr = await screenFrame(page);
+    return (await fr.$('#detailBox')) ? fr : null;
+  }, 10000);
+  check('화면 안의 링크로 다른 페이지(detail.html)로 간다', !!onDetail);
+  check('화면 머리에 지금 페이지가 보인다', ((await page.textContent('.sc-page').catch(() => '')) ?? '').includes('detail.html'));
+  if (onDetail) {
+    f = onDetail;
+    const db = await f.evaluate(() => { const b = document.querySelector('#detailBox')!.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+    await ctrlPick(page, await stagePoint(page, db.x, db.y));
+    await page.waitForSelector('.popover-card .composer');
+    await page.click('.popover-card .composer .cm-content');
+    await page.keyboard.type('상세 페이지의 상자');
+    await page.keyboard.press('Control+Enter');
+    const cm = await until(() => comments('SCR-003')[0], 8000);
+    check('Comment 에 페이지(detail.html)가 남는다', cm?.anchor?.page === 'detail.html', cm?.anchor?.page);
+    await page.keyboard.press('Escape');
+    await page.click('.sc-page');
+    const home = await until(async () => {
+      const fr = await screenFrame(page);
+      return (await fr.$('#toDetail')) ? fr : null;
+    }, 10000);
+    check('머리의 경로를 누르면 첫 페이지로', !!home);
+    await page.click('.cards > .card:first-child .card-title');
+    const again = await until(async () => {
+      const fr = await screenFrame(page);
+      if (!(await fr.$('#detailBox'))) return false;
+      const ms = await page.$$eval('.marker', (m) => m.filter((x) => (x as HTMLElement).style.display === 'flex').length);
+      return ms === 1;
+    }, 15000);
+    check('다른 페이지의 Comment 를 누르면 그 페이지로 가서 마커가 붙는다', !!again);
+    await page.screenshot({ path: resolve(OUT, 'b5b-multipage.png') });
+    await page.keyboard.press('Escape');
+  }
+
+  console.log('\n[5c] 그림 화면 (png)');
+  await nextOpen(app, IMG);
+  await page.click('button[aria-label="화면 추가"]');
+  await page.click('.popover-item:has-text("그림")');
+  await until(async () => ((await page.textContent('.sc-head .sc-id').catch(() => '')) ?? '') === 'SCR-004', 10000);
+  check('그림이 화면(SCR-004)으로 들어온다', ((await page.textContent('.sc-head .sc-id')) ?? '') === 'SCR-004');
+  check('실행 상태가 "그림" — 일시정지·녹화가 없다', ((await page.textContent('.sc-state')) ?? '').includes('그림') && !(await page.$('.sc-head button[aria-label="화면 일시정지"]')));
+  const ib = (await (await page.$('.stage-frame'))!.boundingBox())!;
+  await ctrlPick(page, { x: ib.x + ib.width * 0.5, y: ib.y + ib.height * 0.5 });
+  await page.waitForSelector('.popover-card .composer');
+  await page.click('.popover-card .composer .cm-content');
+  await page.keyboard.type('로고 가운데');
+  await page.keyboard.press('Control+Enter');
+  const ci = await until(() => comments('SCR-004')[0], 8000);
+  check('그림 위 클릭은 박스(영역) Comment 가 된다', !!ci?.anchor?.region, JSON.stringify(ci?.anchor?.region));
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: resolve(OUT, 'b5c-image.png') });
 
   console.log('\n[6] 다른 이름으로 저장');
   await nextSave(app, EXPORT);
@@ -237,7 +351,7 @@ async function main() {
     await badge.click();
     await page.click('.popover-returned button:has-text("병합")');
     await page.selectOption('select[aria-label="화면"]', 'SCR-001');
-    const merged = await until(() => comments('SCR-001').length === 2 && comments('SCR-001')[0].replies.length === 1, 8000);
+    const merged = await until(() => comments('SCR-001').length === 3 && comments('SCR-001')[0].replies.length === 1, 8000);
     check('병합 — Comment 추가와 답글이 들어온다', !!merged);
     check('병합한 회신본은 returned/merged/ 로', existsSync(join(WS, 'returned', 'merged', 'proto_수신자.terr.html')));
   }
@@ -252,6 +366,17 @@ async function main() {
   check('마지막 작업 폴더가 그대로 열린다', !!(await until(async () => ((await page.textContent('.tb-place').catch(() => '')) ?? '').includes(WS.split(/[\\/]/).pop()!), 15000)));
   check('마지막으로 보던 화면(SCR-002)으로', !!(await until(async () => (await page.$eval('select[aria-label="화면"]', (el) => (el as HTMLSelectElement).value).catch(() => '')) === 'SCR-002', 10000)));
   check('Comment 가 그대로 있다', (await page.$$('.cards > .card')).length === 1);
+
+  console.log('\n[10] 테라리움 문서가 든 폴더 열기 — 풀어서 작업 폴더로');
+  mkdirSync(UNPACK, { recursive: true });
+  cpSync(dist, join(UNPACK, 'proto_받은.terr.html'));
+  await nextOpen(app, UNPACK);
+  await page.click('button[aria-label="작업 폴더 · 문서"]');
+  await page.click('.popover-item:has-text("폴더 열기")');
+  check('문서를 풀어 terrarium.json 을 만든다', !!(await until(() => existsSync(join(UNPACK, 'terrarium.json')), 10000)));
+  check('화면이 모두 풀린다', !!(await until(() => existsSync(join(UNPACK, 'screens')) && readdirSync(join(UNPACK, 'screens')).length === 4, 8000)),
+    existsSync(join(UNPACK, 'screens')) ? readdirSync(join(UNPACK, 'screens')).join(',') : '');
+  check('툴바가 그 폴더를 가리킨다', !!(await until(async () => ((await page.textContent('.tb-place')) ?? '').includes('unpack-ws'), 5000)));
   await app.close();
 
   for (const d of [WS, SRC, UD]) rmSync(d, { recursive: true, force: true });

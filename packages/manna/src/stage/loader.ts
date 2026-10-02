@@ -44,7 +44,8 @@ const URL_ATTRS: [string, string][] = [
   ['use[href]', 'href'],
 ];
 
-export async function prepareScreen(version: ScreenVersion, blobs: BlobStore): Promise<Prepared> {
+/** page 를 주면 시작 페이지 대신 패키지 안의 그 HTML 을 연다 (페이지 사이 이동) */
+export async function prepareScreen(version: ScreenVersion, blobs: BlobStore, page?: string): Promise<Prepared> {
   const index = buildIndex(version);
   const types = new Map<string, string>();
   for (const [p, f] of Object.entries(version.files)) types.set(pkgUrl(p), f.type);
@@ -56,7 +57,7 @@ export async function prepareScreen(version: ScreenVersion, blobs: BlobStore): P
 
   const urls = new Map<string, string>();
   const made: string[] = [];
-  const entryUrl = entryUrlOf(version);
+  const entryUrl = page && version.files[page] ? pkgUrl(page) : entryUrlOf(version);
 
   const urlFor = (abs: string): string | undefined => {
     const key = [abs, abs.split('#')[0], abs.split('#')[0].split('?')[0]].find((k) => bytes.has(k));
@@ -74,10 +75,11 @@ export async function prepareScreen(version: ScreenVersion, blobs: BlobStore): P
     urls.set(key, u);
     return u;
   };
-  for (const url of bytes.keys()) if (url !== entryUrl) urlFor(url);
+  // 시작 페이지도 Blob URL 을 만든다 — 다른 페이지에서 돌아오는 링크를 shim 이 알아보게
+  for (const url of bytes.keys()) urlFor(url);
 
   const entry = bytes.get(entryUrl);
-  if (!entry) throw new Error(`엔트리 파일 '${version.entry}' 이 문서에 없습니다.`);
+  if (!entry) throw new Error(`시작 파일 '${page ?? version.entry}' 이 문서에 없습니다.`);
   const dom = new DOMParser().parseFromString(utf8.decode(entry), 'text/html');
   const warnings: string[] = [];
   // <base href> 가 있으면 문서 안 상대 경로의 기준이 바뀐다. 해석에 반영하고, 태그는 지운다(srcdoc 에서는 엉뚱한 곳을 가리킨다)

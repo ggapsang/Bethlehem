@@ -61,6 +61,19 @@ async function ctrlClick(page: Page, p: { x: number; y: number }) {
   await page.keyboard.up('Control');
 }
 
+/** Comment 를 눌러 화면 상태를 찾아가는 동안 — 불러오는 표시가 떴다 사라질 때까지 */
+async function revealDone(page: Page) {
+  await page.waitForSelector('.stage-note', { timeout: 1500 }).catch(() => {});
+  await page.waitForFunction(() => !document.querySelector('.stage-note'), null, { timeout: 30000 }).catch(() => {});
+}
+
+/** 패널의 n번째 Comment 를 고른 상태로 — 이미 골라져 있으면 그대로 둔다 */
+async function selectCard(page: Page, n: number) {
+  const sel = `.cards > .card:nth-child(${n})`;
+  if (!(await page.$(sel + '.is-sel'))) await page.click(sel + ' .no');
+  if (!(await page.$(sel + '.is-sel'))) await page.click(sel + ' .no');
+}
+
 async function typeComposer(page: Page, text: string) {
   await page.waitForSelector('.composer .cm-content');
   await page.click('.composer .cm-content');
@@ -91,7 +104,23 @@ async function main() {
       return c.captureStream(30);
     };
   });
+  if (process.env.DEBUG_REVEAL) {
+    await ctx.addInitScript(() => {
+      if (window.top === window) return;
+      window.addEventListener('message', (e) => {
+        const m = (e.data as { __terrHost?: { type: string } })?.__terrHost;
+        if (m && m.type === 'reveal') console.log('REVEAL ' + JSON.stringify(m));
+      });
+      const t0 = Date.now();
+      setInterval(() => {
+        try {
+          console.log(`T${Date.now() - t0} view=${(0, eval)('typeof store !== "undefined" ? store.view : "-"')} splash=${document.querySelector('#splash')?.className}`);
+        } catch {}
+      }, 1000);
+    });
+  }
   const page = await ctx.newPage();
+  if (process.env.DEBUG_REVEAL) page.on('console', (m) => /^(REVEAL|T\d)/.test(m.text()) && console.log('    [frame]', m.text().slice(0, 600)));
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -118,7 +147,7 @@ async function main() {
   await page.mouse.move(p.x, p.y);
   await page.keyboard.down('Control');
   await page.waitForTimeout(100);
-  check('Ctrl 을 누르면 피커가 된다', !!(await page.$('.pick-layer')) && !!(await page.$('.stage-badge-pick')));
+  check('Ctrl 을 누르면 피커가 된다', !!(await page.$('.pick-layer')) && !!(await page.$('.app.is-picking')));
   await page.mouse.click(p.x, p.y);
   await page.keyboard.up('Control');
   await page.waitForTimeout(100);
@@ -127,6 +156,9 @@ async function main() {
   await page.keyboard.press('Control+Enter');
   await page.waitForTimeout(300);
   check('Comment 가 생긴다', (await cardCount(page)) === 1);
+  check('다크 테마가 기본이다', (await page.getAttribute('html', 'data-theme')) === 'dark');
+  check('화면 머리에 화면 ID · 버전 · 실행 상태가 보인다',
+    !!(await page.$('.screen-container .sc-head .sc-id')) && (await page.$$('.sc-head .ver-chip')).length === 2 && !!(await page.$('.sc-head .sc-state')));
   check('목록 이어 쓰기와 체크박스가 렌더링된다', !!(await page.$('.card .cm-task')));
   // 캔버스 위 영역 — Ctrl 누른 채 드래그
   const a = await pagePoint(page, f, '#fabCv', 0.3, 0.3);
@@ -139,8 +171,7 @@ async function main() {
   await page.mouse.move(b.x, b.y, { steps: 4 });
   await page.mouse.up();
   await page.waitForSelector('.composer');
-  const regionLabel = (await page.textContent('.composer .mono')) ?? '';
-  check('드래그는 캔버스 안의 영역으로 잡힌다', regionLabel === 'canvas#fabCv 안의 영역', regionLabel);
+  check('작성 창에 대상 설명 같은 각주가 없다', !(await page.$('.composer .mono')) && !(await page.$('.composer label')));
   check('작성 창이 대상 옆 팝업으로 뜬다', !!(await page.$('.popover-card .composer')) && !(await page.$('.panel .composer')));
   await typeComposer(page, 'BAY-4 구역 — **경고 색** 대비가 약함');
   await page.click('.composer .btn-primary');
@@ -191,6 +222,16 @@ async function main() {
   check('팝업의 체크박스를 누르면 [x] 로 바뀐다', await page.$eval('.popover-card .detail .cm-task', (el) => (el as HTMLInputElement).checked));
   check('패널 카드에도 반영된다', await page.$eval('.cards > .card:nth-child(2) .card-body .cm-task', (el) => (el as HTMLInputElement).checked));
 
+  console.log('\n[6b] Delete 키');
+  await selectCard(page, 2);
+  await page.keyboard.press('Delete');
+  await page.waitForTimeout(300);
+  check('고른 Comment 를 Delete 로 지운다', (await cardCount(page)) === 1, `${await cardCount(page)}개`);
+  await page.mouse.click(5, 300);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(300);
+  check('Ctrl+Z 로 되살린다', (await cardCount(page)) === 2);
+
   console.log('\n[7] 다른 화면 상태로 이동');
   await f.click('#tabB');
   await page.waitForTimeout(600);
@@ -206,17 +247,69 @@ async function main() {
   check('FAB 로 가면 설비정보 탭의 Comment 가 숨는다', !(await visibleMarkers(page)).includes('3'));
   // 수신자가 숨은 Comment 를 누른다 — 경로의 탭을 눌러 그 상태로 간다 (빠른 길)
   await page.click('.cards > .card:nth-child(3) .card-title');
-  await page.waitForFunction(() => !document.querySelector('.stage-note'), null, { timeout: 15000 }).catch(() => {});
+  await revealDone(page);
   await page.waitForTimeout(700);
   const inB = await f.evaluate(() => !document.querySelector('#viewB')?.hasAttribute('hidden'));
   check('탭 안의 Comment 를 누르면 그 탭으로 전환된다', inB && (await visibleMarkers(page)).includes('3'), JSON.stringify(await visibleMarkers(page)));
   // 캔버스 Comment(경로 없음)를 누른다 — 처음부터 다시 불러와 FAB 로 돌아간다
   await page.click('.cards > .card:first-child .card-title');
-  await page.waitForFunction(() => !document.querySelector('.stage-note'), null, { timeout: 15000 }).catch(() => {});
+  await revealDone(page);
   await page.waitForTimeout(800);
   f = await screenFrame(page);
   const back = await visibleMarkers(page);
   check('다른 상태의 Comment 를 누르면 그 화면 상태로 돌아간다', back.includes('1'), JSON.stringify(back));
+
+  console.log('\n[7b] FAB 조망 → BAY-4 상세 맵 — 캔버스 클릭으로 들어간 화면');
+  f = await screenFrame(page);
+  await page.mouse.click(5, 300);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  check('Esc 로 Comment 팝업을 닫는다', !(await page.$('.popover-card')));
+  const fabPoint = async () => {
+    const box = (await (await page.$('iframe.stage-iframe'))!.boundingBox())!;
+    const c = await f.evaluate(() => {
+      const h = (window as unknown as { FB?: { hit: { x: number; y: number }[] | null } }).FB?.hit
+        ?? (0, eval)('typeof FB !== "undefined" ? FB.hit : null');
+      const r = document.querySelector('#fabStage')!.getBoundingClientRect();
+      if (!h) return null;
+      return { x: r.left + h.reduce((a: number, q: { x: number }) => a + q.x, 0) / h.length, y: r.top + h.reduce((a: number, q: { y: number }) => a + q.y, 0) / h.length };
+    }).catch(() => null);
+    return c && { x: box.x + c.x * (box.width / 1920), y: box.y + c.y * (box.width / 1920) };
+  };
+  let fp: { x: number; y: number } | null = null;
+  for (let i = 0; i < 30 && !fp; i++) {
+    fp = await fabPoint();
+    if (!fp) await page.waitForTimeout(200);
+  }
+  check('FAB 조망에서 BAY-4 구역을 찾는다', !!fp);
+  if (fp) {
+    const inA = () => f.evaluate(() => !document.querySelector('#viewA')?.hasAttribute('hidden'));
+    await page.mouse.move(fp.x, fp.y);
+    await page.mouse.click(fp.x, fp.y);
+    await page.waitForTimeout(700);
+    check('BAY-4 를 누르면 상세 맵으로 들어간다', await inA());
+    await ctrlClick(page, await pagePoint(page, f, '#iso', 0.45, 0.45));
+    await typeComposer(page, '상세 맵 Comment');
+    await page.keyboard.press('Control+Enter');
+    await page.waitForTimeout(300);
+    const n = await cardCount(page);
+    check('상세 맵에 Comment 를 단다', n === 4, `${n}개`);
+    await f.click('#backFab');
+    await page.waitForTimeout(600);
+    check('FAB 로 돌아오면 상세 맵 Comment 가 숨는다', !(await inA()) && !(await visibleMarkers(page)).includes('4'));
+    await page.click('.cards > .card:nth-child(4) .card-title');
+    await revealDone(page);
+    await page.waitForTimeout(800);
+    f = await screenFrame(page);
+    await page.keyboard.press('Escape');
+    const ok = (await inA()) && (await visibleMarkers(page)).includes('4');
+    check('상세 맵 Comment 를 누르면 FAB → BAY-4 를 다시 눌러 그 화면으로 간다', ok, JSON.stringify(await visibleMarkers(page)));
+    await page.screenshot({ path: resolve(OUT, '2b-bay4.png') });
+    await selectCard(page, 4);
+    await page.keyboard.press('Delete');
+    await page.waitForTimeout(300);
+    check('정리 — 상세 맵 Comment 를 지운다', (await cardCount(page)) === 3);
+  }
 
   console.log('\n[8] 녹화');
   await page.click('.cards > .card:first-child .card-title').catch(() => {});
@@ -246,7 +339,7 @@ async function main() {
   await page.click('button[aria-label="전체화면"]');
   await page.waitForTimeout(400);
   const full = await page.evaluate(() => !!document.fullscreenElement);
-  check('전체화면 — 툴바가 숨고 작은 막대가 뜬다', full && !(await page.$('.toolbar')) && !!(await page.$('.float-bar')));
+  check('전체화면 — 툴바가 숨고 화면 머리에 조작이 남는다', full && !(await page.$('.toolbar')) && !!(await page.$('.sc-head button[aria-label="피커"]')));
   await page.screenshot({ path: resolve(OUT, '3-fullscreen.png') });
   await page.click('button[aria-label="전체화면 나가기"]');
   await page.waitForTimeout(300);
@@ -274,13 +367,13 @@ async function main() {
   check('클립이 남아 있다', ((await page2.textContent('.cards')) ?? '').length > 0 && (await page2.$$('.card .badge-icon')).length > 0);
 
   console.log('\n[11] 버전 · 테마');
-  await page2.selectOption('select[aria-label="화면 버전"]', '1');
+  await page2.click('.ver-chip[data-v="1"]');
   f = await screenFrame(page2);
   check('v1(옛 화면)도 같은 데이터로 뜬다', await splashDone(f));
   await page2.click('button[aria-label="테마 전환"]');
   await page2.waitForTimeout(100);
-  check('다크 테마로 바뀐다', (await page2.getAttribute('html', 'data-theme')) === 'dark');
-  await page2.screenshot({ path: resolve(OUT, '4-dark-v1.png') });
+  check('라이트 테마로 바뀐다', (await page2.getAttribute('html', 'data-theme')) === 'light');
+  await page2.screenshot({ path: resolve(OUT, '4-light-v1.png') });
 
   console.log('\n[12] 라이브 문서 — 저장을 누르지 않아도');
   const page3 = await ctx.newPage();

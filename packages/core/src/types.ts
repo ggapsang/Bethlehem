@@ -46,8 +46,8 @@ export interface ScreenVersion {
   /** 시작 파일. 패키지 경로('index.html') 또는 URL 스냅샷이면 원래 페이지 URL */
   entry: string;
   /** URL 로 담은 화면이면 어떻게 담았는지 */
-  /** URL 화면 — site: 편집기에서는 실시간 사이트, 보낸 파일에는 마지막 사본 / live·static: 예전 담기 방식 */
-  source?: { url: string; mode: 'site' | 'live' | 'static'; at: string };
+  /** site: URL 화면(편집기에서는 실시간, 보낸 파일에는 사본) · image: 그림 화면(영역 박스만) · live·static: 예전 담기 방식 */
+  source?: { url: string; mode: 'site' | 'image' | 'live' | 'static'; at: string };
   viewport: Viewport;
   files: Record<string, FileEntry>;
   external: ExternalEntry[];
@@ -89,6 +89,8 @@ export interface Anchor {
   props?: Record<string, string>;
   /** 화면을 연 뒤 달기 전까지의 클릭 — 다른 화면 상태에 있는 대상으로 돌아갈 때 다시 누른다 */
   path?: Step[];
+  /** 단 페이지 — 폴더 화면은 패키지 경로('detail.html'), URL 화면은 주소. 없으면 시작 페이지 */
+  page?: string;
 }
 
 /** 화면 위 클릭 한 번 — 요소 지문과 요소 안의 상대 위치(0~1). 캔버스 위 클릭도 다시 낼 수 있다 */

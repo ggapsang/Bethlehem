@@ -8,10 +8,10 @@ import { App } from '@manna/App';
 import icon from '@manna/assets/favicon.png';
 import { askName, dirty, screenId, user, versionNo } from '@manna/store';
 import { ImportDialog } from './ImportDialog';
-import { handleDrop, host, importing, mode, placeName, rememberScreen, start, urlAsk } from './session';
+import { docAsk, handleDrop, host, importing, mode, placeName, rememberScreen, start, urlAsk } from './session';
 import { DocTools, ScreenTools } from './Tools';
 import { UrlDialog } from './UrlDialog';
-import { Welcome } from './Welcome';
+import { DocChoice, Welcome } from './Welcome';
 
 function Bethlehem() {
   const [dropping, setDropping] = useState(false);
@@ -51,7 +51,8 @@ function Bethlehem() {
       <App host={host} start={<DocTools />} screenTools={<ScreenTools />} empty={<Welcome />} />
       {importing.value && <ImportDialog key={importing.value.dir + importing.value.screenId} target={importing.value} />}
       {urlAsk.value && <UrlDialog screenId={urlAsk.value.screenId} />}
-      {dropping && <div class="drop-veil">작업 폴더 · 화면 폴더 · 테라리움 문서를 놓으세요</div>}
+      {docAsk.value && <DocChoice />}
+      {dropping && <div class="drop-veil">폴더 · 테라리움 문서 · 그림을 놓으세요</div>}
     </>
   );
 }

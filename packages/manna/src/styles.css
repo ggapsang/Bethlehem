@@ -30,12 +30,15 @@
   --unit-12: 48px; --unit-14: 56px; --unit-60: 240px; --unit-96: 384px;
 
   /* ── 시맨틱 (라이트) ── */
-  --bg-canvas: var(--neutral-100);
+  /* Terrarium UI/UX 가이드 §6 — Light: Canvas neutral-50 · Surface white · Secondary neutral-100 · Border neutral-200 */
+  --bg-canvas: var(--neutral-50);
   --bg-panel: var(--white);
   --bg-input: var(--white);
-  --bg-raise: var(--neutral-50);
+  --bg-raise: var(--neutral-100);
   --bg-hover: var(--neutral-100);
-  --bg-stage: var(--neutral-200);
+  --bg-stage: var(--neutral-100);
+  --bg-container: var(--white);
+  --frame-border: var(--neutral-300);
   --text-primary: var(--neutral-900);
   --text-secondary: var(--neutral-600);
   --text-tertiary: var(--neutral-500);
@@ -49,7 +52,9 @@
   --focus-ring: var(--primary-500);
   --marker-bg: var(--neutral-900);
   --marker-text: var(--white);
-  --shadow: 0 4px 16px rgb(28 25 23 / 0.12);
+  /* 깊이는 그림자가 아니라 레이어와 대비로 (가이드 §20) — 떠 있는 것(팝업·모달)에만 옅게 */
+  --shadow: 0 1px 2px rgb(28 25 23 / 0.06);
+  --shadow-pop: 0 8px 24px rgb(28 25 23 / 0.12);
 
   --st-open: var(--neutral-400);
   --st-open-soft: var(--neutral-100);
@@ -69,12 +74,15 @@
 }
 
 :root[data-theme="dark"] {
+  /* 가이드 §5 — Dark: Canvas neutral-950 · Surface neutral-900 · Secondary neutral-800 · Strong border neutral-700 */
   --bg-canvas: var(--neutral-950);
   --bg-panel: var(--neutral-900);
   --bg-input: var(--neutral-800);
   --bg-raise: var(--neutral-800);
   --bg-hover: var(--neutral-800);
-  --bg-stage: var(--black);
+  --bg-stage: var(--neutral-950);
+  --bg-container: var(--neutral-900);
+  --frame-border: var(--neutral-700);
   --text-primary: var(--neutral-50);
   --text-secondary: var(--neutral-400);
   --text-tertiary: var(--neutral-500);
@@ -84,7 +92,8 @@
   --accent-soft: rgb(248 101 23 / 0.14);
   --marker-bg: var(--neutral-50);
   --marker-text: var(--neutral-900);
-  --shadow: 0 4px 16px rgb(0 0 0 / 0.5);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.45);
   --st-open-soft: var(--neutral-800);
   --st-doing-soft: rgb(248 101 23 / 0.14);
   --st-done-soft: rgb(59 130 246 / 0.16);
@@ -132,13 +141,6 @@ code, .mono { font-family: var(--font-mono); font-size: var(--text-xs); }
 .splitter:hover, .splitter:focus-visible, body.is-resizing .splitter { background: var(--accent); outline: none; }
 body.is-resizing { cursor: col-resize; user-select: none; }
 body.is-resizing iframe { pointer-events: none; }
-.float-bar {
-  position: absolute; top: var(--unit-3); left: 50%; transform: translateX(-50%); z-index: 20;
-  display: flex; gap: var(--unit-1); padding: var(--unit-1); border-radius: var(--unit-3);
-  background: var(--bg-panel); border: 1px solid var(--border); box-shadow: var(--shadow);
-  opacity: .35; transition: opacity .2s;
-}
-.float-bar:hover, .float-bar:focus-within { opacity: 1; }
 
 /* ── 툴바 ───────────────────────────────────────────────────────────────── */
 .toolbar {
@@ -210,7 +212,47 @@ textarea.input { resize: vertical; line-height: var(--lh-sm); }
 .stage { position: absolute; inset: 0; overflow: hidden; background: var(--bg-stage); }
 .stage-scroll { overflow: auto; }
 .stage-empty { display: grid; place-items: center; text-align: center; padding: var(--unit-8); }
-.stage-frame { position: absolute; box-shadow: var(--shadow); background: var(--white); }
+/* 화면 프레임 — Neutral · 얇은 테두리 · 제한적인 모서리 · 강한 그림자 없음 (가이드 §12) */
+.stage-frame { position: absolute; background: var(--white); outline: 1px solid var(--frame-border); border-radius: var(--unit-1); overflow: hidden; }
+/* 화면 컨테이너 — 머리(화면 ID·제목·버전·실행 상태)와 프레임을 한 덩어리로 묶는다 (가이드 §10) */
+.screen-container {
+  position: absolute; z-index: 0;
+  background: var(--bg-container); border: 1px solid var(--border); border-radius: var(--unit-2);
+  box-shadow: var(--shadow);
+}
+.sc-head {
+  display: flex; align-items: center; gap: var(--unit-2); height: 40px; padding: 0 var(--unit-1) 0 var(--unit-3);
+  white-space: nowrap; min-width: 0; overflow: hidden;
+}
+.sc-head .btn-icon { width: var(--unit-8); height: var(--unit-8); }
+.sc-id { flex: none; font-size: var(--text-xs); color: var(--text-tertiary); }
+.sc-title { min-width: 0; font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); }
+.ver-chips { display: inline-flex; gap: var(--unit-0-5); flex: none; }
+.ver-chip {
+  height: var(--unit-6); padding: 0 var(--unit-2); border: 1px solid var(--border); border-radius: var(--unit-1);
+  background: transparent; color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.ver-chip:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.ver-chip[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--white); }
+.sc-page {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; border: 0; background: transparent; padding: 0 var(--unit-1);
+  color: var(--text-secondary); font-size: var(--text-xs);
+}
+.sc-page:hover { color: var(--accent-text); }
+.sc-state { flex: none; display: inline-flex; align-items: center; gap: var(--unit-1-5); font-size: var(--text-xs); color: var(--text-secondary); padding-right: var(--unit-1); }
+.sc-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--neutral-400); }
+.sc-live .sc-dot { background: var(--success-500); }
+.sc-hold .sc-dot { background: var(--warning-500); }
+.sc-rec .sc-dot { background: var(--error-500); animation: sc-blink 1s steps(2) infinite; }
+.sc-rec { color: var(--issue-text); }
+@keyframes sc-blink { 50% { opacity: .25; } }
+.spinner {
+  display: inline-block; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / .3); border-top-color: var(--white); animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner, .sc-rec .sc-dot { animation: none; } }
 .stage-iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: var(--white); display: block; }
 .pick-layer { position: absolute; inset: 0; cursor: crosshair; z-index: 2; }
 .hl-box { position: absolute; left: 0; top: 0; display: none; pointer-events: none; z-index: 3; border-radius: var(--unit-0-5); }
@@ -358,7 +400,7 @@ textarea.input { resize: vertical; line-height: var(--lh-sm); }
 .popover {
   position: absolute; top: calc(100% + var(--unit-1)); right: 0; z-index: 60; min-width: 200px;
   display: flex; flex-direction: column; padding: var(--unit-1); border-radius: var(--unit-2);
-  background: var(--bg-panel); border: 1px solid var(--border); box-shadow: var(--shadow);
+  background: var(--bg-panel); border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop);
 }
 .popover-item { display: flex; align-items: center; gap: var(--unit-2); padding: var(--unit-1-5) var(--unit-2); border: 0; border-radius: var(--unit-1-5); background: transparent; text-align: left; white-space: nowrap; }
 .popover-item:hover { background: var(--bg-hover); }
@@ -386,14 +428,14 @@ textarea.input { resize: vertical; line-height: var(--lh-sm); }
 .modal {
   width: min(440px, calc(100vw - var(--unit-8))); max-height: calc(100vh - var(--unit-12)); overflow: auto;
   background: var(--bg-panel); border-radius: var(--unit-3); padding: var(--unit-6);
-  display: flex; flex-direction: column; gap: var(--unit-4); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: var(--unit-4); box-shadow: var(--shadow-pop); border: 1px solid var(--border);
 }
 .modal h2 { margin: 0; font-size: var(--text-lg); line-height: var(--lh-lg); }
 .modal p { margin: 0; }
 .toast {
   position: fixed; left: 50%; bottom: var(--unit-6); transform: translateX(-50%); z-index: 110;
   padding: var(--unit-2) var(--unit-4); border-radius: var(--unit-2); max-width: 640px;
-  background: var(--neutral-900); color: var(--white); box-shadow: var(--shadow);
+  background: var(--neutral-800); color: var(--white); box-shadow: var(--shadow-pop); border: 1px solid var(--neutral-700);
 }
 .toast-error { background: var(--error-600); }
 :root[data-theme="dark"] .toast-info { background: var(--neutral-700); }
@@ -415,7 +457,7 @@ textarea.input { resize: vertical; line-height: var(--lh-sm); }
 .popover-card {
   position: absolute; z-index: 30; max-height: calc(100% - var(--unit-4)); overflow: auto;
   background: var(--bg-panel); border: 1px solid var(--border-strong); border-radius: var(--unit-3);
-  box-shadow: 0 8px 32px rgb(12 10 9 / 0.28);
+  box-shadow: var(--shadow-pop);
 }
 .popover-card .composer { margin: 0; border: 0; border-radius: 0; background: transparent; }
 .popover-card .detail { padding: var(--unit-3); }

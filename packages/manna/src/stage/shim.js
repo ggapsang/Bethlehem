@@ -80,6 +80,22 @@
     window.Worker.prototype = NativeWorker.prototype;
   }
 
+  /* 패키지 안 다른 페이지로 가는 링크 — srcdoc 에서는 그대로 따라가면 깨진다. 부모에게 그 페이지를 열어 달라고 한다.
+     화면 스크립트가 먼저 처리(preventDefault)한 클릭은 건드리지 않는다. */
+  window.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a || (a.target && a.target !== '_self')) return;
+    var href = a.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return;
+    var abs;
+    try { abs = new URL(href, base).href; } catch (err) { return; }
+    var pagePath = abs.split('#')[0].split('?')[0];
+    if (pagePath.indexOf(PKG) !== 0 || !/\.html?$/i.test(pagePath) || !map[pagePath]) return;
+    e.preventDefault();
+    try { window.parent.postMessage({ manna: 'navigate', url: abs }, '*'); } catch (err) { /* 무시 */ }
+  });
+
   // 일시정지(시계)는 에이전트(agent.ts)가 맡는다
   window.__manna = { resolve: resolve, misses: misses };
 })

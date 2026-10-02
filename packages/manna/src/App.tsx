@@ -1,17 +1,16 @@
 /* Manna 와 Bethlehem 이 같이 쓰는 화면 틀 — 툴바 · 스테이지 | 크기 조절 손잡이 | 개요·Comment 패널 */
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { Crosshair, Minimize2, MousePointer2, PanelRight, Pause, Play } from 'lucide-preact';
 import type { Host } from './host';
 import { flushAutosave, scheduleAutosave } from './host';
 import { onKeyDown, onKeyUp, setKeyHost } from './keys';
 import { Stage } from './stage/Stage';
 import {
-  askName, dirty, fullscreen, holdPick, mode, panelOpen, panelWidth, paused, rev, screen, setPanelWidth, setUser, theme,
-  toast, togglePanel, user,
+  askName, dirty, fullscreen, holdPick, mode, panelOpen, panelWidth, rev, screen, setPanelWidth, setUser, theme,
+  toast, user,
 } from './store';
 import { Panel } from './ui/Panel';
-import { MarkerColorPicker, RecordButton, Toolbar, type ToolbarProps } from './ui/Toolbar';
+import { Toolbar, type ToolbarProps } from './ui/Toolbar';
 
 export interface AppProps {
   host: Host;
@@ -21,7 +20,6 @@ export interface AppProps {
   empty?: ComponentChildren;
 }
 
-const ICON = { size: 18, strokeWidth: 1.5 };
 const MIN_PANEL = 300;
 
 export function App({ host, start, screenTools, empty }: AppProps) {
@@ -80,7 +78,6 @@ export function App({ host, start, screenTools, empty }: AppProps) {
       <div class="workspace" style={{ gridTemplateColumns: showPanel ? `1fr auto ${width}px` : '1fr' }}>
         <main class="main">
           <Stage host={host} empty={empty ?? <p class="muted">이 문서에는 아직 화면이 없습니다.</p>} />
-          {full && <FloatingBar />}
         </main>
         {showPanel && <Splitter />}
         {showPanel && <Panel host={host} />}
@@ -145,25 +142,7 @@ function Splitter() {
   );
 }
 
-/* 전체화면에서 위쪽 가운데에 뜨는 작은 막대 */
-function FloatingBar() {
-  const pickLocked = mode.value === 'annotate';
-  return (
-    <div class="float-bar" role="toolbar" aria-label="전체화면 도구">
-      <button type="button" class={`btn-icon ${pickLocked ? '' : 'is-on-soft'}`} aria-label="보기" title="보기" onClick={() => (mode.value = 'view')}><MousePointer2 {...ICON} /></button>
-      <button type="button" class={`btn-icon ${pickLocked ? 'is-on-soft' : ''}`} aria-label="피커" title="피커 (Ctrl 을 누르고 있어도 됩니다)" onClick={() => (mode.value = 'annotate')}><Crosshair {...ICON} /></button>
-      <button type="button" class={`btn-icon ${paused.value ? 'is-on' : ''}`} aria-label={paused.value ? '화면 재생' : '화면 일시정지'} onClick={() => (paused.value = !paused.value)}>
-        {paused.value ? <Play {...ICON} /> : <Pause {...ICON} />}
-      </button>
-      <RecordButton />
-      <MarkerColorPicker />
-      <button type="button" class={`btn-icon ${panelOpen.value ? 'is-on-soft' : ''}`} aria-label="개요·Comment 패널" onClick={() => togglePanel()}><PanelRight {...ICON} /></button>
-      <button type="button" class="btn-icon" aria-label="전체화면 나가기" title="전체화면 나가기 (Esc)" onClick={() => document.exitFullscreen?.()}><Minimize2 {...ICON} /></button>
-    </div>
-  );
-}
-
-function NameDialog({ host }: { host: Host }) {
+function NameDialog(_p: { host: Host }) {
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
   const submit = (e: Event) => {
@@ -177,11 +156,6 @@ function NameDialog({ host }: { host: Host }) {
     <div class="modal-backdrop" onClick={(e) => e.target === e.currentTarget && user.value && (askName.value = false)}>
       <form class="modal" onSubmit={submit} aria-labelledby="name-title">
         <h2 id="name-title">이름을 알려 주세요</h2>
-        <p class="muted">
-          {host.kind === 'manna'
-            ? 'Comment·답글에 이름이 함께 남습니다. 이름은 이 브라우저에만 기억됩니다.'
-            : 'Comment·답글에 이 이름이 남습니다.'}
-        </p>
         <input ref={input} class="input" placeholder="예: 홍길동" defaultValue={user.value ?? ''} maxLength={40} />
         <div class="row">
           <span class="grow" />

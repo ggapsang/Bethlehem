@@ -39,8 +39,12 @@ export interface BethlehemApi {
   grantDropped(file: File): Promise<Granted | null>;
   scanFolder(dir: string, entry?: string): Promise<ScanResult>;
   packFolder(opts: PackOptions): Promise<PackResult>;
+  /* 그림 화면 */
+  pickImage(): Promise<string[]>;
+  packImage(path: string): Promise<{ title: string; version: PackResult['version']; blobs: [string, EncodedBlob][] }>;
   /* 작업 폴더 */
-  wsPick(mode: 'open' | 'create'): Promise<string | null>;
+  wsPick(o?: { title?: string; defaultPath?: string }): Promise<string | null>;
+  wsInspect(dir: string): Promise<{ isWorkspace: boolean; docs: { path: string; name: string; at: string; title?: string }[]; prototype: boolean; empty: boolean }>;
   wsOpen(dir: string): Promise<WorkspaceData & { last: { screen: string; version: number } | null }>;
   wsLast(): Promise<string | null>;
   wsSave(o: { dir: string; doc: MannaDoc; blobs: [string, EncodedBlob][]; links: Record<string, SourceLink> }): Promise<boolean>;

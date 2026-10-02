@@ -289,8 +289,9 @@ declare global {
   };
   const onKey = (phase: 'down' | 'up') => (e: KeyboardEvent) => {
     const mod = e.ctrlKey || e.metaKey;
-    if (!(e.key === 'Control' || e.key === 'Meta' || e.key === 'Escape' || mod)) return;
+    if (!(e.key === 'Control' || e.key === 'Meta' || e.key === 'Escape' || e.key === 'Delete' || mod)) return;
     const ty = typing(e);
+    if (e.key === 'Delete' && (ty || phase === 'up')) return;
     if (phase === 'down' && mod && !ty && /^[szy]$/i.test(e.key)) e.preventDefault();
     send({ type: 'key', phase, key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, meta: e.metaKey, alt: e.altKey, repeat: e.repeat, typing: ty });
   };

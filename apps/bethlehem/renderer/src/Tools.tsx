@@ -1,11 +1,11 @@
 /* 툴바에 끼우는 작성 도구 — 작업 폴더·문서 열기, 화면 추가·새 버전·삭제, 돌아온 문서 */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Inbox, Layers, Trash2 } from 'lucide-preact';
+import { ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Trash2 } from 'lucide-preact';
 import { rev, screen } from '@manna/store';
 import {
-  addScreenFromFolder, askUrl, mergeReturned, mode, newWorkspace, openDocument, openWorkspace, placeName, recent, refreshRecent,
-  refreshReturned, removeScreen, returned, createWorkspace,
+  addImageScreen, addScreenFromFolder, askUrl, createWorkspace, mergeReturned, mode, openDocument, openFolder, placeName, recent, refreshRecent,
+  refreshReturned, removeScreen, returned,
 } from './session';
 
 const ICON = { size: 18, strokeWidth: 1.5 };
@@ -71,11 +71,8 @@ export function DocTools() {
       >
         {(close) => (
           <>
-            <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); newWorkspace(); }}>
-              <FolderPlus {...ICON} size={16} /> 새 작업 폴더…
-            </button>
-            <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); openWorkspace(); }}>
-              <FolderGit2 {...ICON} size={16} /> 작업 폴더 열기…
+            <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); openFolder(); }}>
+              <FolderGit2 {...ICON} size={16} /> 폴더 열기…
             </button>
             <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); openDocument(); }}>
               <FolderOpen {...ICON} size={16} /> 테라리움 문서 열기…
@@ -95,7 +92,7 @@ export function DocTools() {
             )}
             <div class="popover-sep" />
             <span class="popover-label"><History {...ICON} size={14} /> 최근 작업 폴더</span>
-            <RecentList items={recent.value.workspaces} empty="최근 작업 폴더가 없습니다." onPick={(p) => { close(); openWorkspace(p); }} />
+            <RecentList items={recent.value.workspaces} empty="최근 작업 폴더가 없습니다." onPick={(p) => { close(); openFolder(p); }} />
             <span class="popover-label"><History {...ICON} size={14} /> 최근 문서</span>
             <RecentList items={recent.value.files} empty="최근에 연 문서가 없습니다." onPick={(p) => { close(); openDocument(p); }} />
           </>
@@ -142,6 +139,9 @@ function SourceMenu({ title, icon, label, screenId }: { title: string; icon: Com
           <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); askUrl(screenId); }}>
             <Globe {...ICON} size={16} /> URL…
           </button>
+          <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); addImageScreen(screenId); }}>
+            <Image {...ICON} size={16} /> 그림 (png · jpg)…
+          </button>
           <div class="popover-sep" />
           <span class="popover-label"><History {...ICON} size={14} /> 최근 폴더</span>
           <RecentList items={recent.value.folders} empty="최근에 쓴 폴더가 없습니다." onPick={(p) => { close(); addScreenFromFolder(screenId, p); }} />
@@ -157,8 +157,8 @@ export function ScreenTools() {
   const scr = screen.value;
   return (
     <>
-      <SourceMenu title="화면 추가 — 폴더나 URL" icon={<FolderPlus {...ICON} />} label={scr ? undefined : '화면 추가'} />
-      {scr && <SourceMenu title={`${scr.id} 새 버전 — 폴더나 URL`} icon={<Layers {...ICON} />} screenId={scr.id} />}
+      <SourceMenu title="화면 추가" icon={<FolderPlus {...ICON} />} label={scr ? undefined : '화면 추가'} />
+      {scr && <SourceMenu title={`${scr.id} 새 버전`} icon={<Layers {...ICON} />} screenId={scr.id} />}
       {scr && <button type="button" class="btn-icon" aria-label={`${scr.id} 지우기`} title={`${scr.id} 화면 지우기`} onClick={() => removeScreen(scr.id)}><Trash2 {...ICON} /></button>}
     </>
   );

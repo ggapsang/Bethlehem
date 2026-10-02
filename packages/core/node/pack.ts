@@ -44,9 +44,14 @@ export const nodeFetcher: Fetcher = async (url) => {
   return { ok: r.ok, status: r.status, type: r.headers.get('content-type') ?? undefined, bytes: new Uint8Array(await r.arrayBuffer()) };
 };
 
+/** 화면 폴더가 작업 폴더를 겸할 때 — 작업 폴더가 만든 것은 화면에 넣지 않는다 */
+const WS_NAMES = /^(terrarium\.json|screens|blobs|dist|returned)$/i;
+
 async function walk(dir: string, root = dir, out: string[] = []): Promise<string[]> {
-  for (const d of await readdir(dir, { withFileTypes: true })) {
-    if (SKIP.test(d.name)) continue;
+  const entries = await readdir(dir, { withFileTypes: true });
+  const ws = dir === root && entries.some((d) => d.name === 'terrarium.json');
+  for (const d of entries) {
+    if (SKIP.test(d.name) || /\.terr\.html$/i.test(d.name) || (ws && WS_NAMES.test(d.name))) continue;
     const p = join(dir, d.name);
     if (d.isDirectory()) await walk(p, root, out);
     else if (d.isFile()) out.push(relative(root, p).split(sep).join('/'));

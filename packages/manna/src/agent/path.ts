@@ -33,28 +33,47 @@ function shown(el: Element): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** 대상 요소가 나타날 때까지 기다린다 */
+const pointOf = (el: Element, x: number, y: number) => {
+  const r = el.getBoundingClientRect();
+  return { cx: r.left + x * r.width, cy: r.top + y * r.height };
+};
+
+/** 그 자리에서 맨 위에 있는 요소가 대상(이나 그 안쪽)인가 — 스플래시·로딩 막이 덮고 있으면 아니다 */
+function onTop(el: Element, x: number, y: number): boolean {
+  const { cx, cy } = pointOf(el, x, y);
+  const top = el.ownerDocument.elementFromPoint(cx, cy);
+  return !!top && (top === el || el.contains(top) || top.contains(el));
+}
+
+/** 대상 요소가 나타나고, 그 자리를 다른 것이 덮고 있지 않을 때까지 기다린다 */
 async function waitFor(doc: Document, step: Step, timeout: number): Promise<Element | null> {
   const end = Date.now() + timeout;
+  let seenAt = 0;
   while (Date.now() < end) {
     const el = resolve(doc, step.fp)?.el;
-    if (el && shown(el)) return el;
-    await sleep(120);
+    if (el && shown(el) && onTop(el, step.x, step.y)) {
+      // 막 나타난 화면은 그리기가 한 박자 늦다 — 잠깐 더 본다
+      if (!seenAt) seenAt = Date.now();
+      else if (Date.now() - seenAt > 250) return el;
+    } else seenAt = 0;
+    await sleep(100);
   }
   return null;
 }
 
-/** 실제 클릭과 같은 순서로 이벤트를 낸다 (pointer → mouse → click) */
+/** 실제 클릭과 같은 순서로 이벤트를 낸다 — 마우스를 먼저 올리고(호버로 대상을 정하는 화면) pointer → mouse → click */
 export function clickAt(el: Element, x: number, y: number): void {
   const doc = el.ownerDocument;
   const win = doc.defaultView as (Window & typeof globalThis) | null;
   if (!win) return;
-  const r = el.getBoundingClientRect();
-  const cx = r.left + x * r.width;
-  const cy = r.top + y * r.height;
+  const { cx, cy } = pointOf(el, x, y);
   const target = doc.elementFromPoint(cx, cy) ?? el;
   const base = { bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy, button: 0, view: win };
   const ptr = { ...base, pointerId: 1, pointerType: 'mouse', isPrimary: true };
+  target.dispatchEvent(new win.PointerEvent('pointerover', { ...ptr, buttons: 0 }));
+  target.dispatchEvent(new win.MouseEvent('mouseover', { ...base, buttons: 0 }));
+  target.dispatchEvent(new win.PointerEvent('pointermove', { ...ptr, buttons: 0 }));
+  target.dispatchEvent(new win.MouseEvent('mousemove', { ...base, buttons: 0 }));
   target.dispatchEvent(new win.PointerEvent('pointerdown', { ...ptr, buttons: 1 }));
   target.dispatchEvent(new win.MouseEvent('mousedown', { ...base, buttons: 1 }));
   target.dispatchEvent(new win.PointerEvent('pointerup', { ...ptr, buttons: 0 }));
@@ -81,10 +100,10 @@ export async function quickReveal(doc: Document, steps: Step[]): Promise<void> {
 export async function replay(doc: Document, steps: Step[], alive: () => boolean): Promise<boolean> {
   for (const s of steps) {
     if (!alive()) return false;
-    const el = await waitFor(doc, s, 10000);
+    const el = await waitFor(doc, s, 15000);
     if (!el) return false;
     clickAt(el, s.x, s.y);
-    await sleep(350);
+    await sleep(450);
   }
   return true;
 }

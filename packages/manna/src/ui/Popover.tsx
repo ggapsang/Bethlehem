@@ -9,7 +9,7 @@ import type { Host } from '../host';
 import { annotations, draft, rev, screen, selected, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
 import { MarkdownEditor } from './editor/MarkdownEditor';
-import { ago, anchorLabel } from './labels';
+import { ago } from './labels';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 const W = 380;
@@ -85,14 +85,12 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
 }
 
 function Composer() {
-  const d = draft.value!;
   const text = useRef('');
   const add = () => addFromDraft(text.current);
   return (
     <div class="composer" aria-label="새 Comment">
       <div class="row">
         <strong>새 Comment</strong>
-        <span class="muted mono ellipsis">{d.picked.region ? `${d.picked.label} 안의 영역` : d.picked.label}</span>
         <span class="grow" />
         <button type="button" class="btn-icon btn-xs" aria-label="취소" onClick={() => (draft.value = null)}><X {...ICON} /></button>
       </div>
@@ -103,7 +101,7 @@ function Composer() {
         onChange={(t) => (text.current = t)}
         onSubmit={add}
         onEscape={() => (draft.value = null)}
-        placeholder="마크다운 — Ctrl+Enter 로 추가, Esc 취소"
+        placeholder="Comment"
         label="새 Comment 본문"
         class="body-editor"
       />
@@ -147,16 +145,11 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
         minRows={5}
         autoFocus={mine && !a.body}
         onChange={(t) => editBody(a, t)}
-        placeholder={mine ? 'Comment — 마크다운' : ''}
+        placeholder={mine ? 'Comment' : ''}
         label={`${a.id} Comment 본문`}
         class="body-editor"
       />
       {(a.clips ?? []).map((c) => <ClipView key={c.id} clip={c} canRemove={c.author === me || host.author} onRemove={() => removeClip(a, c.id)} />)}
-      {a.anchor && (
-        <p class="muted small ellipsis" title={a.anchor.fp.selector}>
-          <code>{anchorLabel(a.anchor.fp, false)}</code>{a.anchor.region ? ' 안의 영역' : ''}
-        </p>
-      )}
       {a.replies.length > 0 && (
         <ol class="replies">
           {a.replies.map((r) => (
@@ -174,7 +167,7 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
           minRows={2}
           onChange={(t) => (reply.current = t)}
           onSubmit={send}
-          placeholder="답글 — 마크다운 (Ctrl+Enter)"
+          placeholder="답글"
           label="답글 쓰기"
           class="reply-editor"
         />

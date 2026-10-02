@@ -1,7 +1,7 @@
-/* 툴바 — 문서·화면·버전, 피커, 일시정지, 녹화, 마커 색, 되돌리기, 패널·전체화면, 테마, 저장 */
+/* 툴바 — 문서 수준만 (가이드 §17: 현재 문서 → 현재 화면 → 작업 모드 → 저장). 화면에 붙은 조작은 화면 컨테이너 머리에 */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
-  Circle, Crosshair, FilePlus2, Maximize2, Moon, MousePointer2, PanelRight, Pause, Play, Redo2, Save, Square, Sun, Undo2, UserRound,
+  Circle, Crosshair, FilePlus2, Moon, MousePointer2, PanelRight, Redo2, Save, Square, Sun, Undo2, UserRound,
 } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
 import type { MarkerColor } from '@core';
@@ -11,8 +11,8 @@ import type { Host } from '../host';
 import { canConnectFile, connectFile, save } from '../host';
 import { ago } from './labels';
 import {
-  askName, canRedo, canUndo, dirty, doc, rev, saveState, draft, mode, mutate, panelOpen, paused, recording, redo, screen, selectScreen,
-  setTheme, theme, togglePanel, undo, user, version,
+  askName, canRedo, canUndo, dirty, doc, rev, saveState, draft, mode, mutate, panelOpen, recording, redo, screen, selectScreen,
+  setTheme, theme, togglePanel, undo, user,
 } from '../store';
 import { Logo } from './Logo';
 
@@ -38,7 +38,6 @@ export function Toolbar({ host, start, screenTools }: ToolbarProps) {
   rev.value; // 문서는 제자리에서 고치므로 props 가 같아도 다시 그려야 한다 (signals 의 얕은 비교를 피한다)
   const d = doc.value;
   const scr = screen.value;
-  const v = version.value;
   const pickLocked = mode.value === 'annotate';
 
   return (
@@ -77,11 +76,6 @@ export function Toolbar({ host, start, screenTools }: ToolbarProps) {
             {d.screens.map((s) => <option key={s.id} value={s.id}>{s.id} {s.title}</option>)}
           </select>
         )}
-        {scr && scr.versions.length > 1 && (
-          <select class="input input-sm tb-version" aria-label="화면 버전" value={v?.v} onChange={(e) => selectScreen(scr.id, Number(e.currentTarget.value))}>
-            {scr.versions.map((x) => <option key={x.v} value={x.v}>v{x.v}{x.label ? ` · ${x.label}` : ''}</option>)}
-          </select>
-        )}
         {screenTools}
       </div>
 
@@ -97,18 +91,6 @@ export function Toolbar({ host, start, screenTools }: ToolbarProps) {
               <Crosshair {...ICON} size={16} /> 피커
             </button>
           </div>
-          <button
-            type="button"
-            class={`btn-icon ${paused.value ? 'is-on' : ''}`}
-            aria-pressed={paused.value}
-            aria-label={paused.value ? '화면 재생' : '화면 일시정지'}
-            title={paused.value ? '화면 재생' : '화면 일시정지 — 움직이는 대상에 Comment 를 달 때'}
-            onClick={() => (paused.value = !paused.value)}
-          >
-            {paused.value ? <Play {...ICON} /> : <Pause {...ICON} />}
-          </button>
-          <RecordButton />
-          <MarkerColorPicker />
         </div>
       )}
 
@@ -121,7 +103,6 @@ export function Toolbar({ host, start, screenTools }: ToolbarProps) {
         <button type="button" class={`btn-icon ${panelOpen.value ? 'is-on-soft' : ''}`} aria-pressed={panelOpen.value} aria-label="개요·Comment 패널" title="개요·Comment 패널 보이기/숨기기" onClick={() => togglePanel()}>
           <PanelRight {...ICON} />
         </button>
-        <button type="button" class="btn-icon" aria-label="전체화면" title="전체화면 (Esc 로 나가기)" onClick={enterFullscreen}><Maximize2 {...ICON} /></button>
         <button type="button" class="btn-icon" aria-label="테마 전환" title={theme.value === 'light' ? '다크 테마' : '라이트 테마'} onClick={() => setTheme(theme.value === 'light' ? 'dark' : 'light')}>
           {theme.value === 'light' ? <Moon {...ICON} /> : <Sun {...ICON} />}
         </button>

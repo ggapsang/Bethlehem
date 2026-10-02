@@ -15,7 +15,7 @@
 /* ── 첫 화면 ── */
 .welcome {
   width: min(720px, 100%); background: var(--bg-panel); border-radius: var(--unit-3);
-  overflow: hidden; box-shadow: var(--shadow); text-align: left;
+  overflow: hidden; border: 1px solid var(--border); text-align: left;
 }
 .welcome-art { display: block; width: 100%; aspect-ratio: 1030 / 588; object-fit: cover; }
 .welcome-body { padding: var(--unit-5) var(--unit-6) var(--unit-6); display: flex; flex-direction: column; gap: var(--unit-3); }

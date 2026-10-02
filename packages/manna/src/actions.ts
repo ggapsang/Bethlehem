@@ -4,7 +4,7 @@ import { moveAnnotation, now, setField, sha256, toBase64, touchParticipant, uid 
 import type { SiteSnap } from './host';
 import { startRecording, type Recorder } from './stage/record';
 import {
-  addBlobs, askName, blobs, draft, mutate, notify, recording, screen, selected, stageRef, still, user, version,
+  addBlobs, askName, blobs, draft, mutate, notify, recording, screen, selected, stagePage, stageRef, still, user, version,
 } from './store';
 
 export function needName(): boolean {
@@ -35,7 +35,7 @@ export async function addFromDraft(body: string): Promise<string | null> {
   }
   const a: Annotation = {
     ...blank(body),
-    anchor: { fp: p.fp, ...(p.region ? { region: p.region } : {}), trail: p.trail, props: p.props, path: p.path },
+    anchor: { fp: p.fp, ...(p.region ? { region: p.region } : {}), trail: p.trail, props: p.props, path: p.path, ...(stagePage.peek() ? { page: stagePage.peek() } : {}) },
     ...(shot ? { shot } : {}),
   };
   mutate((x) => {

@@ -8,13 +8,14 @@ import type { Picked, RectTuple } from '../agent/protocol';
 import type { Host } from '../host';
 import { onKeyDown, onKeyUp } from '../keys';
 import {
-  annotations, blobs, doc, draft, holdPick, hovered, misses, paused, picking, recording, reveal, revealing, rev,
-  screen, selected, shotView, stageRef, still, version, versionKey, visible,
+  annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, reveal, revealing, rev,
+  screen, selected, shotView, stagePage, stageRef, still, version, versionKey, visible,
 } from '../store';
 import { applySiteSnapshot } from '../actions';
 import { StagePopover } from '../ui/Popover';
 import { iframeBridge, webviewBridge, type Bridge, type WebviewLike } from './bridge';
 import { prepareScreen } from './loader';
+import { StageHeader } from './StageHeader';
 import { useBlobUrl } from './media';
 
 interface Fit {
@@ -24,7 +25,11 @@ interface Fit {
 }
 
 const MARK = 24; // 마커 지름 (unit-6)
-const PAD = 24;
+const PAD = 32; // 화면 컨테이너 바깥 여백 — 장식이 아니라 숨 쉴 자리 (가이드 §9)
+const HEAD = 40; // 컨테이너 머리 (unit-10)
+const CPAD = 8; // 컨테이너 안쪽 여백 (unit-2)
+/** 그림 화면에서 클릭하면 만드는 박스 크기 (화면 좌표) */
+const POINT_BOX = 64;
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -38,6 +43,13 @@ function place(box: HTMLElement | null, r: Box | null, s: number): void {
   box.style.transform = `translate(${r.x * s}px, ${r.y * s}px)`;
   box.style.width = `${Math.max(2, r.w * s)}px`;
   box.style.height = `${Math.max(2, r.h * s)}px`;
+}
+
+/** 같은 페이지인가 — 해시는 무시한다. 페이지가 적혀 있지 않은 옛 Comment 는 어디서나 */
+function samePage(a: string | undefined, b: string): boolean {
+  if (!a) return true;
+  const norm = (u: string) => u.split('#')[0];
+  return norm(a) === norm(b);
 }
 
 const tupleBox = (t: [number, number, number, number] | RectTuple): Box => ({ x: t[0], y: t[1], w: t[2], h: t[3] });
@@ -76,7 +88,21 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
   const isPicking = picking.value || dragging;
   const markerColor = doc.value.meta.marker ?? 'auto';
   const live = !!host.site && v?.source?.mode === 'site';
-  const frameKey = `${vkey}#${reloadNo}`;
+  const isImage = v?.source?.mode === 'image';
+  /* 지금 보고 있는 페이지 — 폴더 화면은 패키지 안의 다른 HTML 로 옮겨 갈 수 있고, URL 화면은 사이트 안에서 이동한다 */
+  const [page, setPage] = useState<string | null>(null);
+  const [liveUrl, setLiveUrl] = useState<string | null>(null);
+  const currentPage = live ? (liveUrl ?? v?.source?.url ?? '') : (page ?? v?.entry ?? '');
+  const pageRef = useRef(currentPage);
+  pageRef.current = currentPage;
+  useEffect(() => {
+    setPage(null);
+    setLiveUrl(null);
+  }, [vkey]);
+  useEffect(() => {
+    stagePage.value = currentPage;
+  }, [currentPage]);
+  const frameKey = `${vkey}#${page ?? ''}#${reloadNo}`;
   const sel = list.find((a) => a.id === selected.value) ?? null;
   const showShot = !!sel?.shot && shotView.value && !draft.value;
   const shotSrc = useBlobUrl(sel?.shot?.sha, 'image/jpeg');
@@ -89,10 +115,15 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
     const el = area.current;
     if (!el || !vw) return;
     const update = () => {
-      const aw = el.clientWidth - PAD * 2;
-      const ah = el.clientHeight - PAD * 2;
+      const aw = el.clientWidth - PAD * 2 - CPAD * 2;
+      const ah = el.clientHeight - PAD * 2 - HEAD - CPAD;
       const s = Math.max(0.1, Math.min(1, vfit === 'width' ? aw / vw : Math.min(aw / vw, ah / vh)));
-      setFit({ s, ox: Math.max(PAD, (el.clientWidth - vw * s) / 2), oy: vfit === 'width' ? PAD : Math.max(PAD, (el.clientHeight - vh * s) / 2) });
+      const boxH = vh * s + HEAD + CPAD;
+      setFit({
+        s,
+        ox: Math.max(PAD + CPAD, (el.clientWidth - vw * s) / 2),
+        oy: (vfit === 'width' ? PAD : Math.max(PAD, (el.clientHeight - boxH) / 2)) + HEAD,
+      });
     };
     update();
     const ro = new ResizeObserver(update);
@@ -107,7 +138,7 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
   /* ── 에이전트에게 지금 상태 알리기 ─────────────────────────────────── */
   const anchorsMsg = () => ({
     type: 'anchors' as const,
-    list: annotations.peek().filter((a) => a.anchor).map((a) => ({ id: a.id, fp: a.anchor!.fp, ...(a.anchor!.region ? { region: a.anchor!.region } : {}) })),
+    list: annotations.peek().filter((a) => a.anchor && samePage(a.anchor.page, pageRef.current)).map((a) => ({ id: a.id, fp: a.anchor!.fp, ...(a.anchor!.region ? { region: a.anchor!.region } : {}) })),
   });
   const syncAgent = () => {
     const b = bridge.current;
@@ -127,7 +158,7 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
     setLoading(true);
     setError(null);
     setWarnings([]);
-    prepareScreen(ver, blobs)
+    prepareScreen(ver, blobs, live ? undefined : (page ?? undefined))
       .then((p) => {
         if (!alive) return p.dispose();
         dispose = p.dispose;
@@ -153,6 +184,7 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
     const off = b.on((m) => {
       if (m.type === 'ready') {
         setLoading(false);
+        if (live) setLiveUrl(m.url);
         syncAgent();
         takeSnapshot(4000);
         readyWaiters.current.splice(0).forEach((w) => w());
@@ -195,15 +227,17 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
   useEffect(() => () => clearTimeout(snapTimer.current), [frameKey]);
 
   /* 앵커 목록이 바뀌면 다시 알린다 */
-  const anchorKey = list.map((a) => (a.anchor ? `${a.id}:${a.anchor.fp.selector}:${JSON.stringify(a.anchor.region ?? '')}` : '')).join('|');
+  const anchorKey = list.map((a) => (a.anchor ? `${a.id}:${a.anchor.fp.selector}:${JSON.stringify(a.anchor.region ?? '')}:${a.anchor.page ?? ''}` : '')).join('|');
   useEffect(() => {
     bridge.current?.send(anchorsMsg());
-  }, [anchorKey]);
+  }, [anchorKey, currentPage]);
 
   /* ── 찾지 못한 파일 보고 (shim → postMessage) ──────────────────────── */
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
-      if (e.source !== iframe.current?.contentWindow || e.data?.manna !== 'miss') return;
+      if (e.source !== iframe.current?.contentWindow) return;
+      if (e.data?.manna === 'navigate') return setPage(pkgPath(String(e.data.url).split('#')[0].split('?')[0]));
+      if (e.data?.manna !== 'miss') return;
       misses.value = [...misses.value, { url: pkgPath(String(e.data.url)) }];
     };
     window.addEventListener('message', onMsg);
@@ -263,6 +297,15 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
     revealing.value = true;
     paused.value = false;
     (async () => {
+      // 다른 페이지에서 단 Comment — 그 페이지를 열고 경로를 다시 누른다
+      if (anchor.page && !samePage(anchor.page, pageRef.current)) {
+        const ready = waitReady();
+        setPage(anchor.page);
+        await ready;
+        if (!alive || !bridge.current) return;
+        await bridge.current.ask({ ...msg, quick: false }, 60000);
+        return;
+      }
       const quick = await b.ask<{ ok: boolean }>({ ...msg, quick: true });
       if (!alive || quick?.ok) return;
       // 빠른 길로 안 되면 처음부터 다시 불러와 경로를 다시 누른다
@@ -295,8 +338,8 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
         continue;
       }
       seen.add(id);
-      const x = Math.min(Math.max(t[0] * s - MARK / 2, -MARK / 2), vw * s - MARK / 2);
-      const y = Math.min(Math.max(t[1] * s - MARK / 2, -MARK / 2), vh * s - MARK / 2);
+      const x = Math.min(Math.max(t[0] * s - MARK / 2, 2), vw * s - MARK - 2);
+      const y = Math.min(Math.max(t[1] * s - MARK / 2, 2), vh * s - MARK - 2);
       node.style.display = 'flex';
       node.style.transform = `translate(${x}px, ${y}px)`;
       node.dataset.tone = t[5] ? 'ondark' : 'onlight';
@@ -359,7 +402,7 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
       if (st.dragging) place(dragBox.current, { x: Math.min(p.x, st.down.x), y: Math.min(p.y, st.down.y), w: Math.abs(dx), h: Math.abs(dy) }, fitRef.current.s);
       return;
     }
-    hoverAt(p);
+    if (!isImage) hoverAt(p);
   };
 
   const onDown = (e: PointerEvent) => {
@@ -381,6 +424,10 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
     if (st.dragging) {
       st.dragging = false;
       setDraft(await bridge.current.ask<Picked>({ type: 'pickRect', x: Math.min(p.x, down.x), y: Math.min(p.y, down.y), w: Math.abs(p.x - down.x), h: Math.abs(p.y - down.y) }));
+    } else if (isImage) {
+      // 그림 화면은 요소가 없다 — 클릭한 자리에 작은 박스
+      const h = POINT_BOX / 2;
+      setDraft(await bridge.current.ask<Picked>({ type: 'pickRect', x: Math.max(0, p.x - h), y: Math.max(0, p.y - h), w: POINT_BOX, h: POINT_BOX }));
     } else {
       setDraft(await bridge.current.ask<Picked>({ type: 'pick', x: p.x, y: p.y }));
     }
@@ -423,15 +470,21 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
   const innerStyle = { width: `${vw}px`, height: `${vh}px`, transform: `scale(${fit.s})` };
   const shotBox = sel?.shot?.box;
 
+  const boxStyle = { left: `${fit.ox - CPAD}px`, top: `${fit.oy - HEAD}px`, width: `${vw * fit.s + CPAD * 2}px`, height: `${vh * fit.s + HEAD + CPAD}px` };
+
   return (
     <div class={`stage ${vfit === 'width' ? 'stage-scroll' : ''}`} ref={area}>
+      {/* 화면 컨테이너 — 이 화면이 테라리움 안에 담겨 있다 (가이드 §10) */}
+      <div class="screen-container" style={boxStyle}>
+        <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} />
+      </div>
       <div class={`stage-frame ${recording.value || capturing ? 'is-recording' : ''}`} style={frameStyle} ref={frameBox}>
         {live ? (
           <webview
             key={frameKey}
             ref={webview as never}
             class="stage-webview"
-            src={v.source!.url}
+            src={page ?? v.source!.url}
             partition={host.site!.partition}
             webpreferences="contextIsolation=yes,sandbox=yes"
             style={innerStyle}
@@ -440,6 +493,17 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
           <iframe
             key={frameKey}
             ref={iframe}
+            onLoad={() => {
+              // 스크립트가 location 으로 다른 페이지로 갔다 — srcdoc 밖이면 같은 이름의 패키지 페이지를 연다
+              try {
+                const href = iframe.current?.contentWindow?.location.href ?? '';
+                if (!href || href.startsWith('about:')) return;
+                const rel = decodeURIComponent(new URL(href).pathname.split('/').pop() ?? '');
+                if (rel && v.files[rel]) setPage(rel);
+              } catch {
+                /* 다른 출처 — 어쩔 수 없다 */
+              }
+            }}
             class="stage-iframe"
             title={`${scr.id} ${scr.title} v${v.v}`}
             style={innerStyle}
@@ -464,16 +528,14 @@ export function Stage({ host, empty }: { host: Host; empty?: preact.ComponentChi
         <div class="marker-layer" ref={markers} data-color={markerColor}>
           {list.filter((a) => a.anchor).map((a) => <Marker key={a.id} a={a} scr={scr} />)}
         </div>
-        {loading && !error && <div class="stage-note">{live ? '사이트를 여는 중…' : '화면을 펼치는 중…'}</div>}
-        {revealing.value && <div class="stage-note">Comment 가 있는 화면 상태로 이동하는 중…</div>}
+        {(loading || revealing.value) && !error && <div class="stage-note" aria-label="불러오는 중"><span class="spinner" /></div>}
         {showShot && (
           <div class="stage-badge stage-badge-shot">
-            Comment 를 달 때의 화면
+            <span>달 때 화면</span>
             <button type="button" class="badge-btn" onClick={() => (shotView.value = false)}>실시간 화면 보기</button>
           </div>
         )}
-        {!showShot && paused.value && !recording.value && <div class="stage-badge">일시정지됨</div>}
-        {holdPick.value && <div class="stage-badge stage-badge-pick">피커 — 클릭하거나 드래그하세요</div>}
+
       </div>
       <StagePopover
         host={host}
