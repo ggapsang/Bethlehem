@@ -116,15 +116,14 @@ function Notes({ scr }: { scr: Screen }) {
                   {t.title}
                 </button>
               )}
-              {t.id !== MAIN_NOTE && t.id === tab.id && renaming !== t.id && (
+              {renaming !== t.id && (
                 <button
                   type="button"
                   class="note-tab-x"
                   aria-label={`${t.title} 탭 지우기`}
+                  title="탭 지우기 — 한 번 묻고 지운다"
                   onClick={() => {
-                    if (t.body.trim() && !confirm(`"${t.title}" 노트를 지울까요? (Ctrl+Z 로 되돌릴 수 있습니다)`)) return;
-                    removeNoteTab(t.id);
-                    setCur(MAIN_NOTE);
+                    if (removeNoteTab(t.id) && (t.id === tab.id || t.id === MAIN_NOTE)) setCur(MAIN_NOTE);
                   }}
                 >
                   <X {...ICON} size={12} />

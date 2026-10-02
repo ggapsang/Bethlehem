@@ -7,6 +7,7 @@ import { signal } from '@preact/signals';
 import type { EncodedBlob, MannaDoc, Screen, ScreenVersion } from '@core';
 import { isManna, latest, mergeDoc, newDoc, nextScreenId, now, parseManna, referencedShas } from '@core';
 import type { Host } from '@manna/host';
+import { deleteScreen } from '@manna/actions';
 import { buildHtml, flushAutosave, save, suggestedName } from '@manna/host';
 import {
   addBlobs, blobs, dirty, doc, draft, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, undo, user, versionNo,
@@ -446,12 +447,10 @@ export function addSiteScreen(url: string, title: string, targetId?: string): vo
 }
 
 export function removeScreen(id: string): void {
-  const s = doc.value.screens.find((x) => x.id === id);
-  if (!s || !confirm(`${s.id} ${s.title} 을 문서에서 지울까요? Comment ${s.annotations.length}개도 함께 지워집니다. (Ctrl+Z 로 되돌릴 수 있습니다)`)) return;
-  mutate((d) => (d.screens = d.screens.filter((x) => x.id !== id)), { label: '화면 삭제' });
-  const first = doc.value.screens[0];
-  if (first) selectScreen(first.id);
-  else screenId.value = null;
+  if (deleteScreen(id) && links.peek()[id]) {
+    const { [id]: _gone, ...rest } = links.peek();
+    links.value = rest;
+  }
 }
 
 /* ── 돌아온 문서 ───────────────────────────────────────────────────── */

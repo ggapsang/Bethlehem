@@ -4,7 +4,7 @@ import { moveAnnotation, now, setField, sha256, toBase64, touchParticipant, uid 
 import type { SiteSnap } from './host';
 import { startRecording, type Recorder } from './stage/record';
 import {
-  addBlobs, askName, blobs, draft, draftClip, mutate, notify, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
+  dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
   stageViewport, still, user, version,
 } from './store';
 
@@ -169,6 +169,27 @@ export function editNotes(text: string): void {
   mutate(() => (s.notes = text), { label: '노트 수정', merge: `notes:${s.id}` });
 }
 
+/** 화면을 문서에서 지운다 — 확인을 한 번 받는다. 지우면 옆 탭으로 */
+export function deleteScreen(id: string): boolean {
+  const d = doc.peek();
+  const s = d.screens.find((x) => x.id === id);
+  if (!s) return false;
+  const n = s.annotations.length;
+  if (!confirm(`${s.id} ${s.title} 화면을 지울까요?${n ? ` Comment ${n}개도 함께 지워집니다.` : ''} (Ctrl+Z 로 되돌릴 수 있습니다)`)) return false;
+  const tabs = openTabs.peek();
+  const at = tabs.indexOf(id);
+  const wasCurrent = screenId.peek() === id;
+  mutate((x) => (x.screens = x.screens.filter((y) => y.id !== id)), { label: '화면 삭제' });
+  dropTab(id);
+  if (wasCurrent) {
+    const rest = openTabs.peek();
+    const next = rest[Math.min(Math.max(0, at), rest.length - 1)] ?? doc.peek().screens[0]?.id;
+    if (next) selectScreen(next);
+    else screenId.value = null;
+  }
+  return true;
+}
+
 /* ── 자유 노트 탭 — 첫 탭은 notes(·notesTitle), 나머지는 moreNotes ─────────── */
 export const MAIN_NOTE = 'main';
 
@@ -208,13 +229,30 @@ export function addNoteTab(): string | null {
   return id;
 }
 
-export function removeNoteTab(id: string): void {
+/** 노트 탭 지우기 — 확인을 한 번 받는다. 첫 탭을 지우면 다음 탭이 첫 탭이 되고, 탭이 하나뿐이면 내용만 비운다 */
+export function removeNoteTab(id: string): boolean {
   const s = screen.peek();
-  if (!s || id === MAIN_NOTE) return;
+  if (!s) return false;
+  const tabs = noteTabs(s);
+  const t = tabs.find((x) => x.id === id);
+  if (!t) return false;
+  const only = tabs.length === 1;
+  if (!confirm(only ? `"${t.title}" 노트의 내용을 지울까요? (Ctrl+Z 로 되돌릴 수 있습니다)` : `"${t.title}" 노트 탭을 지울까요? (Ctrl+Z 로 되돌릴 수 있습니다)`)) return false;
   mutate(() => {
-    s.moreNotes = (s.moreNotes ?? []).filter((x) => x.id !== id);
-    if (!s.moreNotes.length) delete s.moreNotes;
+    if (id === MAIN_NOTE) {
+      const next = s.moreNotes?.[0];
+      if (next) {
+        s.notes = next.body;
+        s.notesTitle = next.title;
+        s.moreNotes = s.moreNotes!.slice(1);
+      } else {
+        s.notes = '';
+        delete s.notesTitle;
+      }
+    } else s.moreNotes = (s.moreNotes ?? []).filter((x) => x.id !== id);
+    if (!s.moreNotes?.length) delete s.moreNotes;
   }, { label: '노트 탭 삭제' });
+  return true;
 }
 
 /* ── 녹화 ─────────────────────────────────────────────────────────────── */

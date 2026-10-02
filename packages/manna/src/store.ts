@@ -326,6 +326,13 @@ export function closeTab(id: string): void {
   if (screenId.peek() === id) selectScreen(rest[Math.min(at, rest.length - 1)]!);
 }
 
+/** 지운 화면의 탭을 뺀다 */
+export function dropTab(id: string): void {
+  if (!openTabs.peek().includes(id)) return;
+  openTabs.value = openTabs.peek().filter((x) => x !== id);
+  saveTabs();
+}
+
 /** 탭 순서 바꾸기 */
 export function moveTab(id: string, to: number): void {
   const tabs = openTabs.peek().filter((x) => x !== id);

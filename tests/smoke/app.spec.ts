@@ -84,7 +84,7 @@ export const appSpecs: Spec[] = [
   {
     name: 'app-workspace',
     kind: 'app',
-    files: [new RegExp(`^${B}main/(index|workspace|image)\\.ts$`), new RegExp(`^${B}renderer/src/(session|Welcome|Tools|ImportDialog|UrlDialog)\\.tsx?$`), new RegExp(`^${B}(shared|preload)/`), /^packages\/core\/node\//],
+    files: [/^packages\/manna\/src\/stage\/ScreenTabs\.tsx$/, new RegExp(`^${B}main/(index|workspace|image)\\.ts$`), new RegExp(`^${B}renderer/src/(session|Welcome|Tools|ImportDialog|UrlDialog)\\.tsx?$`), new RegExp(`^${B}(shared|preload)/`), /^packages\/core\/node\//],
     async run() {
       const ctx = await appWithScreen();
       let { app, page } = ctx;
@@ -95,6 +95,21 @@ export const appSpecs: Spec[] = [
         await page.fill('.tab-input', '바꾼 이름');
         await page.keyboard.press('Enter');
         check('탭을 두 번 눌러 이름 바꾸기', !!(await until(() => JSON.parse(readFileSync(join(ws, 'screens', 'SCR-001', 'screen.json'), 'utf8')).title === '바꾼 이름', 5000)));
+        // 탭 × — 묻고 화면을 지운다 (임시 화면 하나를 더해서)
+        await page.click('button[aria-label="화면 추가"]');
+        await nextOpen(app, src);
+        await page.click('.popover-item:has-text("화면 폴더 선택")');
+        await page.waitForSelector('.file-list');
+        await page.click('.modal button[type=submit]');
+        await until(() => existsSync(join(ws, 'screens', 'SCR-002')), 8000);
+        let asked = '';
+        page.once('dialog', (dg) => {
+          asked = dg.message();
+          dg.accept();
+        });
+        await page.click('.tab[data-id="SCR-002"] .tab-x');
+        check('탭 × — 한 번 묻고 화면을 지운다', asked.includes('SCR-002') && !!(await until(() => !existsSync(join(ws, 'screens', 'SCR-002')), 8000)) && !(await page.$('.tab[data-id="SCR-002"]')));
+        await page.click('.tab[data-id="SCR-001"] .tab-main').catch(() => {});
         // 바깥에서 고치면 다시 불러온다
         await ctrlPick(page, await stagePoint(page, 960, 120));
         await page.click('.snip-btn:has-text("화면에 붙이기")').catch(() => {});

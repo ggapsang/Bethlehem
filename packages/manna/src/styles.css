@@ -682,3 +682,6 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .tab-input { flex: 1; min-width: 0; height: 26px; margin: 0 var(--unit-1-5); padding: 0 var(--unit-1-5); font-size: var(--text-sm); font-weight: 600; border: 1px solid var(--focus-ring); border-radius: var(--unit-1); background: var(--bg-input); color: var(--text-primary); outline: none; }
 .tab-tool { position: relative; }
 .tab-more { position: absolute; top: 2px; right: -2px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px; background: var(--accent); color: var(--white); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+/* 노트 탭 × — 마우스를 올리거나 고른 탭에서 보인다 */
+.note-tab .note-tab-x { visibility: hidden; }
+.note-tab:hover .note-tab-x, .note-tab.is-on .note-tab-x, .note-tab-x:focus-visible { visibility: visible; }

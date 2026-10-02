@@ -100,6 +100,18 @@ export const docSpecs: Spec[] = [
       await page.click('.note-tab-main:has-text("개요")');
       await page.click('.note-tab-main:has-text("회의록")');
       check('노트 탭 — 더하고 이름 짓고 따로 쓴다', ((await page.textContent('.notes .cm-content')) ?? '').includes('회의 메모'));
+      let asked = '';
+      page.once('dialog', (dg) => {
+        asked = dg.message();
+        dg.accept();
+      });
+      await page.click('.note-tab:has-text("회의록") .note-tab-x');
+      check('노트 탭 × — 한 번 묻고 지운다', asked.includes('회의록') && !!(await until(async () => (await page.$$('.note-tab')).length === 1, 2000)));
+      page.once('dialog', (dg) => dg.accept());
+      await page.hover('.note-tab:has-text("개요")');
+      await page.click('.note-tab:has-text("개요") .note-tab-x');
+      check('하나 남은 탭을 지우면 내용만 비운다', !!(await until(async () => ((await page.textContent('.notes .cm-content')) ?? '').trim() === '' || !!(await page.$('.notes .cm-placeholder')), 2000)));
+      await page.keyboard.press('Control+z');
       await page.click('.comments .section-head');
       check('Comment 도 접힌다', !(await page.$('.cards')));
     },

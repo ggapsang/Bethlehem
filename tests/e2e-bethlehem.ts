@@ -392,12 +392,15 @@ async function main() {
 
   console.log('\n[5d] 탭');
   check('등록한 화면마다 탭이 열려 있다', (await page.$$('.tabs .tab')).length === 4, `${(await page.$$('.tabs .tab')).length}개`);
+  // 탭 × 는 화면 지우기 — 묻는 창에서 취소하면 그대로 둔다 (지우기는 smoke app-workspace 에서)
+  page.once('dialog', (d) => d.dismiss());
   await page.click('.tab[data-id="SCR-004"] .tab-x');
-  check('× 로 탭을 닫으면 옆 탭으로', (await page.$$('.tabs .tab')).length === 3 && (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-003');
+  await page.waitForTimeout(200);
+  check('탭 × 는 지우기 전에 묻고, 취소하면 그대로', (await page.$$('.tabs .tab')).length === 4);
   await page.click('.tab[data-id="SCR-001"] .tab-main');
   check('탭을 눌러 화면을 바꾼다', !!(await until(async () => (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-001' && !!(await page.$('iframe.stage-iframe')), 5000)));
   await openScreen(page, 'SCR-004');
-  check('화면 목록에서 고르면 탭으로 다시 열린다', (await page.$$('.tabs .tab')).length === 4 && (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-004');
+  check('화면 목록에서 골라도 그 탭으로', (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-004');
 
   await page.dblclick('.tab[data-id="SCR-004"] .tab-main');
   await page.fill('.tab-input', '앱 아이콘');

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { Check, ChevronDown, X } from 'lucide-preact';
 import { closeTab, doc, moveTab, mutate, openTabs, rev, screenId, selectScreen } from '../store';
+import { deleteScreen } from '../actions';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
@@ -77,16 +78,22 @@ export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; ca
               onPointerDown={(e) => onDown(e, id)}
               onClick={() => !drag.current?.moved && !on && selectScreen(id)}
               onDblClick={() => canRename && setRenaming(id)}
-              onAuxClick={(e) => e.button === 1 && closeTab(id)}
+              onAuxClick={(e) => e.button === 1 && (canRename ? deleteScreen(id) : closeTab(id))}
             >
               <span class="tab-id mono">{s.id}</span>
               <span class="tab-title ellipsis">{s.title}</span>
             </button>
             )}
-            {ids.length > 1 && (
-              <button type="button" class="tab-x" aria-label={`${s.id} 탭 닫기`} title="탭 닫기 (가운데 클릭)" onClick={() => closeTab(id)}>
+            {canRename ? (
+              <button type="button" class="tab-x" aria-label={`${s.id} 화면 지우기`} title="화면 지우기 (가운데 클릭) — 한 번 묻고 지운다" onClick={() => deleteScreen(id)}>
                 <X {...ICON} size={14} />
               </button>
+            ) : (
+              ids.length > 1 && (
+                <button type="button" class="tab-x" aria-label={`${s.id} 탭 닫기`} title="탭 닫기 (가운데 클릭)" onClick={() => closeTab(id)}>
+                  <X {...ICON} size={14} />
+                </button>
+              )
             )}
           </div>
         );
