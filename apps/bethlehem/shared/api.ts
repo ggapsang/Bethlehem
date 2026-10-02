@@ -3,8 +3,9 @@ import type { EncodedBlob, MannaDoc, Runtime } from '@core';
 import type { PackOptions, PackResult, ScanResult } from '@core/node/pack';
 import type { SiteSnapshot } from '../main/site';
 import type { Returned, SourceLink, WorkspaceData } from '../main/workspace';
+import type { MenuCommand } from '../main/menu';
 
-export type { Returned, SiteSnapshot, SourceLink };
+export type { MenuCommand, Returned, SiteSnapshot, SourceLink };
 
 export interface OpenedFile {
   path: string;
@@ -62,6 +63,7 @@ export interface BethlehemApi {
   siteSnapshot(guestId: number): Promise<SiteSnapshot>;
   /* 창 */
   toggleDevTools(): void;
+  onMenu(cb: (cmd: MenuCommand) => void): void;
   setState(s: { title: string; dirty: boolean }): void;
   onRequestSave(cb: () => void): void;
   closeNow(): void;

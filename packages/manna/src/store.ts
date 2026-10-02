@@ -29,7 +29,7 @@ export interface Miss {
 
 /* notes 는 키를 바꿨다 — 개요는 이제 기본으로 접혀 있다 (전에 펼쳐 둔 기록을 따르지 않는다) */
 const LS = {
-  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', titleW: 'terr.titleW',
+  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW',
   tabs: (docId: string) => `terr.tabs.${docId}`,
 };
 
@@ -99,6 +99,10 @@ export const titleWidth = signal(Math.min(720, Math.max(120, Number(lsGet(LS.tit
 export const openTabs = signal<string[]>([]);
 /** 화면 배율 — null 이면 남는 자리에 맞춘다 */
 export const zoom = signal<number | null>(null);
+/** 지금 실제 배율 — 맞춤일 때도 (메뉴의 확대·축소가 여기서 한 단계씩) */
+export const stageScale = signal(1);
+/** Comment 목록 펼침 — 개요처럼 접을 수 있다 (기본 펼침) */
+export const commentsOpen = signal(lsGet(LS.comments) !== '0');
 export const canUndo = signal(false);
 export const canRedo = signal(false);
 
@@ -325,6 +329,11 @@ export function setPanelWidth(w: number): void {
 export function togglePanel(open = !panelOpen.value): void {
   panelOpen.value = open;
   lsSet(LS.panel, open ? '1' : '0');
+}
+
+export function toggleComments(open = !commentsOpen.value): void {
+  commentsOpen.value = open;
+  lsSet(LS.comments, open ? '1' : '0');
 }
 
 export function toggleNotes(open = !notesOpen.value): void {

@@ -7,7 +7,7 @@ import { displayNo } from '@core';
 import { addScreenComment, editBody, editNotes, reorder } from '../actions';
 import type { Host } from '../host';
 import {
-  annotations, hovered, notesOpen, popHidden, requestReveal, rev, screen, selected, toggleNotes, visible,
+  annotations, commentsOpen, hovered, notesOpen, popHidden, requestReveal, rev, screen, selected, toggleComments, toggleNotes, visible,
 } from '../store';
 import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
 import { ago } from './labels';
@@ -19,19 +19,50 @@ export function Panel(_props: { host: Host }) {
   if (!scr) return <aside class="panel" aria-label="개요와 Comment" />;
   return (
     <aside class="panel" aria-label="개요와 Comment">
-      <div class="panel-scroll">
-        <Notes scr={scr} />
-        <Comments scr={scr} />
-      </div>
+      <Notes scr={scr} />
+      <Comments scr={scr} />
     </aside>
   );
 }
 
+/* 개요 높이 — 펼치면 패널의 절반. 쓰다가 내용이 늘면 늘어난 만큼 같이 늘어나고(Enter 한 번에 한 줄),
+   Comment 제목이 밀려나기 직전(HARD)에서 멈춘다. 그 뒤로는 상자 안에서 스크롤한다. 화면을 바꾸거나 다시 펼치면 절반부터 */
+const HALF_GAP = 72; // 패널 위 여백 + 개요 제목 + 아래 여백
+const HARD_GAP = 124; // 위 + 개요 제목·여백 + Comment 제목 + 아래
+
 function Notes({ scr }: { scr: Screen }) {
   rev.value; // 문서는 제자리에서 고치므로 props 가 같아도 다시 그려야 한다 (signals 의 얕은 비교를 피한다)
   const open = notesOpen.value;
+  const box = useRef<HTMLElement>(null);
+  const capRef = useRef<number | null>(null);
+  const prevH = useRef(0);
+  // 내용 높이를 지켜보다가, 쓰는 중에(포커스가 개요 안에) 늘어난 만큼 상자도 늘린다.
+  // 다시 그리지 않고 스타일만 바꾼다 — 쓰는 도중에 다시 그리면 아직 반영 전인 개요로 편집기가 되돌아간다
+  useEffect(() => {
+    capRef.current = null;
+    prevH.current = 0;
+    const sec = box.current;
+    sec?.style.removeProperty('--notes-max');
+    const content = sec?.querySelector('.cm-content') as HTMLElement | null;
+    if (!open || !sec || !content) return;
+    const ro = new ResizeObserver(() => {
+      const h = content.offsetHeight;
+      const grew = prevH.current ? h - prevH.current : 0;
+      prevH.current = h;
+      const panel = sec.closest('.panel') as HTMLElement | null;
+      if (!panel || grew <= 0 || !sec.contains(document.activeElement)) return;
+      const ph = panel.clientHeight;
+      const next = Math.min(ph - HARD_GAP, (capRef.current ?? ph * 0.5 - HALF_GAP) + grew);
+      if (next !== capRef.current) {
+        capRef.current = next;
+        sec.style.setProperty('--notes-max', `${next}px`);
+      }
+    });
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, [scr.id, open]);
   return (
-    <section class="notes">
+    <section ref={box} class={`notes ${open ? 'is-open' : ''}`}>
       <button type="button" class="section-head" aria-expanded={open} onClick={() => toggleNotes()}>
         {open ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
         <span>개요</span>
@@ -89,15 +120,19 @@ function Comments({ scr }: { scr: Screen }) {
   const others = list.filter((a) => a.id !== drag?.id);
   const lineBefore = drag && drag.to < others.length ? others[drag.to].id : null;
   return (
-    <section class="comments">
-      <div class="section-head section-head-static">
-        <span>Comment</span>
-        <span class="count">{list.length}</span>
-        <span class="grow" />
+    <section class={`comments ${commentsOpen.value ? 'is-open' : ''}`}>
+      <div class="section-row">
+        <button type="button" class="section-head" aria-expanded={commentsOpen.value} onClick={() => toggleComments()}>
+          {commentsOpen.value ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
+          <span>Comment</span>
+          <span class="count">{list.length}</span>
+        </button>
         <button type="button" class="btn-icon btn-xs" title="화면 전체에 Comment 달기" aria-label="화면 전체에 Comment 달기" onClick={() => addScreenComment()}>
           <Plus {...ICON} />
         </button>
       </div>
+      {commentsOpen.value && (
+      <div class="cards-scroll">
       <ol class="cards" ref={listRef}>
         {list.map((a) => (
           <Fragment key={a.id}>
@@ -107,6 +142,8 @@ function Comments({ scr }: { scr: Screen }) {
         ))}
         {drag && drag.to >= others.length && <li class="drop-line" aria-hidden="true" />}
       </ol>
+      </div>
+      )}
       {drag && (
         <div class="drag-ghost" style={{ top: `${drag.y}px` }}>
           {displayNo(scr, list.find((a) => a.id === drag.id)!)}번 옮기는 중

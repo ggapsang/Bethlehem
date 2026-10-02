@@ -149,6 +149,10 @@ async function main() {
   check('Pretendard 가 문서 안의 파일로 적용된다', await f.evaluate(() => document.fonts.check('16px "Pretendard Variable"')));
   check('개요는 기본으로 접혀 있다', !(await page.$('.notes .cm-content')));
   await page.click('.notes .section-head'); // 펼친다
+  await page.waitForSelector('.notes .cm-content');
+  await page.waitForTimeout(100);
+  const ratio = await page.evaluate(() => document.querySelector('.notes')!.getBoundingClientRect().height / document.querySelector('.panel')!.getBoundingClientRect().height);
+  check('개요를 펼치면 패널의 절반쯤', ratio > 0.42 && ratio < 0.75, ratio.toFixed(2));
   check('개요에 README 가 마크다운으로 보인다', ((await page.textContent('.notes .cm-content')) ?? '').includes('데이터 매핑'));
   check('개요의 # 기호는 숨고 제목 서식만 보인다', !!(await page.$('.notes .cm-h1')) && !((await page.textContent('.notes .cm-h1')) ?? '').startsWith('#'));
   await page.click('.notes .section-head'); // 개요 접기 — Comment 를 위로
@@ -378,6 +382,24 @@ async function main() {
   await page.click('.notes .cm-content');
   await page.keyboard.press('Control+Home');
   await page.keyboard.type('검증 메모\n');
+  const notesH = () => page.evaluate(() => document.querySelector('.notes')!.getBoundingClientRect().height);
+  const nh0 = await notesH();
+  for (let i = 0; i < 5; i++) await page.keyboard.press('Enter');
+  await page.waitForTimeout(150);
+  const nh1 = await notesH();
+  check('Enter 를 치면 개요 상자가 늘어난다', nh1 > nh0 + 40, `${Math.round(nh0)} → ${Math.round(nh1)}px`);
+  for (let i = 0; i < 70; i++) await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+  const lay = await page.evaluate(() => {
+    const panel = document.querySelector('.panel')!.getBoundingClientRect();
+    const head = document.querySelector('.comments .section-head')!.getBoundingClientRect();
+    const sc = document.querySelector('.notes .cm-scroller') as HTMLElement;
+    return { headIn: head.bottom <= panel.bottom + 1, scrolls: sc.scrollHeight > sc.clientHeight + 4 };
+  });
+  check('개요가 늘어나도 Comment 제목은 화면 안에 남고, 그 뒤로는 개요 상자가 스크롤된다', lay.headIn && lay.scrolls, JSON.stringify(lay));
+  await page.click('.comments .section-head');
+  check('Comment 도 접힌다', !(await page.$('.cards')));
+  await page.click('.comments .section-head');
   await page.click('.toolbar .tb-title').catch(() => {});
   await page.waitForTimeout(500);
   const dl = page.waitForEvent('download');
@@ -392,7 +414,8 @@ async function main() {
   await splashDone(f);
   await page2.waitForTimeout(800);
   check('Comment 3개가 남아 있다', (await cardCount(page2)) === 3);
-  check('개요 편집이 남아 있다', ((await page2.textContent('.notes .cm-content')) ?? '').startsWith('검증 메모'));
+  const notes2 = (await page2.textContent('.notes .cm-content')) ?? '';
+  check('개요 편집이 남아 있다', notes2.startsWith('검증 메모'), JSON.stringify(notes2.slice(0, 40)));
   check('클립이 남아 있다', ((await page2.textContent('.cards')) ?? '').length > 0 && (await page2.$$('.card .badge-icon')).length > 0);
 
   console.log('\n[11] 버전 · 테마');
@@ -411,7 +434,8 @@ async function main() {
   await page3.waitForTimeout(1500);
   check('이 브라우저에 남은 변경이 이어서 열린다 (Comment 3개)', (await cardCount(page3)) === 3, `${await cardCount(page3)}개`);
   check('자동 저장 상태가 보인다', ((await page3.textContent('.save-status')) ?? '').length > 0, (await page3.textContent('.save-status')) ?? '');
-  check('저장과 다른 이름으로 저장이 따로 있다', !!(await page3.$('.split-main')) && !!(await page3.$('button[aria-label="다른 이름으로 저장"]')));
+  check('저장과 다른 이름으로 저장이 따로 있다 (디스켓 · 연필)', !!(await page3.$('.split-main')) && !!(await page3.$('button[aria-label="다른 이름으로 저장"] .saveas-pen')));
+  check('로고는 앱 아이콘 그림', (await page3.getAttribute('.toolbar img.logo', 'src'))?.startsWith('data:image/png') ?? false);
 
   const real = errors.filter((e) => !/favicon|ERR_FILE_NOT_FOUND/.test(e));
   check('페이지 오류가 없다', real.length === 0, real.slice(0, 3).join(' | '));

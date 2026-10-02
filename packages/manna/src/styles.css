@@ -152,7 +152,7 @@ body.is-resizing iframe { pointer-events: none; }
 }
 .tb-group { display: flex; align-items: center; gap: var(--unit-2); min-width: 0; }
 .tb-brand { gap: var(--unit-3); }
-.logo { flex: none; display: block; }
+.logo { flex: none; display: block; border-radius: 7px; }
 /* 제목 칸 — 폭은 휠·손잡이로 (titleWidth) */
 .tb-titlebox { position: relative; display: flex; align-items: center; flex: none; min-width: 120px; }
 .tb-title {
@@ -345,15 +345,26 @@ textarea.input { resize: vertical; line-height: var(--lh-sm); }
 .diag-body { padding: 0 var(--unit-4) var(--unit-3); max-height: 240px; overflow: auto; }
 .diag-body p { margin: var(--unit-1) 0; }
 
-/* ── 패널 — 개요 + Comment 한 스크롤 ─────────────────────────────────────── */
-.panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg-panel); }
-.panel-scroll { flex: 1; overflow: auto; padding: var(--unit-2) var(--unit-3) var(--unit-8); }
+/* ── 패널 — 위에 개요, 아래에 Comment. 둘 다 접힌다 ─────────────────────────
+   개요를 펼치면 패널의 절반쯤에서 시작해, 쓰는 대로 늘어나다가 Comment 머리가 밀려나기 직전에 멈추고
+   그 뒤로는 편집 상자 안에서 스크롤한다 (컨테이너 높이 cqh 기준). Comment 목록은 남은 자리에서 스크롤한다. */
+.panel {
+  container-type: size; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden;
+  padding: var(--unit-2) var(--unit-3) 0; background: var(--bg-panel);
+}
+.notes.is-open { flex: none; display: flex; flex-direction: column; }
+.notes-editor .cm-editor { min-height: calc(50cqh - 72px); max-height: min(var(--notes-max, calc(50cqh - 72px)), calc(100cqh - 124px)); }
+.notes-editor .cm-scroller { overflow: auto; overscroll-behavior: contain; }
+.comments { flex: none; display: flex; flex-direction: column; min-height: 0; }
+.comments.is-open { flex: 1 1 0; }
+.section-row { display: flex; align-items: center; gap: var(--unit-1); flex: none; }
+.section-row .section-head { flex: 1; }
+.cards-scroll { flex: 1; min-height: 0; overflow: auto; padding-bottom: var(--unit-8); }
 .section-head {
   display: flex; align-items: center; gap: var(--unit-1-5); width: 100%; min-width: 0;
   height: var(--unit-10); padding: 0 var(--unit-1); border: 0; background: transparent; text-align: left;
   font-weight: 700; font-size: var(--text-sm); color: var(--text-primary);
 }
-.section-head-static { cursor: default; }
 .notes { border-bottom: 1px solid var(--border); padding-bottom: var(--unit-3); margin-bottom: var(--unit-2); }
 .count { font-size: var(--text-xs); color: var(--text-tertiary); font-weight: 500; }
 .panel-empty { padding: var(--unit-2) var(--unit-1); margin: 0; }
@@ -508,6 +519,10 @@ textarea.input { resize: vertical; line-height: var(--lh-sm); }
 
 /* ── 저장 ─────────────────────────────────────────────────────────────── */
 .split { display: inline-flex; }
+/* 다른 이름으로 저장 — 디스켓 오른쪽 아래에 연필 (오피스와 같은 모양) */
+.saveas-icon { position: relative; display: inline-flex; width: 18px; height: 18px; align-items: center; }
+.saveas-pen { position: absolute; right: -3px; bottom: -3px; padding: 1px; border-radius: 3px; background: var(--accent); }
+.btn-primary:hover .saveas-pen { background: var(--accent-hover); }
 .split-main { border-radius: var(--unit-2) 0 0 var(--unit-2); }
 .split-more { border-radius: 0 var(--unit-2) var(--unit-2) 0; padding: 0 var(--unit-2); border-left: 1px solid rgb(255 255 255 / .35); }
 .save-status { font-size: var(--text-xs); color: var(--text-tertiary); white-space: nowrap; display: inline-flex; gap: var(--unit-1); align-items: center; }

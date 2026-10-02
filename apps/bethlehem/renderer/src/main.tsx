@@ -8,7 +8,8 @@ import { App } from '@manna/App';
 import icon from '@manna/assets/favicon.png';
 import { askName, dirty, screenId, user, versionNo } from '@manna/store';
 import { ImportDialog } from './ImportDialog';
-import { docAsk, handleDrop, host, importing, mode, placeName, rememberScreen, start, urlAsk } from './session';
+import { docAsk, handleDrop, host, importing, mode, rememberScreen, start, urlAsk } from './session';
+import { runMenu } from './menu';
 import { AddScreenMenu, DeleteScreenButton, DocTools, NewVersionMenu } from './Tools';
 import { UrlDialog } from './UrlDialog';
 import { DocChoice, Welcome } from './Welcome';
@@ -17,7 +18,7 @@ function Bethlehem() {
   const [dropping, setDropping] = useState(false);
 
   useEffect(() => {
-    window.bethlehem.setState({ title: `${placeName()}${dirty.value ? ' •' : ''} — 테라리움`, dirty: dirty.value });
+    window.bethlehem.setState({ title: 'Terrarium', dirty: dirty.value });
   }, [mode.value, dirty.value]);
 
   useEffect(rememberScreen, [screenId.value, versionNo.value]);
@@ -25,6 +26,7 @@ function Bethlehem() {
   useEffect(() => {
     if (!user.value) askName.value = true;
     start();
+    window.bethlehem.onMenu(runMenu);
     const over = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes('Files')) return;
       e.preventDefault();

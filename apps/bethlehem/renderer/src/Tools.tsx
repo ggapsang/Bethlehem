@@ -1,7 +1,7 @@
 /* 작성 도구 — 툴바(작업 폴더·문서 열기, 돌아온 문서), 탭 줄(화면 추가), 화면 막대(새 버전·화면 지우기) */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { Bug, ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Plus, Trash2 } from 'lucide-preact';
+import { ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Plus, Trash2 } from 'lucide-preact';
 import { rev, screen } from '@manna/store';
 import {
   addImageScreen, addScreenFromFolder, askUrl, createWorkspace, mergeReturned, mode, openDocument, openFolder, placeName, recent, refreshRecent,
@@ -96,10 +96,7 @@ export function DocTools() {
                 <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); api.wsReveal('returned'); }}>돌아온 문서 폴더(returned) 열기</button>
               </>
             )}
-            <div class="popover-sep" />
-            <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); api.toggleDevTools(); }}>
-              <Bug {...ICON} size={16} /> 개발자 도구 <span class="grow" /><span class="muted small">F12</span>
-            </button>
+
             {m.kind === 'file' && (
               <>
                 <div class="popover-sep" />

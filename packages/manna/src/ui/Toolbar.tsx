@@ -1,7 +1,7 @@
 /* 툴바 — 문서 수준만 (가이드 §17: 현재 문서 → 현재 화면 → 작업 모드 → 저장). 화면에 붙은 조작은 화면 컨테이너 머리에 */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
-  Circle, Crosshair, FilePlus2, Moon, MousePointer2, PanelRight, Redo2, Save, Square, Sun, Undo2, UserRound,
+  Circle, Crosshair, Moon, MousePointer2, PanelRight, PencilLine, Redo2, Save, Square, Sun, Undo2, UserRound,
 } from 'lucide-preact';
 import type { ComponentChildren } from 'preact';
 import type { MarkerColor } from '@core';
@@ -148,11 +148,21 @@ export function Toolbar({ host, start }: ToolbarProps) {
             <Save {...ICON} size={16} /> 저장
           </button>
           <button type="button" class="btn btn-primary split-more" onClick={() => save(host, true)} title="다른 이름으로 저장 (Ctrl+Shift+S)" aria-label="다른 이름으로 저장">
-            <FilePlus2 {...ICON} size={16} />
+            <SaveAsIcon />
           </button>
         </div>
       </div>
     </header>
+  );
+}
+
+/** 다른 이름으로 저장 — 오피스처럼 디스켓에 연필 */
+function SaveAsIcon() {
+  return (
+    <span class="saveas-icon" aria-hidden="true">
+      <Save {...ICON} size={16} />
+      <PencilLine class="saveas-pen" size={11} strokeWidth={2.2} />
+    </span>
   );
 }
 

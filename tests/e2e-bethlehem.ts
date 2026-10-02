@@ -46,7 +46,7 @@ async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await electron.launch({
     args: [ROOT],
     cwd: ROOT,
-    env: { ...process.env, BETHLEHEM_E2E_GRANT: `${WS};${SRC};${OUT}`, BETHLEHEM_USER_DATA: UD, ELECTRON_RENDERER_URL: '' },
+    env: { ...process.env, BETHLEHEM_E2E_GRANT: `${WS};${SRC};${OUT}`, BETHLEHEM_USER_DATA: UD },
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
@@ -131,10 +131,12 @@ async function main() {
   check('terrarium.json 이 생긴다', !!(await until(() => existsSync(join(WS, 'terrarium.json')))));
   check('원래 있던 파일은 그대로 둔다', existsSync(join(WS, '메모.txt')));
   check('다크 테마가 기본이다', (await page.getAttribute('html', 'data-theme')) === 'dark');
-  await page.click('button[aria-label="작업 폴더 · 문서"]');
-  await page.click('.popover-item:has-text("개발자 도구")');
+  const menu = await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.map((m) => m.label) ?? []);
+  check('창 메뉴 — 파일 · 편집 · 화면 · 보기 · 도움말', ['파일', '편집', '화면', '보기', '도움말'].every((l) => menu.some((m) => m.startsWith(l))), menu.join(' '));
+  check('창 제목은 Terrarium', (await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle())) === 'Terrarium');
+  await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.getMenuItemById('devtools')?.click());
   const devOpen = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.webContents.isDevToolsOpened()));
-  check('메뉴에서 개발자 도구를 연다', !!(await until(devOpen, 5000)));
+  check('보기 → 개발자 도구', !!(await until(devOpen, 5000)));
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((w) => w.webContents.closeDevTools()));
   check('툴바에 작업 폴더 이름이 보인다', ((await page.textContent('.tb-place')) ?? '').includes(WS.split(/[\\/]/).pop()!));
 

@@ -9,7 +9,7 @@ import type { Host } from '../host';
 import { onKeyDown, onKeyUp } from '../keys';
 import {
   annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, reveal, revealing, rev,
-  popHidden, screen, selected, shotView, stagePage, stageRef, still, version, versionKey, visible, zoom, zoomStep,
+  popHidden, screen, selected, shotView, stagePage, stageRef, stageScale, still, version, versionKey, visible, zoom, zoomStep,
 } from '../store';
 import type { ComponentChildren } from 'preact';
 import { ago } from '../ui/labels';
@@ -91,6 +91,9 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
   const [popRect, setPopRect] = useState<Box | null>(null);
   const fitRef = useRef(fit);
   fitRef.current = fit;
+  useEffect(() => {
+    stageScale.value = fit.s;
+  }, [fit.s]);
 
   rev.value;
   const v = version.value;

@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { EncodedBlob, MannaDoc } from '@core';
 import { packFolder, scanFolder, type Fetcher, type PackOptions } from '@core/node/pack';
 import { IMAGE_EXT, packImage } from './image';
+import { buildMenu } from './menu';
 import { SITE_PARTITION, snapshotSite, watchSite } from './site';
 import {
   bakeDist, isWorkspace, listReturned, markMerged, readReturned, readWorkspace, watchDir, writeWorkspace, type SourceLink,
@@ -30,7 +31,10 @@ for (const p of (process.env.BETHLEHEM_E2E_GRANT ?? '').split(';').filter(Boolea
 if (process.env.BETHLEHEM_USER_DATA) app.setPath('userData', resolve(process.env.BETHLEHEM_USER_DATA));
 
 app.setName('Terrarium');
-const ICON = join(root, 'apps/bethlehem/resources/icon-256.png');
+/** 실행본(run/)에서는 main 옆에, 소스 트리(out/)에서는 저장소 안의 자리에 있다 */
+const beside = (rel: string, inRepo: string) => (existsSync(join(here, '..', rel)) ? join(here, '..', rel) : join(root, inRepo));
+const ICON = beside('resources/icon-256.png', 'apps/bethlehem/resources/icon-256.png');
+export const GUIDE = beside('docs/USER_GUIDE.md', 'docs/USER_GUIDE.md');
 const EXT = 'terr.html';
 
 function grant(p: string): string {
@@ -135,11 +139,8 @@ function watchWorkspace(): void {
 
 /* ── 창 ──────────────────────────────────────────────────────────────── */
 
-/** npm start — electron-vite 개발 서버로 띄웠다 */
-const DEV = !app.isPackaged && !!process.env.ELECTRON_RENDERER_URL;
-
 function rendererUrl(): string {
-  return process.env.ELECTRON_RENDERER_URL || pathToFileURL(join(here, '../renderer/index.html')).href;
+  return pathToFileURL(join(here, '../renderer/index.html')).href;
 }
 
 function createWindow(): void {
@@ -148,7 +149,7 @@ function createWindow(): void {
     height: 1000,
     minWidth: 1100,
     minHeight: 700,
-    title: '테라리움',
+    title: 'Terrarium',
     icon: ICON,
     backgroundColor: '#F5F5F4',
     show: false,
@@ -160,11 +161,7 @@ function createWindow(): void {
       webviewTag: true,
     },
   });
-  win.once('ready-to-show', () => {
-    win?.show();
-    // 개발 모드(npm start)에서는 개발자 도구를 따로 띄운다. BETHLEHEM_DEVTOOLS=0 이면 띄우지 않는다
-    if (DEV && process.env.BETHLEHEM_DEVTOOLS !== '0') win?.webContents.openDevTools({ mode: 'detach' });
-  });
+  win.once('ready-to-show', () => win?.show());
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) shell.openExternal(url);
@@ -201,7 +198,7 @@ function createWindow(): void {
     setTimeout(() => {
       if (closing || !win) return;
       const choice = dialog.showMessageBoxSync(win, {
-        type: 'warning', buttons: ['닫기', '취소'], defaultId: 1, cancelId: 1, title: '테라리움',
+        type: 'warning', buttons: ['닫기', '취소'], defaultId: 1, cancelId: 1, title: 'Terrarium',
         message: '아직 저장되지 않은 변경이 있습니다.', detail: '그래도 닫을까요?',
       });
       if (choice === 0) {
@@ -217,14 +214,14 @@ function createWindow(): void {
 /* ── IPC ──────────────────────────────────────────────────────────────── */
 
 ipcMain.handle('runtime', async () => {
-  const dir = join(root, 'out/manna');
+  const dir = join(here, '../manna');
   try {
     return {
       js: await readFile(join(dir, 'manna-runtime.js'), 'utf8'),
       css: await readFile(join(dir, 'manna-runtime.css'), 'utf8'),
     };
   } catch {
-    throw new Error('문서 런타임 빌드가 없습니다. npm start 로 실행하면 먼저 빌드됩니다 (또는 npm run build:manna).');
+    throw new Error('문서 런타임이 없습니다. npm start 로 다시 켜 주세요.');
   }
 });
 
@@ -417,7 +414,7 @@ ipcMain.handle('site-snapshot', async (_e, guestId: number) => snapshotSite(gues
 
 ipcMain.on('set-state', (_e, s: { title: string; dirty: boolean }) => {
   dirty = s.dirty;
-  win?.setTitle(s.title);
+  win?.setTitle('Terrarium');
   win?.setDocumentEdited(s.dirty);
 });
 
@@ -427,7 +424,7 @@ ipcMain.on('close-now', () => {
 });
 
 app.whenReady().then(async () => {
-  Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(buildMenu(() => win, GUIDE));
   await loadSettings();
   // 녹화 — 화면 공유를 요청하면 묻지 않고 이 창(요청한 프레임)을 건넨다
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {

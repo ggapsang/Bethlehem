@@ -1,5 +1,5 @@
 {
-  "name": "bethlehem",
+  "name": "terrarium",
   "version": "0.1.0",
   "private": true,
   "description": "Terrarium — 동작하는 화면을 품은 화면정의서. Bethlehem(작성 프로그램)과 Manna(내보낸 문서).",
@@ -7,14 +7,15 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
-    "start": "npm run build:manna && electron-vite dev",
-    "build:manna": "npm run build:agent && vite build -c packages/manna/vite.config.ts",
+    "start": "npm run build --silent && tsx scripts/install-app.ts && electron run",
+    "build": "npm run build:manna --silent && electron-vite build --logLevel warn",
+    "build:manna": "npm run build:agent --silent && vite build -c packages/manna/vite.config.ts --logLevel warn",
     "bake": "npm run build:manna && tsx scripts/bake.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:e2e": "npm run bake -- example/proto out/e2e/proto.terr.html --entry \"index - old.html,index.html\" && tsx tests/e2e.ts",
-    "test:e2e:app": "npm run build:manna && electron-vite build && tsx tests/e2e-bethlehem.ts",
-    "build:agent": "vite build -c packages/manna/vite.agent.config.ts"
+    "test:e2e:app": "npm run build --silent && tsx tests/e2e-bethlehem.ts",
+    "build:agent": "vite build -c packages/manna/vite.agent.config.ts --logLevel warn"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",
