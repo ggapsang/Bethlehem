@@ -318,7 +318,7 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
         editable={mine}
         allowCheck
         minRows={5}
-        autoFocus={mine && !a.body}
+        autoFocus={mine && !a.body && !a.title}
         onChange={(t) => editBody(a, t)}
         placeholder={mine ? 'Comment' : ''}
         label={`${a.id} Comment 본문`}

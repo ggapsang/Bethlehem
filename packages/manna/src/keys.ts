@@ -16,6 +16,8 @@ export function setKeyHost(h: Host): void {
 export function isTyping(e: Event): boolean {
   const t = e.target as HTMLElement | null;
   if (!t || !t.tagName) return false;
+  // 닫힌 편집기가 포커스를 쥔 채 떨어져 나갔다 — 글을 쓰는 중이 아니다 (Delete · Esc 가 먹히게)
+  if (!t.isConnected) return false;
   return /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
 }
 

@@ -51,8 +51,10 @@ export const docSpecs: Spec[] = [
       check('방금 단 Comment 가 골라져 있다', !!(await page.$('.cards > .card:nth-child(2).is-sel')));
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
       await page.waitForTimeout(200); // 작성 창이 닫히며 포커스가 정리될 시간
+      const pre = await page.evaluate(() => { const e = document.activeElement as HTMLElement; return [e?.tagName, e?.getAttribute('aria-label'), e?.isConnected]; });
       await page.keyboard.press('Delete');
-      check('Delete 로 지운다', !!(await until(async () => (await cardCount(page)) === 1, 3000)));
+      const delOk = !!(await until(async () => (await cardCount(page)) === 1, 3000));
+      check('Delete 로 지운다', delOk, delOk ? '' : JSON.stringify(pre));
       await page.keyboard.press('Control+z');
       check('Ctrl+Z 로 되살린다', !!(await until(async () => (await cardCount(page)) === 2, 3000)));
       // 완료 — 지우지 않고 숨긴다. 번호는 다시 매기지 않는다

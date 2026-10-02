@@ -113,9 +113,12 @@ export function MarkdownEditor(p: EditorProps) {
       }),
     });
     view.current = v;
-    if (p.autoFocus) requestAnimationFrame(() => v.focus());
+    // 열리자마자 닫힌 편집기(빨리 쓰고 바로 추가)는 포커스를 가져가지 않는다 — 떨어져 나간 편집기가 키를 먹으면 Delete 등이 안 듣는다
+    if (p.autoFocus) requestAnimationFrame(() => view.current === v && v.dom.isConnected && v.focus());
     return () => {
       flush();
+      // 포커스를 쥔 채 사라지면 떨어져 나간 편집기가 키보드를 붙잡는다 — 놓고 사라진다
+      if (v.contentDOM.contains(document.activeElement)) v.contentDOM.blur();
       v.destroy();
       view.current = null;
     };
