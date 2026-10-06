@@ -6,6 +6,7 @@ import type { Annotation, Screen } from '@core';
 import { displayNo, pkgPath } from '@core';
 import type { Picked, RectTuple } from '../agent/protocol';
 import type { Host } from '../host';
+import { liveSite } from '../host';
 import { onKeyDown, onKeyUp } from '../keys';
 import {
   annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, requestReveal, reveal, revealing, rev,
@@ -308,6 +309,21 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
     }, delay);
   };
   useEffect(() => () => clearTimeout(snapTimer.current), [frameKey]);
+  /* 원본 내려받기 직전에 — 지금 이 순간의 DOM 으로 사본을 새로 뜬다 */
+  useEffect(() => {
+    if (!live || !host.snapshotSite) return;
+    const fn = async () => {
+      const wv = webview.current as (WebviewLike & { getWebContentsId?: () => number }) | null;
+      if (!wv?.getWebContentsId || !scr || !v) return false;
+      const r = await host.snapshotSite!(wv.getWebContentsId()).catch(() => null);
+      if (r) applySiteSnapshot(scr.id, v.v, r);
+      return !!r;
+    };
+    liveSite.snapshot = fn;
+    return () => {
+      if (liveSite.snapshot === fn) liveSite.snapshot = null;
+    };
+  }, [frameKey, live, scr?.id, v?.v]);
 
   /* 앵커 목록이 바뀌면 다시 알린다 */
   const anchorKey = list.map((a) => (a.anchor ? `${a.id}:${a.anchor.fp.selector}:${JSON.stringify(a.anchor.region ?? '')}:${a.anchor.page ?? ''}` : '')).join('|');

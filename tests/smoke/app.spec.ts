@@ -73,6 +73,25 @@ export const appSpecs: Spec[] = [
         check('화면 전체를 찍은 캡처로 저장', c?.kind === 'capture' && !!c?.shot?.box);
         await page.keyboard.press('Escape');
         check('실시간 화면에 마커가 붙지 않는다', (await page.$$eval('.marker', (ms) => ms.filter((m) => (m as HTMLElement).style.display === 'flex').length)) === 0);
+        // URL 화면의 원본 내려받기 — 지금 DOM 을 CSS · 글꼴 · 그림까지 넣은 HTML 하나로 (스크립트 없이, 오프라인으로 열린다)
+        const domOut = join(tempDir('dom'), 'copy.html');
+        await app.evaluate(({ session }, p) => session.defaultSession.once('will-download', (_e, item) => item.setSavePath(p)), domOut);
+        await page.click('button[aria-label="저장 방식"]');
+        check('URL 화면 — 메뉴가 DOM 사본 내려받기로', ((await page.textContent('.save-menu button[aria-label="원본 파일 내려받기"]')) ?? '').includes('DOM 사본'));
+        await page.click('.save-menu button[aria-label="원본 파일 내려받기"]');
+        const dom = await until(() => (existsSync(domOut) && readFileSync(domOut, 'utf8').includes('</html>') ? readFileSync(domOut, 'utf8') : null), 30000);
+        check('DOM 사본 HTML — 스크립트 없음 · 바깥 스타일시트 없음 · 캔버스는 그림으로', !!dom && !/<script/i.test(dom) && !/<link[^>]*stylesheet/i.test(dom) && /style="[^"]*data:image\/jpeg[^"]*"[^>]*data-terr-pixels/.test(dom) && !dom.includes('terr.shot'), dom ? `${Math.round(dom.length / 1024)}KB` : '없음');
+        if (dom) {
+          const br = await chromium.launch({ executablePath: CHROME });
+          const ctx = await br.newContext({ viewport: { width: 1920, height: 1080 }, offline: true });
+          const pg = await ctx.newPage();
+          const failed: string[] = [];
+          pg.on('requestfailed', (r) => failed.push(r.url()));
+          await pg.goto(pathToFileURL(domOut).href);
+          await wait(800);
+          check('DOM 사본 — 오프라인 브라우저에서 리소스 빠짐없이 열린다', failed.length === 0 && (await pg.$$('body *')).length > 50, failed.slice(0, 3).join(' '));
+          await br.close();
+        }
         await page.click('.sc-bar .seg-btn:has-text("캡처 모음")');
         check('프로그램에서도 캡처 모음', !!(await until(() => page.$('.gallery .gal-item .gal-shot img'), 5000)));
         // 실시간 / 캡처 모음은 탭마다 따로 — 다른 URL 탭은 실시간 그대로, 돌아오면 캡처 모음 그대로
@@ -97,6 +116,12 @@ export const appSpecs: Spec[] = [
         await rp.fill('.modal input', '수신자');
         await rp.click('.modal button[type=submit]');
         check('받는 사람 — URL 화면은 캡처 모음', !!(await until(() => rp.$('.gallery .gal-item .gal-shot img'), 8000)));
+        await rp.click('button[aria-label="저장 방식"]');
+        const dl = rp.waitForEvent('download');
+        await rp.click('.save-menu button[aria-label="원본 파일 내려받기"]');
+        const got = await dl;
+        const rhtml = readFileSync((await got.path())!, 'utf8');
+        check('받는 사람도 담아 둔 DOM 사본을 HTML 로 내려받는다', /_DOM\.html$/.test(got.suggestedFilename()) && !/<script/i.test(rhtml) && rhtml.includes('data-terr-pixels'), got.suggestedFilename());
         await br.close();
       } finally {
         await app.close();

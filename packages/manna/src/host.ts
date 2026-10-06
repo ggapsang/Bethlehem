@@ -4,6 +4,7 @@
 import type { EncodedBlob, ExternalEntry, MannaDoc, Runtime } from '@core';
 import { decodeBlob, makeZip, mergeDoc, referencedShas, serializeManna } from '@core';
 import { idbGet, idbPut } from './idb';
+import { siteCopyHtml } from './site-copy';
 import { blobs, dirty, doc, fileName, notify, rev, saveState, user, screenId, versionNo } from './store';
 
 export interface SiteSnap {
@@ -33,6 +34,9 @@ export interface Host {
 
 const safe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '_').trim();
 
+/** 실시간 URL 화면 — 띄워 둔 스테이지가 "지금 모습으로 사본 뜨기"를 걸어 둔다 */
+export const liveSite: { snapshot: (() => Promise<boolean>) | null } = { snapshot: null };
+
 /** 테라리움 문서 확장자 — 브라우저가 바로 여는 .html 앞에 .terr 를 붙인다 */
 export const EXT = '.terr.html';
 const HTML_EXT = /(\.terr)?\.html?$/i;
@@ -60,14 +64,16 @@ export async function buildHtml(host: Host, only?: string[]): Promise<string> {
   return serializeManna(out, blobs, await host.runtime());
 }
 
-/** 원본 파일 내려받기 — 지금 화면 · 버전의 파일들을 원래 폴더 모양 그대로 zip 으로. URL 화면은 원본이 없다 */
+/** 원본 파일 내려받기 — 지금 화면 · 버전의 파일들을 원래 폴더 모양 그대로 zip 으로.
+ *  URL 화면은 원본 대신 그 페이지의 DOM 사본을 파일 하나로 열리는 HTML 로 (실시간이면 지금 모습으로 새로 떠서) */
 export async function downloadSource(): Promise<boolean> {
   const s = doc.peek().screens.find((x) => x.id === screenId.peek());
   const v = s?.versions.find((x) => x.v === versionNo.peek()) ?? s?.versions[s.versions.length - 1];
   if (!s || !v) return false;
+  if (v.source?.mode === 'site') return downloadSiteCopy(s.id, v.v);
   const paths = Object.keys(v.files);
   if (!paths.length) {
-    notify('URL 화면은 원본 파일이 없습니다 — Comment 를 달 때 찍은 캡처만 있습니다.', 'error');
+    notify('이 화면에는 내려받을 원본 파일이 없습니다.', 'error');
     return false;
   }
   try {
@@ -76,17 +82,27 @@ export async function downloadSource(): Promise<boolean> {
       const b = blobs.get(v.files[p]!.sha);
       if (b) files.push({ path: p, bytes: await decodeBlob(b) });
     }
-    const zip = makeZip(files);
     const name = `${safe(s.title)}_${s.id}_v${v.v}_원본.zip`;
-    const url = URL.createObjectURL(new Blob([zip as BlobPart], { type: 'application/zip' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    download(makeZip(files) as BlobPart, name, 'application/zip');
     notify(`원본 파일 ${files.length}개를 내려받았습니다 — ${name}`);
+    return true;
+  } catch (e) {
+    notify(`내려받지 못했습니다: ${(e as Error).message}`, 'error');
+    return false;
+  }
+}
+
+async function downloadSiteCopy(id: string, vno: number): Promise<boolean> {
+  try {
+    notify('지금 화면의 DOM 을 담는 중…');
+    await liveSite.snapshot?.().catch(() => false);
+    const s = doc.peek().screens.find((x) => x.id === id);
+    const v = s?.versions.find((x) => x.v === vno);
+    if (!s || !v) return false;
+    const html = await siteCopyHtml(v, blobs, s.title);
+    const name = `${safe(s.title)}_${s.id}_v${v.v}_DOM.html`;
+    download(html, name);
+    notify(`DOM 사본을 내려받았습니다 — ${name} (스크립트 없이 그 순간의 모습, 파일 하나로 열린다)`);
     return true;
   } catch (e) {
     notify(`내려받지 못했습니다: ${(e as Error).message}`, 'error');
@@ -185,8 +201,8 @@ type Picker = (o: object) => Promise<FileHandle>;
 let handle: FileHandle | null = null;
 let baseShas = new Set<string>();
 
-function download(html: string, name: string): void {
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+function download(data: BlobPart, name: string, type = 'text/html'): void {
+  const url = URL.createObjectURL(new Blob([data], { type }));
   const a = document.createElement('a');
   a.href = url;
   a.download = name;

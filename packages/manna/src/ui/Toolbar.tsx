@@ -172,6 +172,7 @@ function SaveMenu({ host }: { host: Host }) {
     };
   }, [open]);
   const scr = screen.value;
+  const isSite = version.value?.source?.mode === 'site';
   return (
     <div class="popover-wrap" ref={ref}>
       <button type="button" class="btn btn-primary split-more" aria-haspopup="true" aria-expanded={open} aria-label="저장 방식" title="다른 이름으로 저장 · 현재 탭만 저장" onClick={() => setOpen(!open)}>
@@ -191,11 +192,11 @@ function SaveMenu({ host }: { host: Host }) {
             role="menuitem"
             class="popover-item"
             aria-label="원본 파일 내려받기"
-            disabled={!scr || version.value?.source?.mode === 'site'}
-            title={version.value?.source?.mode === 'site' ? 'URL 화면은 원본 파일이 없습니다' : '지금 화면 · 버전의 HTML · CSS · JS · 데이터 · 그림을 원래 폴더 모양 그대로 zip 으로'}
+            disabled={!scr || (isSite && !host.site && !version.value?.external.length)}
+            title={isSite ? '지금 이 페이지의 DOM(그 순간의 모습)을 CSS · 글꼴 · 그림까지 넣어 파일 하나로 열리는 HTML 로. 스크립트는 빠진다' : '지금 화면 · 버전의 HTML · CSS · JS · 데이터 · 그림을 원래 폴더 모양 그대로 zip 으로'}
             onClick={() => { setOpen(false); downloadSource(); }}
           >
-            <FolderDown {...ICON} size={16} /> 원본 파일 내려받기 (zip)
+            <FolderDown {...ICON} size={16} /> {isSite ? 'DOM 사본 내려받기 (HTML)' : '원본 파일 내려받기 (zip)'}
           </button>
         </div>
       )}

@@ -29,7 +29,7 @@ export function buildMenu(getWin: () => BrowserWindow | null): Menu {
         item('저장', 'save', 'Ctrl+S'),
         item('다른 이름으로 저장…', 'save-as', 'Ctrl+Shift+S'),
         item('현재 탭만 저장…', 'save-tab'),
-        item('원본 파일 내려받기 (zip)…', 'download-source'),
+        item('원본 파일 내려받기 (zip · URL 화면은 DOM 사본 HTML)…', 'download-source'),
         { type: 'separator' },
         item('보낼 파일 폴더(dist) 열기', 'reveal-dist'),
         item('돌아온 문서 폴더(returned) 열기', 'reveal-returned'),
