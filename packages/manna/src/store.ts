@@ -335,6 +335,7 @@ const lastVer = new Map<string, number>();
 function saveTabs(writeDoc = true): void {
   const d = doc.peek();
   const open = openTabs.peek().filter((id) => d.screens.some((s) => s.id === id));
+  if (!tabPolicy.persist) return;
   lsSet(LS.tabs(d.id), JSON.stringify({ open, known: d.screens.map((s) => s.id), seen: layoutKey(d.meta.tabs) }));
   if (!tabPolicy.author || !writeDoc) return;
   const hidden = d.screens.map((s) => s.id).filter((id) => !open.includes(id));
@@ -346,8 +347,41 @@ function saveTabs(writeDoc = true): void {
 /** 작성자 탭 배치를 비교하는 열쇠 */
 const layoutKey = (t?: { open: string[]; hidden: string[] }) => (t ? `${t.open.join(',')}|${t.hidden.join(',')}` : '');
 
-/** 탭 배치를 문서에 넣을지 — 작성 프로그램만 (받는 사람의 탭은 그 브라우저에만) */
-export const tabPolicy = { author: false };
+/** 탭 배치를 문서에 넣을지 — 작성 프로그램만 (받는 사람의 탭은 그 브라우저에만).
+ *  persist = false 면 이 브라우저에도 기억하지 않는다 (빼낸 창 · 복제 보기 창은 본 창의 탭 기억을 건드리지 않는다) */
+export const tabPolicy = { author: false, persist: true };
+
+/* ── 여러 창 — 탭을 별도 창으로 빼거나 복제해 볼 때 ─────────────────────── */
+/** 이 창이 본 창(main)인지, 본 창에서 띄운 창(mirror)인지 */
+export const windowMode = signal<'main' | 'mirror'>('main');
+/** 별도 창으로 빼낸 화면들 — 본 창의 탭 줄에서는 잠시 빠진다(문서의 탭 배치는 그대로) */
+export const detachedTabs = signal<ReadonlySet<string>>(new Set());
+
+/** 다른 창에서 고친 문서를 받아 들인다 — 제자리에서 바꾸고, 이 창의 되돌리기는 비운다(다른 창의 고침을 되돌리지 않게) */
+export function applyRemoteDoc(d: MannaDoc, entries: [string, EncodedBlob][], markDirty: boolean): void {
+  addBlobs(entries);
+  // 다른 창의 고침도 이 창에서 되돌릴 수 있다 — 잇단 고침(타이핑)은 한 걸음으로
+  const t = Date.now();
+  const top = undoStack[undoStack.length - 1];
+  if (top?.merge === 'other-window' && t - top.at < 2000) top.at = t;
+  else {
+    undoStack.push({ snap: JSON.stringify(doc.peek()), label: '다른 창에서 고침', merge: 'other-window', at: t });
+    if (undoStack.length > MAX_STEPS) undoStack.shift();
+  }
+  redoStack.length = 0;
+  const cur = doc.peek() as unknown as Record<string, unknown>;
+  for (const k of Object.keys(cur)) delete cur[k];
+  Object.assign(cur, d);
+  syncHistory();
+  const x = doc.peek();
+  if (screenId.peek() && !x.screens.some((s) => s.id === screenId.peek())) {
+    screenId.value = x.screens[0]?.id ?? null;
+    versionNo.value = x.screens[0] ? latest(x.screens[0]).v : null;
+  }
+  if (selected.peek() && !x.screens.some((s) => s.annotations.some((a) => a.id === selected.peek()))) selected.value = null;
+  if (markDirty) dirty.value = true;
+  rev.value++;
+}
 
 export function selectScreen(id: string, v?: number): void {
   const s = doc.value.screens.find((x) => x.id === id);

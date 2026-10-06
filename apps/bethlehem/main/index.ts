@@ -183,6 +183,78 @@ function rendererUrl(): string {
   return pathToFileURL(join(here, '../renderer/index.html')).href;
 }
 
+const WEB_PREFS = () => ({
+  preload: join(here, '../preload/index.cjs'),
+  contextIsolation: true,
+  nodeIntegration: false,
+  sandbox: true,
+  webviewTag: true,
+});
+
+/** 창마다 같은 규칙 — 바깥 주소는 브라우저로, 페이지 이동 막기, F12, URL 화면 webview 의 preload · 격리 */
+function guardWindow(w: BrowserWindow): void {
+  w.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  w.webContents.on('will-navigate', (e, url) => {
+    if (url !== w.webContents.getURL()) e.preventDefault();
+  });
+  w.webContents.on('before-input-event', (_e, input) => {
+    if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) {
+      w.webContents.toggleDevTools();
+    }
+  });
+  /* URL 화면의 webview — preload·격리를 메인 프로세스가 정한다. 다른 세션·다른 스킴은 붙이지 않는다 */
+  w.webContents.on('will-attach-webview', (e, prefs, params) => {
+    if (params.partition !== SITE_PARTITION || !/^https?:/.test(params.src)) return e.preventDefault();
+    prefs.preload = join(here, '../preload/site.cjs');
+    prefs.contextIsolation = true;
+    prefs.sandbox = true;
+    prefs.nodeIntegration = false;
+  });
+  w.webContents.on('did-attach-webview', (_e, guest) => {
+    watchSite(guest);
+    // URL 화면 안에 포커스가 있을 때 F12 — 그 사이트의 개발자 도구
+    guest.on('before-input-event', (_ev, input) => {
+      if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) guest.toggleDevTools();
+    });
+  });
+}
+
+/** 탭을 빼거나 복제해 띄운 창들 */
+const screenWindows = new Set<BrowserWindow>();
+
+ipcMain.handle('open-screen-window', (_e, o: { screen: string; detach: boolean; x?: number; y?: number }) => {
+  const w = new BrowserWindow({
+    width: 1280,
+    height: 860,
+    minWidth: 720,
+    minHeight: 480,
+    ...(o.x != null && o.y != null ? { x: Math.round(o.x - 160), y: Math.round(o.y - 20) } : {}),
+    title: 'Terrarium',
+    icon: ICON,
+    backgroundColor: '#0c0a09',
+    show: false,
+    webPreferences: WEB_PREFS(),
+  });
+  w.setMenu(null);
+  w.once('ready-to-show', () => w.show());
+  guardWindow(w);
+  screenWindows.add(w);
+  w.on('closed', () => {
+    screenWindows.delete(w);
+    // beforeunload 가 못 가는 경우(멈춤 · 강제 종료)에도 본 창이 뺀 탭을 되찾게
+    if (!win?.isDestroyed()) win?.webContents.send('screen-window-closed', { screen: o.screen, detach: o.detach });
+  });
+  const url = new URL(rendererUrl());
+  url.searchParams.set('window', 'mirror');
+  url.searchParams.set('screen', o.screen);
+  url.searchParams.set('detach', o.detach ? '1' : '0');
+  w.loadURL(url.href);
+  return true;
+});
+
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1600,
@@ -193,42 +265,14 @@ function createWindow(): void {
     icon: ICON,
     backgroundColor: '#F5F5F4',
     show: false,
-    webPreferences: {
-      preload: join(here, '../preload/index.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webviewTag: true,
-    },
+    webPreferences: WEB_PREFS(),
   });
   win.once('ready-to-show', () => win?.show());
-
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  win.webContents.on('will-navigate', (e, url) => {
-    if (url !== win?.webContents.getURL()) e.preventDefault();
-  });
-  win.webContents.on('before-input-event', (_e, input) => {
-    if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) {
-      win?.webContents.toggleDevTools();
-    }
-  });
-  /* URL 화면의 webview — preload·격리를 메인 프로세스가 정한다. 다른 세션·다른 스킴은 붙이지 않는다 */
-  win.webContents.on('will-attach-webview', (e, prefs, params) => {
-    if (params.partition !== SITE_PARTITION || !/^https?:/.test(params.src)) return e.preventDefault();
-    prefs.preload = join(here, '../preload/site.cjs');
-    prefs.contextIsolation = true;
-    prefs.sandbox = true;
-    prefs.nodeIntegration = false;
-  });
-  win.webContents.on('did-attach-webview', (_e, guest) => {
-    watchSite(guest);
-    // URL 화면 안에 포커스가 있을 때 F12 — 그 사이트의 개발자 도구
-    guest.on('before-input-event', (_ev, input) => {
-      if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) guest.toggleDevTools();
-    });
+  guardWindow(win);
+  // 본 창을 닫으면 거기서 띄운 창(빼낸 탭 · 복제 보기)도 닫는다
+  win.on('closed', () => {
+    for (const w of screenWindows) if (!w.isDestroyed()) w.destroy();
+    screenWindows.clear();
   });
   // 자동 저장이 남아 있으면 마저 저장하고 닫는다
   win.on('close', (e) => {
@@ -479,16 +523,19 @@ ipcMain.handle('export-as', async (_e, o: { html: string; suggestedName: string 
 });
 
 /* 창 안의 영역을 그림으로 — 피커 멈춤 그림과 Comment 의 '달 때 화면' (webview 픽셀도 들어간다) */
-ipcMain.handle('capture-rect', async (_e, r: { x: number; y: number; width: number; height: number }) => {
-  if (!win) return null;
-  const img = await win.webContents.capturePage(r);
+ipcMain.handle('capture-rect', async (e, r: { x: number; y: number; width: number; height: number }) => {
+  // 부른 창을 찍는다 — 빼낸 창에서 단 Comment 도 그 창의 화면이 들어간다
+  const w = BrowserWindow.fromWebContents(e.sender) ?? win;
+  if (!w) return null;
+  const img = await w.webContents.capturePage(r);
   const size = img.getSize();
   return { bytes: new Uint8Array(img.toJPEG(85)), w: size.width, h: size.height };
 });
 
 ipcMain.handle('site-snapshot', async (_e, guestId: number) => snapshotSite(guestId));
 
-ipcMain.on('set-state', (_e, s: { title: string; dirty: boolean }) => {
+ipcMain.on('set-state', (e, s: { title: string; dirty: boolean }) => {
+  if (e.sender !== win?.webContents) return; // 띄운 창은 저장을 본 창에 맡긴다
   dirty = s.dirty;
   win?.setTitle('Terrarium');
   win?.setDocumentEdited(s.dirty);

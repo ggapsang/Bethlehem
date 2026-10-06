@@ -740,3 +740,7 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .list-eye { flex: none; color: var(--text-secondary); }
 .list-row.is-hidden .list-eye { color: var(--text-tertiary); }
 .tab-menu { z-index: 70; min-width: 220px; }
+/* 탭 빼기 — 탭 줄 밖으로 끌고 있을 때 */
+.tab.is-tearing { opacity: .55; outline: 2px dashed var(--accent); outline-offset: -2px; }
+.tabs-strip.is-tearing { cursor: copy; }
+.tabs-detached { display: inline-flex; align-items: center; gap: 4px; align-self: center; margin-left: var(--unit-2); white-space: nowrap; }

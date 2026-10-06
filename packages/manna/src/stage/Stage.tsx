@@ -19,7 +19,7 @@ import { StagePopover } from '../ui/Popover';
 import { iframeBridge, webviewBridge, type Bridge, type WebviewLike } from './bridge';
 import { prepareScreen } from './loader';
 import { StageHeader } from './StageHeader';
-import { ScreenTabs } from './ScreenTabs';
+import { ScreenTabs, type WindowTools } from './ScreenTabs';
 import { whoText } from '../ui/Who';
 import { MarkerStrip } from './MarkerStrip';
 import { SiteGallery } from './SiteGallery';
@@ -74,9 +74,11 @@ export interface StageProps {
   versionTools?: ComponentChildren;
   /** 화면 막대 끝 (Bethlehem: 화면 지우기) */
   screenActions?: ComponentChildren;
+  /** 탭을 새 창으로 빼기 · 복제 보기 (Bethlehem) */
+  windowTools?: WindowTools;
 }
 
-export function Stage({ host, empty, tabTools, versionTools, screenActions }: StageProps) {
+export function Stage({ host, empty, tabTools, versionTools, screenActions, windowTools }: StageProps) {
   const area = useRef<HTMLDivElement>(null);
   const frameBox = useRef<HTMLDivElement>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
@@ -587,7 +589,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
 
   return (
     <div class="stage-col">
-      <ScreenTabs tools={tabTools} canRename={host.author} />
+      <ScreenTabs tools={tabTools} canRename={host.author} windowTools={windowTools} />
       <div class="full-hot" aria-hidden="true" />
       <div class="stage-top">
       <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} onReload={reloadScreen}

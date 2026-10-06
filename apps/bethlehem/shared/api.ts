@@ -83,6 +83,10 @@ export interface BethlehemApi {
   /** 바깥에서 작업 폴더 파일을 고쳤다 */
   onWorkspaceChanged(cb: (file: string) => void): void;
   /* 창 */
+  /** 화면 하나를 새 창으로 — detach 면 본 창의 탭 줄에서 잠시 빠진다(빼기), 아니면 복제 보기 */
+  openScreenWindow(o: { screen: string; detach: boolean; x?: number; y?: number }): Promise<boolean>;
+  /** 띄운 창이 닫혔다 (어떻게 닫혔든) */
+  onScreenWindowClosed(cb: (o: { screen: string; detach: boolean }) => void): void;
   toggleDevTools(): void;
   onMenu(cb: (cmd: MenuCommand) => void): void;
   setState(s: { title: string; dirty: boolean }): void;

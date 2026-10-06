@@ -2,16 +2,28 @@
  *   × = 화면 지우기(작성자, 한 번 묻는다) · 받는 사람은 탭 숨기기
  *   가운데 클릭 · 오른쪽 클릭 메뉴의 "탭 숨기기" = 지우지 않고 탭에서만 뺀다 (▾ 목록에서 다시 보이게)
  * 오른쪽 ▾ 는 문서의 모든 화면 목록(눈 아이콘으로 숨기기 · 보이기), tools 는 작성 도구(Bethlehem: 화면 추가)를 끼우는 자리.
+ * 여러 창(windowTools 가 있을 때): 탭을 탭 줄 밖으로 끌어 놓으면 별도 창으로 빠진다. 오른쪽 클릭 메뉴에 "새 창으로 빼기" · "복제 보기".
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { ChevronDown, Eye, EyeOff, Pencil, Trash2, X } from 'lucide-preact';
-import { closeTab, doc, moveTab, mutate, openTab, openTabs, rev, screenId, selectScreen } from '../store';
+import { ChevronDown, Copy, Eye, EyeOff, Pencil, SquareArrowOutUpRight, Trash2, X } from 'lucide-preact';
+import { closeTab, detachedTabs, doc, moveTab, mutate, openTab, openTabs, rev, screenId, selectScreen, windowMode } from '../store';
 import { deleteScreen } from '../actions';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
+/** 탭 줄에서 이만큼(px) 위아래로 벗어나 놓으면 별도 창으로 뺀다 */
+const TEAR = 48;
 
-export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; canRename?: boolean }) {
+/** 여러 창을 띄울 수 있을 때(작성 프로그램) — 탭을 새 창으로 빼기 · 복제 보기 */
+export interface WindowTools {
+  tearOff(id: string, screenX: number, screenY: number): void;
+  duplicate(id: string): void;
+}
+
+export function ScreenTabs({ tools, canRename, windowTools }: { tools?: ComponentChildren; canRename?: boolean; windowTools?: WindowTools }) {
+  const mirror = windowMode.value === 'mirror';
+  const [tearing, setTearing] = useState<string | null>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   useEffect(() => {
@@ -34,40 +46,60 @@ export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; ca
   rev.value;
   const d = doc.value;
   const cur = screenId.value;
-  const ids = openTabs.value.filter((id) => d.screens.some((s) => s.id === id));
-  if (cur && !ids.includes(cur)) ids.push(cur);
+  const detached = detachedTabs.value;
+  const ids = mirror ? (cur ? [cur] : []) : openTabs.value.filter((id) => d.screens.some((s) => s.id === id) && !detached.has(id));
+  if (cur && !ids.includes(cur) && !detached.has(cur)) ids.push(cur);
   const drag = useRef<{ id: string; x: number; moved: boolean } | null>(null);
 
+  /* 끌기 — 옆으로는 순서 바꾸기, 탭 줄 밖(위아래)으로 끌어 놓으면 별도 창으로 빼기.
+     창 밖까지 따라가야 하므로 창 전체에 듣는다 */
   const onDown = (e: PointerEvent, id: string) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || mirror) return;
     drag.current = { id, x: e.clientX, moved: false };
-  };
-  const onMove = (e: PointerEvent) => {
-    const g = drag.current;
-    if (!g || (!g.moved && Math.abs(e.clientX - g.x) < 6)) return;
-    g.moved = true;
-    const strip = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('.tab');
-    let to = 0;
-    strip.forEach((t, i) => {
-      const r = t.getBoundingClientRect();
-      if (e.clientX > r.left + r.width / 2) to = i + (t.dataset.id === g.id ? 0 : 1);
-    });
-    const from = ids.indexOf(g.id);
-    const target = to > from ? to - 1 : to;
-    if (target !== from) moveTab(g.id, target);
-  };
-  const onUp = () => {
-    drag.current = null;
+    // 품은 화면(iframe · webview) 위로 지나가도 끌기가 끊기지 않게 — 포인터를 이 탭이 붙잡는다
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    const outside = (ev: PointerEvent) => {
+      const r = stripRef.current?.getBoundingClientRect();
+      return !!r && !!windowTools && ids.length > 1 && (ev.clientY < r.top - TEAR || ev.clientY > r.bottom + TEAR || ev.clientX < 0 || ev.clientX > innerWidth);
+    };
+    const move = (ev: PointerEvent) => {
+      const g = drag.current;
+      if (!g || (!g.moved && Math.abs(ev.clientX - g.x) < 6 && Math.abs(ev.clientY - e.clientY) < 6)) return;
+      g.moved = true;
+      if (outside(ev)) return setTearing(g.id);
+      setTearing(null);
+      const tabsEls = stripRef.current?.querySelectorAll<HTMLElement>('.tab') ?? [];
+      let to = 0;
+      tabsEls.forEach((t, i) => {
+        const r = t.getBoundingClientRect();
+        if (ev.clientX > r.left + r.width / 2) to = i + (t.dataset.id === g.id ? 0 : 1);
+      });
+      const from = ids.indexOf(g.id);
+      const target = to > from ? to - 1 : to;
+      if (target !== from) moveTab(g.id, target);
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      const g = drag.current;
+      setTearing(null);
+      if (g?.moved && outside(ev)) windowTools!.tearOff(g.id, ev.screenX, ev.screenY);
+      setTimeout(() => (drag.current = null), 0);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
 
   return (
     <div class="tabs">
-    <div class="tabs-strip" role="tablist" aria-label="열린 화면" onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
+    <div class={`tabs-strip ${tearing ? 'is-tearing' : ''}`} role="tablist" aria-label="열린 화면" ref={stripRef}>
       {ids.map((id) => {
         const s = d.screens.find((x) => x.id === id)!;
         const on = id === cur;
         return (
-          <div key={id} class={`tab ${on ? 'is-on' : ''}`} data-id={id}>
+          <div key={id} class={`tab ${on ? 'is-on' : ''} ${tearing === id ? 'is-tearing' : ''}`} data-id={id} title={tearing === id ? '놓으면 새 창으로 뺀다' : undefined}>
             {renaming === id ? (
               <input
                 class="tab-input"
@@ -93,8 +125,9 @@ export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; ca
               onPointerDown={(e) => onDown(e, id)}
               onClick={() => !drag.current?.moved && !on && selectScreen(id)}
               onDblClick={() => canRename && setRenaming(id)}
-              onAuxClick={(e) => e.button === 1 && closeTab(id)}
+              onAuxClick={(e) => e.button === 1 && !mirror && closeTab(id)}
               onContextMenu={(e) => {
+                if (mirror) return;
                 e.preventDefault();
                 setMenu({ id, x: e.clientX, y: e.clientY });
               }}
@@ -103,7 +136,7 @@ export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; ca
               <span class="tab-title ellipsis">{s.title}</span>
             </button>
             )}
-            {canRename ? (
+            {mirror ? null : canRename ? (
               <button type="button" class="tab-x" aria-label={`${s.id} 화면 지우기`} title="화면 지우기 — 한 번 묻고 지운다 (숨기기는 가운데 클릭 · 오른쪽 클릭)" onClick={() => deleteScreen(id)}>
                 <X {...ICON} size={14} />
               </button>
@@ -120,6 +153,17 @@ export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; ca
     </div>
       {menu && (
         <div class="popover tab-menu" role="menu" aria-label="탭" style={{ position: 'fixed', left: `${menu.x}px`, top: `${menu.y}px`, right: 'auto' }}>
+          {windowTools && (
+            <>
+              <button type="button" role="menuitem" class="popover-item" disabled={ids.length <= 1} title={ids.length <= 1 ? '마지막 탭은 뺄 수 없습니다' : '탭 줄 밖으로 끌어 놓아도 된다'} onClick={() => { windowTools.tearOff(menu.id, window.screenX + menu.x + 40, window.screenY + menu.y + 40); setMenu(null); }}>
+                <SquareArrowOutUpRight {...ICON} size={15} /> 새 창으로 빼기 <span class="grow" /><span class="muted small">탭 끌어 놓기</span>
+              </button>
+              <button type="button" role="menuitem" class="popover-item" title="같은 화면을 새 창에서 하나 더 — 두 창에서 고친 것이 서로 바로 반영된다" onClick={() => { windowTools.duplicate(menu.id); setMenu(null); }}>
+                <Copy {...ICON} size={15} /> 복제 보기 (새 창)
+              </button>
+              <div class="popover-sep" />
+            </>
+          )}
           <button type="button" role="menuitem" class="popover-item" disabled={ids.length <= 1} title={ids.length <= 1 ? '마지막 탭은 숨길 수 없습니다' : ''} onClick={() => { closeTab(menu.id); setMenu(null); }}>
             <EyeOff {...ICON} size={15} /> 탭 숨기기 <span class="grow" /><span class="muted small">가운데 클릭</span>
           </button>
@@ -137,10 +181,13 @@ export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; ca
         </div>
       )}
       {/* 탭 줄은 옆으로 스크롤되므로, 펼침 메뉴가 잘리지 않게 도구는 그 밖에 둔다 */}
-      <div class="tabs-tools">
-        <ScreenList openIds={ids} />
-        {tools}
-      </div>
+      {!mirror && (
+        <div class="tabs-tools">
+          <ScreenList openIds={ids} />
+          {tools}
+        </div>
+      )}
+      {!mirror && detached.size > 0 && <span class="tabs-detached muted small" title={[...detached].join(', ')}><SquareArrowOutUpRight {...ICON} size={13} /> 별도 창 {detached.size}</span>}
     </div>
   );
 }

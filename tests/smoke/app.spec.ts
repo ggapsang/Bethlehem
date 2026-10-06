@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
 import { parseManna } from '../../packages/core/src';
 import {
-  CHROME, OUT, SITE, appWithScreen, check, comments, ctrlPick, launchApp, nextOpen, openScreen, screenFrame, stagePoint, tempDir, typeIn, until, wait, type Spec,
+  CHROME, OUT, SITE, appWithScreen, splashDone, check, comments, ctrlPick, launchApp, nextOpen, openScreen, screenFrame, stagePoint, tempDir, typeIn, until, wait, type Spec,
 } from './lib';
 
 const B = 'apps/bethlehem/';
@@ -297,6 +297,64 @@ export const appSpecs: Spec[] = [
         check('Ctrl+휠로 글자 확대', !!(await until(async () => (await page.$eval('.guide-body', (el) => parseFloat(getComputedStyle(el).fontSize))) > f1, 2000)));
         await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.getMenuItemById('devtools')?.click());
         check('보기 → 개발자 도구', !!(await until(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().some((w) => w.webContents.isDevToolsOpened())), 5000)));
+      } finally {
+        await app.close();
+      }
+    },
+  },
+  {
+    name: 'app-windows',
+    kind: 'app',
+    files: [/^packages\/manna\/src\/stage\/ScreenTabs\.tsx$/, new RegExp(`^${B}renderer/src/(sync|main)\\.tsx?$`), new RegExp(`^${B}main/index\\.ts$`), /^packages\/manna\/src\/store\.ts$/],
+    async run() {
+      const { app, page, ws, src } = await appWithScreen();
+      try {
+        await page.click('button[aria-label="화면 추가"]');
+        await nextOpen(app, src);
+        await page.click('.popover-item:has-text("화면 폴더 선택")');
+        await page.waitForSelector('.file-list');
+        await page.click('.modal button[type=submit]');
+        await until(() => page.$('.tab[data-id="SCR-002"]'), 8000);
+        await page.click('.tab[data-id="SCR-001"] .tab-main');
+        await screenFrame(page);
+        // 복제 보기 — 같은 화면을 새 창에, 본 창의 탭은 그대로
+        await page.click('.tab[data-id="SCR-001"] .tab-main', { button: 'right' });
+        const dupP = app.waitForEvent('window');
+        await page.click('.popover-item:has-text("복제 보기")');
+        const dup = await dupP;
+        await dup.waitForSelector('.tab[data-id="SCR-001"]', { timeout: 10000 });
+        check('복제 보기 — 새 창에 그 화면 하나만', (await dup.$$('.tabs .tab')).length === 1 && !(await dup.$('button[aria-label="화면 목록"]')));
+        check('복제 보기 — 본 창 탭은 그대로', !!(await page.$('.tab[data-id="SCR-001"]')));
+        await splashDone(await screenFrame(dup));
+        await ctrlPick(dup, await stagePoint(dup, 400, 300), await stagePoint(dup, 800, 600));
+        await typeIn(dup, '.popover-card .composer .cm-content', '복제 창에서');
+        await dup.keyboard.press('Control+Enter');
+        check('띄운 창에서 단 Comment — 본 창에 바로 보이고', !!(await until(async () => (await page.$$eval('.cards > .card', (cs) => cs.map((c) => c.textContent ?? ''))).some((t) => t.includes('복제 창에서')), 8000)));
+        const c = await until(() => comments(ws, 'SCR-001').find((x: { body: string }) => x.body.includes('복제 창에서')), 10000);
+        check('본 창이 작업 폴더에 저장 (그 창의 화면을 찍은 캡처로)', c?.kind === 'capture' && !!c?.shot);
+        await dup.keyboard.press('Escape');
+        await page.dblclick('.tab[data-id="SCR-001"] .tab-main');
+        await page.fill('.tab-input', '본 창에서 바꿈');
+        await page.keyboard.press('Enter');
+        check('본 창에서 고친 것 — 띄운 창에 바로', !!(await until(async () => ((await dup.textContent('.tab[data-id="SCR-001"]')) ?? '').includes('본 창에서 바꿈'), 5000)));
+        await dup.close();
+        // 탭 빼기 — 탭 줄 밖으로 끌어 놓으면 새 창, 본 창 탭 줄에서는 빠졌다가 닫으면 돌아온다
+        const tb = (await (await page.$('.tab[data-id="SCR-002"] .tab-main'))!.boundingBox())!;
+        await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(tb.x + tb.width / 2 + 20, tb.y + 120, { steps: 6 });
+        await page.mouse.move(tb.x + tb.width / 2 + 40, tb.y + 260, { steps: 6 });
+        check('끌고 있을 때 빠질 탭 표시', !!(await page.$('.tab.is-tearing[data-id="SCR-002"]')));
+        const offP = app.waitForEvent('window');
+        await page.mouse.up();
+        const off = await offP;
+        await off.waitForSelector('.tab[data-id="SCR-002"]', { timeout: 10000 });
+        check('탭을 끌어 내면 그 화면이 새 창으로', (await off.$$('.tabs .tab')).length === 1);
+        check('뺀 탭은 본 창 탭 줄에서 빠진다', !!(await until(async () => !(await page.$('.tab[data-id="SCR-002"]')), 5000)) && !!(await page.$('.tabs-detached')));
+        await off.close();
+        check('뺀 창을 닫으면 본 창 탭 줄로 돌아온다', !!(await until(() => page.$('.tab[data-id="SCR-002"]'), 5000)));
+        const order = JSON.parse(readFileSync(join(ws, 'terrarium.json'), 'utf8'));
+        check('띄운 창이 탭 배치를 바꾸지 않는다', !JSON.stringify(order.meta?.tabs?.hidden ?? []).includes('SCR-002'));
       } finally {
         await app.close();
       }
