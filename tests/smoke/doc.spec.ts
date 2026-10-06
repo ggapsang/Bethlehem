@@ -299,6 +299,7 @@ export const docSpecs: Spec[] = [
       await page.click('button[aria-label="화살표 꽂기"]');
       await page.mouse.click(fb.x + fb.width * 0.6, fb.y + fb.height * 0.3);
       await page.waitForSelector('.pin-input');
+      await page.click('.pin-input');
       await page.keyboard.press('Enter');
       check('화살표 모양도 꽂는다 (이름 없이도)', (await page.$$('.pin')).length === 2 && !!(await page.$('.pin.pin-nav')));
       // 골라서 Delete

@@ -169,6 +169,32 @@ export const appSpecs: Spec[] = [
         await page.click('button[aria-label="화면 목록"]');
         await page.click(`.tab[data-id="${hideId}"] .tab-main`, { button: 'middle' });
         check('가운데 클릭도 숨기기 (지우지 않는다)', !(await tabIds()).includes(hideId) && existsSync(join(ws, 'screens', hideId)));
+        // 탭 배치(숨김 · 순서)는 문서에 들어가 내보낸 파일에서도 그대로
+        const [t1, t3] = await tabIds(); // 하나는 숨긴 채 — 남은 둘의 순서를 바꾼다
+        const b1 = (await (await page.$(`.tab[data-id="${t1}"] .tab-main`))!.boundingBox())!;
+        const b3 = (await (await page.$(`.tab[data-id="${t3}"] .tab-main`))!.boundingBox())!;
+        await page.mouse.move(b3.x + b3.width / 2, b3.y + b3.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(b1.x + 5, b1.y + b1.height / 2, { steps: 8 });
+        await page.mouse.up();
+        const layout = await tabIds();
+        check('탭을 끌어 순서를 바꾼다', layout[0] === t3, layout.join(','));
+        await page.keyboard.press('Control+s');
+        await wait(2000);
+        const distNow = join(ws, 'dist', readdirSync(join(ws, 'dist')).find((n) => n.endsWith('.terr.html'))!);
+        const meta = parseManna(readFileSync(distNow, 'utf8')).doc.meta.tabs;
+        check('문서에 탭 배치가 들어 있다 (순서 · 숨김)', meta?.open.join(',') === layout.join(',') && meta?.hidden.join(',') === hideId, JSON.stringify(meta));
+        const br = await chromium.launch({ executablePath: CHROME });
+        const rp = await (await br.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+        await rp.goto(pathToFileURL(distNow).href);
+        await rp.fill('.modal input', '받는이').catch(() => {});
+        await rp.click('.modal button[type=submit]').catch(() => {});
+        const got = await until(async () => {
+          const ids = await rp.$$eval('.tabs .tab', (t) => t.map((x) => (x as HTMLElement).dataset.id));
+          return ids.length ? ids : null;
+        }, 8000);
+        check('받는 사람이 처음 열면 작성자의 탭 순서 · 숨김 그대로', got?.join(',') === layout.join(','), `${got?.join(',')} / ${layout.join(',')}`);
+        await br.close();
         await page.click('button[aria-label="화면 목록"]');
         await page.click(`button[aria-label="${hideId} 탭 보이기"]`);
         await page.click('button[aria-label="화면 목록"]');

@@ -27,6 +27,7 @@ ${screens}
 
 1. 문서 데이터: id 가 manna-doc 인 script 태그(type application/json) 안의 JSON 한 덩어리. 이 주석 바로 아래 head 안의 첫 번째 것이다
    (같은 글자가 맨 아래 화면 코드 안에도 나오지만 그것은 데이터가 아니다).
+   meta.tabs{open, hidden} = 작성자가 정한 탭 순서와 숨긴 화면.
    screens[] = 화면(탭). 각 화면: id, title, notes(자유 노트 첫 탭, 마크다운), notesTitle, moreNotes[]{title, body}, versions[], annotations[],
    pins[]{version, x, y, shape, name, page} = 사람이 화면의 한 점에 일부러 박아 둔 핀(pin) · 화살표(nav). x, y 는 화면 뷰포트 px 좌표다.
    versions[] = 화면의 버전: v, entry(시작 파일), files{"경로": {sha, type}}, source.mode("site" = URL 화면, "image" = 그림 화면, 없으면 폴더 화면).

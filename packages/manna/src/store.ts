@@ -279,26 +279,36 @@ export function loadDocument(d: MannaDoc, b: BlobStore, name: string | null = nu
   doc.value = d;
   fileName.value = name;
   lastVer.clear();
-  /* 열어 둔 탭 — 이 브라우저에 { open, known } 로 기억한다.
-     지난번에 없던 화면(작성자가 새 판에 더한 화면)은 저절로 탭으로 연다. 기억이 없으면 모든 화면 */
+  /* 열어 둔 탭
+     - 문서에 작성자가 정한 배치(meta.tabs: 순서 · 숨김)가 들어 있다. 작성 프로그램은 늘 이것을 따르고 고치면 이것을 고친다
+     - 받는 사람: 이 브라우저에서 이미 바꿔 둔 것이 있으면 그것, 없으면 작성자의 배치
+     - 어느 쪽도 모르는 새 화면(작성자가 새 판에 더한 화면)은 저절로 탭으로 연다. 작성자가 숨긴 화면은 빼고 */
+  const layout = d.meta.tabs;
   let tabs: string[] = [];
   let known: string[] | null = null;
+  let saved: string[] | { open: string[]; known: string[] } | null = null;
   try {
-    const saved = JSON.parse(lsGet(LS.tabs(d.id)) ?? 'null') as string[] | { open: string[]; known: string[] } | null;
-    if (Array.isArray(saved)) tabs = saved; // 예전 형식 — 무엇을 알았는지 몰라 모든 화면을 새로 친다
-    else if (saved) {
-      tabs = saved.open;
-      known = saved.known;
-    }
+    saved = JSON.parse(lsGet(LS.tabs(d.id)) ?? 'null');
   } catch {
     /* 기록이 깨졌다 — 처음처럼 */
   }
+  if (layout && (tabPolicy.author || !saved)) {
+    tabs = layout.open;
+    known = [...layout.open, ...layout.hidden];
+  } else if (Array.isArray(saved)) tabs = saved; // 예전 형식 — 무엇을 알았는지 몰라 모든 화면을 새로 친다
+  else if (saved) {
+    tabs = saved.open;
+    known = saved.known;
+  }
   tabs = tabs.filter((id) => d.screens.some((s) => s.id === id));
-  const fresh = d.screens.map((s) => s.id).filter((id) => !tabs.includes(id) && (!known || !known.includes(id)));
+  const fresh = d.screens.map((s) => s.id).filter((id) => !tabs.includes(id) && (!known || !known.includes(id)) && !layout?.hidden.includes(id));
   tabs = [...tabs, ...fresh];
+  if (!tabs.length && d.screens[0]) tabs = [d.screens[0].id];
   const first = d.screens.find((s) => s.id === tabs[0]) ?? d.screens[0];
   openTabs.value = tabs;
-  if (d.screens.length) saveTabs();
+  if (d.screens.length) saveTabs(false);
+  // 탭 배치가 아직 문서에 없는 예전 문서 — 작성 프로그램이면 지금 배치를 한 번 넣어 둔다 (다음 저장 · 내보내기부터 따라간다)
+  if (tabPolicy.author && !layout && d.screens.length) queueMicrotask(() => doc.peek() === d && saveTabs(true));
   screenId.value = first?.id ?? null;
   versionNo.value = first ? latest(first).v : null;
   zoom.value = null;
@@ -319,9 +329,20 @@ export function addBlobs(entries: Iterable<[string, EncodedBlob]>): void {
 /** 탭마다 마지막으로 보던 버전 */
 const lastVer = new Map<string, number>();
 
-function saveTabs(): void {
-  lsSet(LS.tabs(doc.peek().id), JSON.stringify({ open: openTabs.peek(), known: doc.peek().screens.map((s) => s.id) }));
+/** 탭 배치를 이 브라우저에 기억하고, 작성 프로그램이면 문서에도 넣는다(보낸 파일 · 내보내기에 그대로) */
+function saveTabs(writeDoc = true): void {
+  const d = doc.peek();
+  const open = openTabs.peek().filter((id) => d.screens.some((s) => s.id === id));
+  lsSet(LS.tabs(d.id), JSON.stringify({ open, known: d.screens.map((s) => s.id) }));
+  if (!tabPolicy.author || !writeDoc) return;
+  const hidden = d.screens.map((s) => s.id).filter((id) => !open.includes(id));
+  const cur = d.meta.tabs;
+  if (cur && cur.open.join() === open.join() && cur.hidden.join() === hidden.join()) return;
+  mutate((x) => (x.meta.tabs = { open, hidden }), { undoable: false });
 }
+
+/** 탭 배치를 문서에 넣을지 — 작성 프로그램만 (받는 사람의 탭은 그 브라우저에만) */
+export const tabPolicy = { author: false };
 
 export function selectScreen(id: string, v?: number): void {
   const s = doc.value.screens.find((x) => x.id === id);

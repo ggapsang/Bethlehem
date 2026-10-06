@@ -10,11 +10,14 @@ import type { Host } from '@manna/host';
 import { deleteScreen } from '@manna/actions';
 import { buildHtml, flushAutosave, save, suggestedName } from '@manna/host';
 import {
-  addBlobs, blobs, dirty, doc, draft, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, undo, user, versionNo,
+  tabPolicy, addBlobs, blobs, dirty, doc, draft, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, undo, user, versionNo,
 } from '@manna/store';
 import type { RecentItem, RecentUrl, Returned, SourceLink } from '../../shared/api';
 
 const api = window.bethlehem;
+
+// 작성 프로그램에서 정한 탭 순서 · 숨김은 문서에 들어가 보낸 파일에도 그대로 간다
+tabPolicy.author = true;
 
 export type Mode = { kind: 'none' } | { kind: 'workspace'; dir: string; url?: string } | { kind: 'file'; path: string };
 export const mode = signal<Mode>({ kind: 'none' });

@@ -211,6 +211,8 @@ export interface MannaDoc {
     updatedAt: string;
     /** 마커 색. 기본 auto — 마커 아래 배경 밝기에 따라 어둡게/밝게 */
     marker?: MarkerColor;
+    /** 작성자가 정한 탭 배치 — 열린 탭의 순서와 숨긴 화면. 받는 사람이 처음 열면 이대로 보인다 */
+    tabs?: { open: string[]; hidden: string[] };
   };
   changelog: { version: string; date: string; author: string; note: string }[];
   participants: Participant[];
