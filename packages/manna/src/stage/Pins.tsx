@@ -26,6 +26,7 @@ export function PinLayer({ scale, page, frame }: { scale: number; page: string; 
 function PinMark({ p, scale, frame }: { p: Pin; scale: number; frame: () => HTMLElement | null }) {
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const moved = useRef(false);
+  const cancelled = useRef(false);
   const naming = pinNaming.value === p.id;
   const sel = pinSel.value === p.id;
   const at = drag ?? p;
@@ -87,11 +88,12 @@ function PinMark({ p, scale, frame }: { p: Pin; scale: number; frame: () => HTML
             if (el && el !== document.activeElement) requestAnimationFrame(() => (el.focus(), el.select()));
           }}
           onPointerDown={(e) => e.stopPropagation()}
-          onBlur={(e) => finish(e.currentTarget.value)}
+          onBlur={(e) => (cancelled.current ? (pinNaming.value = null) : finish(e.currentTarget.value))}
           onKeyDown={(e) => {
             e.stopPropagation();
-            if (e.key === 'Enter') finish(e.currentTarget.value);
-            if (e.key === 'Escape') pinNaming.value = null;
+            // 칸이 포커스를 쥔 채 사라지면 다음 키(Esc · Delete)가 먹히지 않는다 — 먼저 놓고(blur) 그때 끝낸다
+            cancelled.current = e.key === 'Escape';
+            if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
           }}
         />
       ) : (

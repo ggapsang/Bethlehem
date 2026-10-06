@@ -75,6 +75,17 @@ export const appSpecs: Spec[] = [
         check('실시간 화면에 마커가 붙지 않는다', (await page.$$eval('.marker', (ms) => ms.filter((m) => (m as HTMLElement).style.display === 'flex').length)) === 0);
         await page.click('.sc-bar .seg-btn:has-text("캡처 모음")');
         check('프로그램에서도 캡처 모음', !!(await until(() => page.$('.gallery .gal-item .gal-shot img'), 5000)));
+        // 실시간 / 캡처 모음은 탭마다 따로 — 다른 URL 탭은 실시간 그대로, 돌아오면 캡처 모음 그대로
+        await page.click('button[aria-label="화면 추가"]');
+        await page.click('.popover-item:has-text("URL")');
+        await page.fill('.modal input[aria-label="주소"]', SITE);
+        await page.click('.modal button[type=submit]');
+        check('다른 URL 탭은 실시간', !!(await until(async () => (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-002' && !!(await page.$('webview.stage-webview')) && !(await page.$('.gallery')), 8000)));
+        await page.click('.tab[data-id="SCR-001"] .tab-main');
+        check('돌아오면 그 탭은 캡처 모음 그대로', !!(await until(async () => !!(await page.$('.gallery .gal-item')) && !(await page.$('webview.stage-webview')), 5000)));
+        await page.click('.tab[data-id="SCR-002"] .tab-main');
+        check('다시 가면 그 탭은 실시간 그대로', !!(await until(async () => !!(await page.$('webview.stage-webview')) && !(await page.$('.gallery')), 5000)));
+        await page.click('.tab[data-id="SCR-001"] .tab-main');
         await page.click('.sc-bar .seg-btn:has-text("실시간")');
         // 받는 사람
         await page.keyboard.press('Control+s');

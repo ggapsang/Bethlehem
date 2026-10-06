@@ -98,10 +98,11 @@ function Notes({ scr }: { scr: Screen }) {
                   ref={(el) => {
                     if (el && el !== document.activeElement) requestAnimationFrame(() => (el.focus(), el.select()));
                   }}
-                  onBlur={(e) => finishRename(t.id, e.currentTarget.value)}
+                  onBlur={(e) => (e.currentTarget.dataset.cancel ? setRenaming(null) : finishRename(t.id, e.currentTarget.value))}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') finishRename(t.id, e.currentTarget.value);
-                    if (e.key === 'Escape') setRenaming(null);
+                    // 칸이 포커스를 쥔 채 사라지면 다음 키가 먹히지 않는다 — 먼저 놓고(blur) 그때 끝낸다
+                  if (e.key === 'Escape') e.currentTarget.dataset.cancel = '1';
+                  if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
                   }}
                 />
               ) : (

@@ -175,6 +175,15 @@ export function setShowBoxes(on: boolean): void {
   lsSet(LS.boxes, on ? '1' : '0');
 }
 
+/** URL 화면을 캡처 모음으로 보고 있는 화면들 — 탭마다 따로 (없으면 실시간) */
+export const siteGalleryOn = signal<ReadonlySet<string>>(new Set());
+export function setSiteGallery(screenId: string, on: boolean): void {
+  const next = new Set(siteGalleryOn.peek());
+  if (on) next.add(screenId);
+  else next.delete(screenId);
+  siteGalleryOn.value = next;
+}
+
 /** 완료한 Comment 도 보일지 — 기본은 숨긴다 (지운 것이 아니다) */
 export const showDone = signal(lsGet(LS.showDone) === '1');
 export function setShowDone(on: boolean): void {

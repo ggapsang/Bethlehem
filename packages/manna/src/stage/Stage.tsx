@@ -9,7 +9,7 @@ import type { Host } from '../host';
 import { onKeyDown, onKeyUp } from '../keys';
 import {
   annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, requestReveal, reveal, revealing, rev,
-  draftClip, fitMode, markerLabels, pinNaming, pinSel, pinTool, popHidden, showBoxes, showDone, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
+  setSiteGallery, siteGalleryOn, draftClip, fitMode, markerLabels, pinNaming, pinSel, pinTool, popHidden, showBoxes, showDone, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
   visible, zoom, zoomStep,
 } from '../store';
 import type { ComponentChildren } from 'preact';
@@ -116,7 +116,9 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions }: St
   /* 받는 사람 쪽 URL 화면 — 사이트를 띄울 수 없으니 캡처 · 클립 모음으로. 사본이 있으면 바꿔 볼 수 있다 */
   const [copyView, setCopyView] = useState(false);
   /* 작성 프로그램도 같은 캡처 모음을 볼 수 있다 — URL 화면의 [실시간 | 캡처 모음] */
-  const [galleryView, setGalleryView] = useState(false);
+  // 탭마다 따로 기억한다 — 한 탭을 캡처 모음으로 바꿔도 다른 탭은 그대로
+  const galleryView = !!scr && siteGalleryOn.value.has(scr.id);
+  const setGalleryView = (on: boolean) => scr && setSiteGallery(scr.id, on);
   const isSite = v?.source?.mode === 'site';
   const gallery = isSite && (host.site ? galleryView : !copyView);
   const hasCopy = !!v && v.source?.mode === 'site' && v.external.length > 0; // 사본은 그 페이지와 리소스를 external 로 담는다
