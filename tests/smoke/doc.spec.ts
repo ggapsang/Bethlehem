@@ -227,6 +227,9 @@ export const docSpecs: Spec[] = [
       nd.meta.updatedAt = new Date(Date.parse(nd.meta.updatedAt) + 1000).toISOString();
       const t = nd.meta.updatedAt;
       nd.screens.push({ ...JSON.parse(JSON.stringify(nd.screens[0])), id: 'SCR-002', title: '새 판에 더한 화면', annotations: [] });
+      nd.screens.push({ ...JSON.parse(JSON.stringify(nd.screens[0])), id: 'SCR-003', title: '작성자가 숨긴 화면', annotations: [] });
+      // 작성자가 정한 탭 배치 — 순서를 뒤집고 하나는 숨겼다
+      nd.meta.tabs = { open: ['SCR-002', 'SCR-001'], hidden: ['SCR-003'] };
       nd.screens[0].annotations.push({ id: 'author-new', version: nd.screens[0].versions.at(-1)!.v, title: '작성자 새 Comment', body: '', author: '기획자', createdAt: t, updatedAt: t, replies: [], history: [] });
       const newer = join(OUT, 'smoke-newer.terr.html');
       writeFileSync(newer, serializeManna(nd, blobs, { js: readFileSync('out/manna/manna-runtime.js', 'utf8'), css: readFileSync('out/manna/manna-runtime.css', 'utf8') }));
@@ -234,9 +237,32 @@ export const docSpecs: Spec[] = [
       await p2.goto(pathToFileURL(newer).href);
       await screenFrame(p2);
       await p2.waitForTimeout(1500);
+      await p2.click('.tab[data-id="SCR-001"] .tab-main');
+      await p2.waitForTimeout(300);
       const names = await p2.$$eval('.card .card-name', (els) => els.map((e) => e.textContent ?? ''));
       const tabIds = await p2.$$eval('.tabs .tab', (t) => t.map((x) => (x as HTMLElement).dataset.id));
-      check('새 판에 더해진 화면은 저절로 탭으로 열린다 (이 브라우저가 기억한 탭에 없어도)', tabIds.includes('SCR-002'), JSON.stringify(tabIds));
+      check('예전 판을 연 적 있는 브라우저도 새 판은 작성자의 탭 순서 · 숨김 그대로', tabIds.join(',') === 'SCR-002,SCR-001', JSON.stringify(tabIds));
+      // 받는 사람이 직접 바꾼 것은 다시 열어도 남는다
+      await p2.click('.tab[data-id="SCR-001"] .tab-main', { button: 'middle' });
+      const p3 = await page.context().newPage();
+      await p3.goto(pathToFileURL(newer).href);
+      await screenFrame(p3);
+      await p3.waitForTimeout(800);
+      check('받는 사람이 숨긴 탭은 다시 열어도 숨겨져 있다', (await p3.$$eval('.tabs .tab', (t) => t.map((x) => (x as HTMLElement).dataset.id))).join(',') === 'SCR-002');
+      await p3.close();
+      // 작성자가 배치를 또 바꿔 보냈다 — 그것을 따른다
+      nd.meta.tabs = { open: ['SCR-001', 'SCR-003'], hidden: ['SCR-002'] };
+      const newest = join(OUT, 'smoke-newest.terr.html');
+      writeFileSync(newest, serializeManna(nd, blobs, { js: readFileSync('out/manna/manna-runtime.js', 'utf8'), css: readFileSync('out/manna/manna-runtime.css', 'utf8') }));
+      const p4 = await page.context().newPage();
+      await p4.goto(pathToFileURL(newest).href);
+      await screenFrame(p4);
+      await p4.waitForTimeout(800);
+      check('작성자가 배치를 바꿔 다시 보내면 그것을 따른다', (await p4.$$eval('.tabs .tab', (t) => t.map((x) => (x as HTMLElement).dataset.id))).join(',') === 'SCR-001,SCR-003');
+      await p4.close();
+      await p2.click('button[aria-label="화면 목록"]');
+      await p2.click('button[aria-label="SCR-001 탭 보이기"]');
+      await p2.click('button[aria-label="화면 목록"]');
       // 현재 탭만 저장 — 저장 옆 단추를 펼쳐서
       await p2.click('.tab[data-id="SCR-002"] .tab-main');
       await p2.click('button[aria-label="저장 방식"]');

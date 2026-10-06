@@ -286,13 +286,15 @@ export function loadDocument(d: MannaDoc, b: BlobStore, name: string | null = nu
   const layout = d.meta.tabs;
   let tabs: string[] = [];
   let known: string[] | null = null;
-  let saved: string[] | { open: string[]; known: string[] } | null = null;
+  let saved: string[] | { open: string[]; known: string[]; seen?: string } | null = null;
   try {
     saved = JSON.parse(lsGet(LS.tabs(d.id)) ?? 'null');
   } catch {
     /* 기록이 깨졌다 — 처음처럼 */
   }
-  if (layout && (tabPolicy.author || !saved)) {
+  // 받는 사람: 작성자의 배치가 지난번에 이 브라우저가 본 것과 다르면(새 판 · 예전 판을 본 적만 있음) 작성자 배치를 따른다
+  const authorChanged = !!layout && (Array.isArray(saved) || !saved || saved.seen !== layoutKey(layout));
+  if (layout && (tabPolicy.author || authorChanged)) {
     tabs = layout.open;
     known = [...layout.open, ...layout.hidden];
   } else if (Array.isArray(saved)) tabs = saved; // 예전 형식 — 무엇을 알았는지 몰라 모든 화면을 새로 친다
@@ -333,13 +335,16 @@ const lastVer = new Map<string, number>();
 function saveTabs(writeDoc = true): void {
   const d = doc.peek();
   const open = openTabs.peek().filter((id) => d.screens.some((s) => s.id === id));
-  lsSet(LS.tabs(d.id), JSON.stringify({ open, known: d.screens.map((s) => s.id) }));
+  lsSet(LS.tabs(d.id), JSON.stringify({ open, known: d.screens.map((s) => s.id), seen: layoutKey(d.meta.tabs) }));
   if (!tabPolicy.author || !writeDoc) return;
   const hidden = d.screens.map((s) => s.id).filter((id) => !open.includes(id));
   const cur = d.meta.tabs;
   if (cur && cur.open.join() === open.join() && cur.hidden.join() === hidden.join()) return;
   mutate((x) => (x.meta.tabs = { open, hidden }), { undoable: false });
 }
+
+/** 작성자 탭 배치를 비교하는 열쇠 */
+const layoutKey = (t?: { open: string[]; hidden: string[] }) => (t ? `${t.open.join(',')}|${t.hidden.join(',')}` : '');
 
 /** 탭 배치를 문서에 넣을지 — 작성 프로그램만 (받는 사람의 탭은 그 브라우저에만) */
 export const tabPolicy = { author: false };
