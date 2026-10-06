@@ -356,6 +356,13 @@ export function closeTab(id: string): void {
   if (screenId.peek() === id) selectScreen(rest[Math.min(at, rest.length - 1)]!);
 }
 
+/** 숨긴 탭을 다시 보이게 — 끝에 붙인다(고르지는 않는다) */
+export function openTab(id: string): void {
+  if (openTabs.peek().includes(id) || !doc.peek().screens.some((s) => s.id === id)) return;
+  openTabs.value = [...openTabs.peek(), id];
+  saveTabs();
+}
+
 /** 지운 화면의 탭을 뺀다 */
 export function dropTab(id: string): void {
   if (!openTabs.peek().includes(id)) return;

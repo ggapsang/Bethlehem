@@ -733,3 +733,10 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .pin-place { position: absolute; inset: 0; z-index: 6; cursor: crosshair; background: rgb(248 101 23 / 0.04); }
 .pin-tools .seg-btn { padding: 0 var(--unit-1-5); }
 .pin-tools .seg-btn[aria-pressed="true"] { background: var(--accent); color: var(--white); }
+/* 화면 목록 — 눈 아이콘으로 탭 숨기기 · 보이기 */
+.list-row { display: flex; align-items: center; gap: 2px; }
+.list-row > .popover-item { flex: 1; min-width: 0; }
+.list-row.is-hidden > .popover-item { color: var(--text-tertiary); }
+.list-eye { flex: none; color: var(--text-secondary); }
+.list-row.is-hidden .list-eye { color: var(--text-tertiary); }
+.tab-menu { z-index: 70; min-width: 220px; }

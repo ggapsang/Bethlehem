@@ -1,16 +1,30 @@
-/* 화면 탭 — 브라우저 탭처럼 여러 화면을 열어 두고 오간다. 끌어서 순서를 바꾸고, 가운데 클릭이나 × 로 닫는다.
- * 오른쪽 ▾ 는 문서의 모든 화면 목록, tools 는 작성 도구(Bethlehem: 화면 추가)를 끼우는 자리.
+/* 화면 탭 — 브라우저 탭처럼 여러 화면을 열어 두고 오간다. 끌어서 순서를 바꾼다.
+ *   × = 화면 지우기(작성자, 한 번 묻는다) · 받는 사람은 탭 숨기기
+ *   가운데 클릭 · 오른쪽 클릭 메뉴의 "탭 숨기기" = 지우지 않고 탭에서만 뺀다 (▾ 목록에서 다시 보이게)
+ * 오른쪽 ▾ 는 문서의 모든 화면 목록(눈 아이콘으로 숨기기 · 보이기), tools 는 작성 도구(Bethlehem: 화면 추가)를 끼우는 자리.
  */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { Check, ChevronDown, X } from 'lucide-preact';
-import { closeTab, doc, moveTab, mutate, openTabs, rev, screenId, selectScreen } from '../store';
+import { ChevronDown, Eye, EyeOff, Pencil, Trash2, X } from 'lucide-preact';
+import { closeTab, doc, moveTab, mutate, openTab, openTabs, rev, screenId, selectScreen } from '../store';
 import { deleteScreen } from '../actions';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
 export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; canRename?: boolean }) {
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: Event) => !(e.target as HTMLElement).closest?.('.tab-menu') && setMenu(null);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [menu]);
   const finish = (id: string, v: string) => {
     setRenaming(null);
     const s = doc.peek().screens.find((x) => x.id === id);
@@ -79,19 +93,23 @@ export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; ca
               onPointerDown={(e) => onDown(e, id)}
               onClick={() => !drag.current?.moved && !on && selectScreen(id)}
               onDblClick={() => canRename && setRenaming(id)}
-              onAuxClick={(e) => e.button === 1 && (canRename ? deleteScreen(id) : closeTab(id))}
+              onAuxClick={(e) => e.button === 1 && closeTab(id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setMenu({ id, x: e.clientX, y: e.clientY });
+              }}
             >
               <span class="tab-id mono">{s.id}</span>
               <span class="tab-title ellipsis">{s.title}</span>
             </button>
             )}
             {canRename ? (
-              <button type="button" class="tab-x" aria-label={`${s.id} 화면 지우기`} title="화면 지우기 (가운데 클릭) — 한 번 묻고 지운다" onClick={() => deleteScreen(id)}>
+              <button type="button" class="tab-x" aria-label={`${s.id} 화면 지우기`} title="화면 지우기 — 한 번 묻고 지운다 (숨기기는 가운데 클릭 · 오른쪽 클릭)" onClick={() => deleteScreen(id)}>
                 <X {...ICON} size={14} />
               </button>
             ) : (
               ids.length > 1 && (
-                <button type="button" class="tab-x" aria-label={`${s.id} 탭 닫기`} title="탭 닫기 (가운데 클릭)" onClick={() => closeTab(id)}>
+                <button type="button" class="tab-x" aria-label={`${s.id} 탭 숨기기`} title="탭 숨기기 (가운데 클릭) — ▾ 에서 다시 연다" onClick={() => closeTab(id)}>
                   <X {...ICON} size={14} />
                 </button>
               )
@@ -100,6 +118,24 @@ export function ScreenTabs({ tools, canRename }: { tools?: ComponentChildren; ca
         );
       })}
     </div>
+      {menu && (
+        <div class="popover tab-menu" role="menu" aria-label="탭" style={{ position: 'fixed', left: `${menu.x}px`, top: `${menu.y}px`, right: 'auto' }}>
+          <button type="button" role="menuitem" class="popover-item" disabled={ids.length <= 1} title={ids.length <= 1 ? '마지막 탭은 숨길 수 없습니다' : ''} onClick={() => { closeTab(menu.id); setMenu(null); }}>
+            <EyeOff {...ICON} size={15} /> 탭 숨기기 <span class="grow" /><span class="muted small">가운데 클릭</span>
+          </button>
+          {canRename && (
+            <button type="button" role="menuitem" class="popover-item" onClick={() => { setRenaming(menu.id); setMenu(null); }}>
+              <Pencil {...ICON} size={15} /> 이름 바꾸기 <span class="grow" /><span class="muted small">두 번 누르기</span>
+            </button>
+          )}
+          {canRename && <div class="popover-sep" />}
+          {canRename && (
+            <button type="button" role="menuitem" class="popover-item btn-danger" onClick={() => { const id = menu.id; setMenu(null); deleteScreen(id); }}>
+              <Trash2 {...ICON} size={15} /> 화면 지우기…
+            </button>
+          )}
+        </div>
+      )}
       {/* 탭 줄은 옆으로 스크롤되므로, 펼침 메뉴가 잘리지 않게 도구는 그 밖에 둔다 */}
       <div class="tabs-tools">
         <ScreenList openIds={ids} />
@@ -136,23 +172,37 @@ function ScreenList({ openIds }: { openIds: string[] }) {
       </button>
       {open && (
         <div class="popover" role="menu" aria-label="화면 목록">
-          {screens.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              role="menuitem"
-              class="popover-item"
-              data-id={s.id}
-              onClick={() => {
-                selectScreen(s.id);
-                setOpen(false);
-              }}
-            >
-              <span class="menu-check">{openIds.includes(s.id) && <Check {...ICON} size={14} />}</span>
-              <span class="mono small muted">{s.id}</span>
-              <span class="ellipsis">{s.title}</span>
-            </button>
-          ))}
+          {screens.map((s) => {
+            const shown = openIds.includes(s.id);
+            return (
+              <div key={s.id} class={`list-row ${shown ? '' : 'is-hidden'}`}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="popover-item"
+                  data-id={s.id}
+                  onClick={() => {
+                    selectScreen(s.id);
+                    setOpen(false);
+                  }}
+                >
+                  <span class="mono small muted">{s.id}</span>
+                  <span class="ellipsis">{s.title}</span>
+                </button>
+                <button
+                  type="button"
+                  class="btn-icon btn-xs list-eye"
+                  aria-label={shown ? `${s.id} 탭 숨기기` : `${s.id} 탭 보이기`}
+                  aria-pressed={shown}
+                  disabled={shown && openIds.length <= 1}
+                  title={shown ? '탭 숨기기 (지우지 않는다)' : '탭 보이기'}
+                  onClick={() => (shown ? closeTab(s.id) : openTab(s.id))}
+                >
+                  {shown ? <Eye {...ICON} size={15} /> : <EyeOff {...ICON} size={15} />}
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -155,6 +155,23 @@ export const appSpecs: Spec[] = [
         await page.click('button[aria-label="화면 추가"]');
         await page.click('.popover-item:has-text("파일")');
         check('＋ → 파일 — 문서의 화면과 그림이 들어온다', !!(await until(() => readdirSync(join(ws, 'screens')).length === 3, 10000)), readdirSync(join(ws, 'screens')).join(','));
+        // 탭 숨기기 — 지우지 않고 탭에서만 뺀다
+        const tabIds = () => page.$$eval('.tabs .tab', (t) => t.map((x) => (x as HTMLElement).dataset.id));
+        const before = await tabIds();
+        const hideId = before[before.length - 1]!;
+        await page.click(`.tab[data-id="${hideId}"] .tab-main`, { button: 'right' });
+        await page.click('.tab-menu .popover-item:has-text("탭 숨기기")');
+        check('오른쪽 클릭 → 탭 숨기기: 탭만 빠지고 화면은 남는다', !(await tabIds()).includes(hideId) && existsSync(join(ws, 'screens', hideId)));
+        check('▾ 에 숨긴 개수가 뜬다', ((await page.textContent('.tab-more').catch(() => '')) ?? '') === '+1');
+        await page.click('button[aria-label="화면 목록"]');
+        await page.click(`button[aria-label="${hideId} 탭 보이기"]`);
+        check('▾ 의 눈 아이콘으로 다시 보인다', (await tabIds()).includes(hideId) && !(await page.$('.tab-more')));
+        await page.click('button[aria-label="화면 목록"]');
+        await page.click(`.tab[data-id="${hideId}"] .tab-main`, { button: 'middle' });
+        check('가운데 클릭도 숨기기 (지우지 않는다)', !(await tabIds()).includes(hideId) && existsSync(join(ws, 'screens', hideId)));
+        await page.click('button[aria-label="화면 목록"]');
+        await page.click(`button[aria-label="${hideId} 탭 보이기"]`);
+        await page.click('button[aria-label="화면 목록"]');
         // 현재 탭만 저장
         const oneOut = join(OUT, 'smoke-app-one-tab');
         await app.evaluate(({ dialog }, d) => {
