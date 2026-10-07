@@ -192,6 +192,22 @@ export interface Annotation {
   history: Change[];
 }
 
+/** 연결의 한쪽 끝 — Comment, 화면 위 영역(Comment 없이 화면 좌표 박스), 화면 전체 */
+export type LinkEnd =
+  | { kind: 'comment'; screen: string; ann: string }
+  /** box = 화면 뷰포트 px [x, y, w, h]. 핀처럼 그 버전 · 그 페이지의 그 자리에 박힌다 */
+  | { kind: 'area'; screen: string; version: number; page?: string; box: [number, number, number, number]; name?: string }
+  | { kind: 'screen'; screen: string };
+
+/** 연결 — 두 끝을 잇는다. 어느 끝에서든 눌러 반대쪽으로 간다 (기획안 화면 ↔ 실제 제품 화면) */
+export interface Connection {
+  id: string;
+  a: LinkEnd;
+  b: LinkEnd;
+  author: string;
+  at: string;
+}
+
 export const MARKER_COLORS = ['auto', 'brand', 'black', 'white', 'blue', 'amber', 'red'] as const;
 export type MarkerColor = (typeof MARKER_COLORS)[number];
 
@@ -217,6 +233,8 @@ export interface MannaDoc {
   changelog: { version: string; date: string; author: string; note: string }[];
   participants: Participant[];
   screens: Screen[];
+  /** 연결 — 탭과 상관없이 Comment · 영역 · 화면을 서로 잇는다 */
+  connections?: Connection[];
   /** 수신자가 저장한 회신본이면 누가 언제 저장했는지 */
   origin?: { by: string; at: string; baseUpdatedAt: string };
 }

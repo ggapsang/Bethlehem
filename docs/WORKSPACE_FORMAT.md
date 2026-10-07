@@ -22,6 +22,7 @@
 | 파일 | 고칠 수 있는 것 |
 |---|---|
 | `screens/<ID>/notes.md`, `notes-<id>.md` | 자유 노트 본문. 마크다운 그대로 |
+| `terrarium.json` 의 `doc.connections` | 연결 `[{ "id", "a", "b", "author", "at" }]`. 끝(a · b)은 `{ "kind": "comment", "screen", "ann" }`(ann = Comment id) · `{ "kind": "area", "screen", "version", "page", "box": [x, y, w, h], "name" }`(화면 뷰포트 px) · `{ "kind": "screen", "screen" }` |
 | `screens/<ID>/screen.json` | `title`(화면 이름), `notesTitle`(첫 탭 이름), `moreNotes`(탭 목록 `[{ "id", "title" }]` — 탭을 더하면 `notes-<id>.md` 도 만든다), `pins`(핀 `[{ "id", "version", "x", "y", "shape": "pin"\|"nav", "name", "author", "at" }]` — x, y 는 화면 뷰포트 px) |
 | `screens/<ID>/comments.json` | Comment 의 `title`, `assignee`(담당), `body`, `replies`, `done`(완료). 순서를 바꾸면 번호가 바뀐다 |
 | `terrarium.json` | `doc.meta.title`(문서 제목), `doc.meta.version` |

@@ -22,6 +22,8 @@ import { prepareScreen } from './loader';
 import { StageHeader } from './StageHeader';
 import { ScreenTabs, type WindowTools } from './ScreenTabs';
 import { TraceLayer, type TraceInput } from './Trace';
+import { AreaDraw, LinkAreaLayer, LinkingBar } from './Links';
+import { revealAfterLoad } from '../links';
 import { whoText } from '../ui/Who';
 import { MarkerStrip } from './MarkerStrip';
 import { SiteGallery } from './SiteGallery';
@@ -279,6 +281,12 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
         syncAgent();
         takeSnapshot(4000);
         readyWaiters.current.splice(0).forEach((w) => w());
+        // 다른 탭에서 연결을 따라 왔다 — 화면이 다 뜬 뒤에 그 Comment 자리를 찾는다
+        const want = revealAfterLoad.peek();
+        if (want) {
+          revealAfterLoad.value = null;
+          if (annotations.peek().some((x) => x.id === want)) requestReveal(want);
+        }
       } else if (m.type === 'nav') {
         if (live) setLiveUrl(m.url);
       } else if (m.type === 'frame') {
@@ -704,6 +712,8 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
         <div class="hl-box hl-pick" ref={pickBox} />
         <div class="hl-box hl-drag" ref={dragBox} />
         <PinLayer scale={fit.s} page={currentPage} frame={() => frameBox.current} />
+        <LinkAreaLayer scale={fit.s} page={currentPage} />
+        <AreaDraw local={local} page={currentPage} scale={fit.s} />
         {pinTool.value && (
           <div
             class={`pin-place pin-place-${pinTool.value}`}
@@ -744,6 +754,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
 
       </div>
       <RecordingBar />
+      <LinkingBar />
       <StagePopover
         host={host}
         fit={fit}

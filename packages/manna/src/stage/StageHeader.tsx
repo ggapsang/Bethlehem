@@ -6,6 +6,7 @@ import type { ComponentChildren } from 'preact';
 import { MapPin, Navigation, SquareDashedMousePointer, RotateCw, Pipette, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus } from 'lucide-preact';
 import type { Screen, ScreenVersion } from '@core';
 import { pinTool, setShowBoxes, showBoxes, fullPanelPinned, setFullPanelPinned, draft, fitMode, fullscreen, mode, setFitMode, paused, picking, recording, rev, selectScreen, zoom, zoomStep } from '../store';
+import { BackChip, ScreenLinksMenu } from './Links';
 import { MarkerColorPicker, RecordButton, enterFullscreen } from '../ui/Toolbar';
 
 const ICON = { size: 18, strokeWidth: 1.5 };
@@ -68,6 +69,7 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
           <button type="button" role="radio" aria-checked={siteView.gallery} class="seg-btn" title="받는 사람이 보는 것과 같은 캡처 · 클립 모음" onClick={() => siteView.set(true)}>캡처 모음</button>
         </div>
       )}
+      <BackChip />
       <span class="grow" />
       <span class={`sc-state sc-${state.tone}`}><span class="sc-dot" aria-hidden="true" />{state.text}</span>
       <span class="sc-sep" />
@@ -100,6 +102,7 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
       >
         <SquareDashedMousePointer {...ICON} />
       </button>
+      <ScreenLinksMenu />
       <div class="seg seg-sm pin-tools" role="group" aria-label="핀 꽂기">
         <button type="button" class="seg-btn" aria-pressed={pinTool.value === 'pin'} aria-label="핀 꽂기" title="핀 꽂기 — 화면을 한 번 누르면 그 자리에 박힌다" onClick={() => (pinTool.value = pinTool.value === 'pin' ? null : 'pin')}>
           <MapPin size={15} strokeWidth={1.75} />

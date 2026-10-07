@@ -135,6 +135,16 @@ export function mergeDoc(base: MannaDoc, incoming: MannaDoc, baseBlobs: BlobStor
       }
     }
   }
+  // 연결 — 없는 것은 더한다 (두 끝이 원본에 다 있을 때만)
+  const has = (e: { kind: string; screen: string; ann?: string }) => {
+    const s = base.screens.find((x) => x.id === e.screen);
+    return !!s && (e.kind !== 'comment' || s.annotations.some((a) => a.id === e.ann));
+  };
+  for (const c of incoming.connections ?? []) {
+    if ((base.connections ?? []).some((x) => x.id === c.id) || !has(c.a) || !has(c.b)) continue;
+    (base.connections ??= []).push(JSON.parse(JSON.stringify(c)));
+    r.updated++;
+  }
   for (const p of incoming.participants) if (!base.participants.some((x) => x.name === p.name)) base.participants.push({ ...p });
   base.changelog.push({ version: base.meta.version, date: now(), author: by, note: `회신 병합 — 추가 ${r.added} · 수정 ${r.updated} · 답글 ${r.replies}${r.conflicts.length ? ` · 충돌 ${r.conflicts.length}` : ''}` });
   return r;

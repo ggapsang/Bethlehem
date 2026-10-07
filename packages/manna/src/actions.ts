@@ -3,6 +3,7 @@ import type { Annotation, Clip, MarkerColor, Shot } from '@core';
 import { moveAnnotation, now, setField, sha256, toBase64, touchParticipant, uid } from '@core';
 import type { SiteSnap } from './host';
 import { startRecording, type Recorder } from './stage/record';
+import { pruneConnections } from './links';
 import {
   pinSel, annotations, shownAnnotations, showDone, undo, dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
   stageViewport, still, user, version,
@@ -215,7 +216,10 @@ export function editReply(a: Annotation, id: string, body: string): void {
 export function removeComment(a: Annotation): void {
   const s = screen.peek();
   if (!s) return;
-  mutate(() => (s.annotations = s.annotations.filter((x) => x.id !== a.id)), { label: 'Comment 삭제' });
+  mutate((x) => {
+    s.annotations = s.annotations.filter((y) => y.id !== a.id);
+    pruneConnections(x);
+  }, { label: 'Comment 삭제' });
   if (selected.peek() === a.id) selected.value = null;
 }
 
@@ -246,7 +250,10 @@ export function deleteScreen(id: string): boolean {
   const tabs = openTabs.peek();
   const at = tabs.indexOf(id);
   const wasCurrent = screenId.peek() === id;
-  mutate((x) => (x.screens = x.screens.filter((y) => y.id !== id)), { label: '화면 삭제' });
+  mutate((x) => {
+    x.screens = x.screens.filter((y) => y.id !== id);
+    pruneConnections(x);
+  }, { label: '화면 삭제' });
   dropTab(id);
   if (wasCurrent) {
     const rest = openTabs.peek();

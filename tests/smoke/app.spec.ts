@@ -527,6 +527,101 @@ export const appSpecs: Spec[] = [
       }
     },
   },
+  {
+    name: 'app-links',
+    kind: 'app',
+    files: [/^packages\/manna\/src\/(links\.ts|stage\/Links\.tsx|stage\/StageHeader\.tsx)$/, /^packages\/core\/src\/(merge|types)\.ts$/, /^packages\/manna\/src\/ui\/Popover\.tsx$/],
+    async run() {
+      const { app, page, ws, src } = await appWithScreen();
+      const conns = () => (JSON.parse(readFileSync(join(ws, 'terrarium.json'), 'utf8')).doc.connections ?? []) as { a: { kind: string; screen: string }; b: { kind: string; screen: string } }[];
+      const addComment = async (text: string, x: number, y: number) => {
+        await ctrlPick(page, await stagePoint(page, x, y));
+        await typeIn(page, '.popover-card .composer .cm-content', text);
+        await page.keyboard.press('Control+Enter');
+        await until(async () => ((await page.textContent('.cards')) ?? '').includes(text), 8000);
+        await page.keyboard.press('Escape');
+      };
+      try {
+        await page.click('button[aria-label="화면 추가"]');
+        await nextOpen(app, src);
+        await page.click('.popover-item:has-text("화면 폴더 선택")');
+        await page.waitForSelector('.file-list');
+        await page.click('.modal button[type=submit]');
+        await until(() => page.$('.tab[data-id="SCR-002"].is-on'), 10000);
+        await splashDone(await screenFrame(page));
+        await addComment('제품 쪽 화면', 960, 300);
+        await page.click('.tab[data-id="SCR-001"] .tab-main');
+        await splashDone(await screenFrame(page));
+        await addComment('기획안 쪽 화면', 960, 300);
+        // 기획안 Comment 에서 "잇기" → 다른 탭의 Comment 를 누른다
+        await page.click('.cards > .card:has-text("기획안 쪽 화면")');
+        await page.click('.popover-card .link-add');
+        check('잇기 — 무엇을 고르면 되는지 안내 막대', !!(await until(() => page.$('.link-bar'), 3000)));
+        await page.click('.tab[data-id="SCR-002"] .tab-main');
+        await page.click('.cards > .card:has-text("제품 쪽 화면")');
+        const c1 = await until(() => conns().find((c) => c.a.kind === 'comment' && c.b.kind === 'comment'), 8000);
+        check('다른 탭의 Comment 를 누르면 이어진다 (문서에 저장)', !!c1 && c1.a.screen === 'SCR-001' && c1.b.screen === 'SCR-002' && !(await page.$('.link-bar')));
+        const chip = await until(() => page.$('.popover-card .comment-links .link-go'), 5000);
+        check('반대쪽 Comment 에도 탭-번호 이름표', ((await chip?.textContent()) ?? '').includes('SCR-001 #1'), (await chip?.textContent()) ?? '');
+        await chip!.click();
+        check('이름표를 누르면 그 탭 · 그 Comment 로', !!(await until(async () => !!(await page.$('.tab[data-id="SCR-001"].is-on')) && ((await page.textContent('.popover-card').catch(() => '')) ?? '').includes('기획안 쪽 화면'), 8000)));
+        check('다른 탭이 다 뜬 뒤 그 Comment 의 대상에 선택 박스', !!(await until(() => page.$eval('.hl-sel', (el) => (el as HTMLElement).style.display === 'block'), 8000)));
+        check('왔던 곳으로 돌아가기', ((await page.textContent('.link-back').catch(() => '')) ?? '').includes('SCR-002'));
+        await page.click('.link-back');
+        check('돌아가기 — 원래 탭 · Comment', !!(await until(async () => !!(await page.$('.tab[data-id="SCR-002"].is-on')) && ((await page.textContent('.popover-card').catch(() => '')) ?? '').includes('제품 쪽 화면'), 8000)));
+        await page.keyboard.press('Escape');
+        // Comment 없이 — 영역끼리 (탭과 상관없이)
+        await page.click('button[aria-label="연결"]');
+        await page.click('.link-menu .popover-item:has-text("영역을 그려서 잇기")');
+        const drag = async (x0: number, y0: number, x1: number, y1: number) => {
+          const a = await stagePoint(page, x0, y0);
+          const b = await stagePoint(page, x1, y1);
+          await page.mouse.move(a.x, a.y);
+          await page.mouse.down();
+          await page.mouse.move(b.x, b.y, { steps: 6 });
+          await page.mouse.up();
+        };
+        await page.waitForSelector('.area-place');
+        await drag(200, 200, 600, 420);
+        check('영역을 그리면 거기서 잇기 시작', !!(await until(() => page.$('.link-bar'), 3000)));
+        await page.click('.tab[data-id="SCR-001"] .tab-main');
+        await page.click('.link-bar button:has-text("영역 그리기")');
+        await page.waitForSelector('.area-place');
+        await drag(1200, 600, 1500, 800);
+        const c2 = await until(() => conns().find((c) => c.a.kind === 'area' && c.b.kind === 'area'), 8000);
+        check('Comment 없이 영역 ↔ 영역 연결', !!c2 && c2.a.screen === 'SCR-002' && c2.b.screen === 'SCR-001');
+        const tag = await until(() => page.$('.link-area .link-go:has-text("SCR-002")'), 5000);
+        check('영역에 반대쪽 이름표가 붙는다', !!tag);
+        await tag!.click();
+        check('영역 이름표를 누르면 그 탭으로 가서 그 영역이 반짝인다', !!(await until(async () => !!(await page.$('.tab[data-id="SCR-002"].is-on')) && !!(await page.$('.link-area.is-flash')), 5000)));
+        check('화면 막대의 연결 수', ((await page.textContent('.link-count')) ?? '') === '2');
+        // 받는 사람 — 보낸 파일에서도 따라간다
+        await page.keyboard.press('Control+s');
+        await wait(2500);
+        const dist = join(ws, 'dist', readdirSync(join(ws, 'dist')).find((n) => n.endsWith('.terr.html'))!);
+        const br = await chromium.launch({ executablePath: CHROME });
+        const rp = await (await br.newContext({ viewport: { width: 1600, height: 960 } })).newPage();
+        await rp.goto(pathToFileURL(dist).href);
+        await rp.fill('.modal input', '수신자');
+        await rp.click('.modal button[type=submit]');
+        await rp.click('.tab[data-id="SCR-001"] .tab-main');
+        const rtag = await until(() => rp.$('.link-area .link-go'), 10000);
+        await rtag?.click();
+        check('받는 사람도 영역 이름표로 다른 탭에 간다', !!(await until(() => rp.$('.tab[data-id="SCR-002"].is-on'), 5000)));
+        await br.close();
+        // Comment 를 지우면 그 연결도 걷힌다
+        await page.click('.tab[data-id="SCR-002"] .tab-main');
+        await page.click('.cards > .card:has-text("제품 쪽 화면")');
+        page.once('dialog', (dg) => dg.accept());
+        await page.keyboard.press('Escape');
+        await page.click('.cards > .card:has-text("제품 쪽 화면")');
+        await page.keyboard.press('Delete');
+        check('Comment 를 지우면 그 연결도 함께 걷힌다', !!(await until(() => conns().length === 1 && conns()[0]!.a.kind === 'area', 8000)), JSON.stringify(conns().map((c) => c.a.kind)));
+      } finally {
+        await app.close();
+      }
+    },
+  },
 ];
 
 // 쓰지 않는 도구를 가져오지 않았다고 타입 검사가 투덜대지 않게

@@ -9,6 +9,7 @@ import { REC_MAX_MS, editAssignee, toggleDone, snipAvailable, addFromDraft, addR
 import type { Host } from '../host';
 import { annotations, draft, draftClip, popHidden, recording, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
+import { CommentLinks } from '../stage/Links';
 import { MarkdownEditor } from './editor/MarkdownEditor';
 import { PeopleList, Who } from './Who';
 import { ago } from './labels';
@@ -367,6 +368,7 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
         class="body-editor"
       />
       {(a.clips ?? []).map((c) => <ClipView key={c.id} clip={c} canRemove={c.author === me || host.author} onRemove={() => removeClip(a, c.id)} />)}
+      <CommentLinks screenId={scr.id} ann={a.id} />
       {user.value && <RecordButton label="화면 녹화 추가 — 조작 포함" />}
       {a.replies.length > 0 && (
         <ol class="replies">

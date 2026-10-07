@@ -300,6 +300,22 @@ describe('merge', () => {
     expect(base.screens[0].annotations[0].assignee).toBe('한재준');
   });
 
+  it('회신본에서 이은 연결을 더한다 — 원본에 없는 Comment 를 가리키면 빼고', async () => {
+    const { mergeDoc } = await import('./merge');
+    const base = mk();
+    const inc: MannaDoc = JSON.parse(JSON.stringify(base));
+    inc.origin = { by: '수신자', at: base.meta.updatedAt, baseUpdatedAt: base.meta.updatedAt };
+    const ann = base.screens[0].annotations[0].id;
+    inc.connections = [
+      { id: 'c1', a: { kind: 'comment', screen: 'S', ann }, b: { kind: 'area', screen: 'S', version: 1, box: [0, 0, 10, 10] }, author: '수신자', at: '' },
+      { id: 'c2', a: { kind: 'comment', screen: 'S', ann: 'gone' }, b: { kind: 'screen', screen: 'S' }, author: '수신자', at: '' },
+    ];
+    mergeDoc(base, inc, new Map(), new Map());
+    expect(base.connections?.map((c) => c.id)).toEqual(['c1']);
+    mergeDoc(base, inc, new Map(), new Map());
+    expect(base.connections).toHaveLength(1);
+  });
+
   it('다른 문서는 합치지 않는다', async () => {
     const { mergeDoc } = await import('./merge');
     expect(() => mergeDoc(mk(), mk(), new Map(), new Map())).toThrow(/다른 문서/);
