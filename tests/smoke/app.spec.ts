@@ -480,6 +480,53 @@ export const appSpecs: Spec[] = [
       }
     },
   },
+  {
+    name: 'app-record',
+    kind: 'app',
+    files: [/^packages\/manna\/src\/stage\/(Trace|Stage|record)\.tsx?$/, /^packages\/manna\/src\/agent\//, /^packages\/manna\/src\/ui\/Popover\.tsx$/, /^packages\/manna\/src\/actions\.ts$/],
+    async run() {
+      const { app, page, ws } = await appWithScreen();
+      try {
+        await ctrlPick(page, await stagePoint(page, 960, 300));
+        await page.waitForSelector('.popover-card .composer');
+        await page.fill('.popover-card .composer .title-input', '재현 영상');
+        await page.click('.popover-card .rec-full');
+        check('화면 녹화 — 팝업이 접히고 녹화 막대가 뜬다', !!(await until(() => page.$('.rec-bar'), 8000)) && !!(await page.$('.popover-card.is-rec-hidden')));
+        check('녹화 중에는 멈춤 그림 · 피커가 걷혀 화면을 만질 수 있다', !(await page.$('.stage-still')) && !(await page.$('.pick-layer')));
+        // 화면을 조작한다 — 움직이고, 누르고, 친다
+        const a = await stagePoint(page, 500, 500);
+        const b = await stagePoint(page, 900, 400);
+        await page.mouse.move(a.x, a.y);
+        await page.mouse.move(b.x, b.y, { steps: 8 });
+        await page.mouse.down();
+        check('누르면 그 자리에 클릭 표시', !!(await until(() => page.$('.trace-ripple'), 3000)));
+        await page.mouse.up();
+        const cur = await page.$eval('.trace-cursor', (el) => ({ hidden: (el as HTMLElement).hidden, t: (el as HTMLElement).style.transform }));
+        const fb = (await (await page.$('.stage-frame'))!.boundingBox())!;
+        const m = /translate\(([\d.]+)px, ([\d.]+)px\)/.exec(cur.t);
+        check('커서가 누른 자리를 따라간다', !cur.hidden && !!m && Math.abs(fb.x + Number(m[1]) - b.x) < 6 && Math.abs(fb.y + Number(m[2]) - b.y) < 6, cur.t);
+        await page.keyboard.type('abc');
+        await page.keyboard.press('Enter');
+        const chips = await until(async () => {
+          const t = await page.$$eval('.trace-key', (els) => els.map((e) => e.textContent));
+          return t.includes('abc') && t.includes('Enter') ? t : null;
+        }, 3000);
+        check('친 글자와 특수 키가 화면에 보인다', !!chips, (chips ?? []).join(' · '));
+        check('녹화 중 화면 안의 키는 테라리움 단축키로 받지 않는다 (Enter 로 팝업이 바뀌지 않음)', !!(await page.$('.popover-card .composer')));
+        await wait(1200);
+        await page.click('.rec-bar .rec-stop');
+        const v = await until(() => page.$('.popover-card:not(.is-rec-hidden) .composer .clip video'), 10000);
+        check('멈추면 팝업이 돌아오고 녹화가 붙어 있다', !!v);
+        check('쓰던 제목은 그대로', (await page.inputValue('.popover-card .composer .title-input')) === '재현 영상');
+        await page.click('.popover-card .composer button:has-text("추가")');
+        const c = await until(() => comments(ws, 'SCR-001').find((x: { title?: string }) => x.title === '재현 영상'), 8000);
+        check('Comment 와 함께 녹화가 저장된다', !!c && c.clips?.length === 1 && c.clips[0].ms > 1000, c ? `${c.clips?.[0]?.ms}ms ${c.clips?.[0]?.w}×${c.clips?.[0]?.h}` : '없음');
+        check('표시 층은 녹화가 끝나면 사라진다', !(await page.$('.trace-layer')) && !(await page.$('.rec-bar')));
+      } finally {
+        await app.close();
+      }
+    },
+  },
 ];
 
 // 쓰지 않는 도구를 가져오지 않았다고 타입 검사가 투덜대지 않게

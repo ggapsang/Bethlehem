@@ -37,11 +37,15 @@ export type HostMsg =
   | { type: 'pickUp'; rid: number }
   | { type: 'pickDown'; rid: number }
   | { type: 'reveal'; fp: Fingerprint; region?: Region; steps: Step[]; quick: boolean; rid: number }
-  | { type: 'setPath'; steps: Step[] };
+  | { type: 'setPath'; steps: Step[] }
+  /** 화면 녹화 중 — 포인터 · 키 입력을 알려 달라 (조작 표시) */
+  | { type: 'trace'; on: boolean };
 
 export type AgentMsg =
   | { type: 'ready'; url: string; title: string }
   | { type: 'nav'; url: string }
   | { type: 'frame'; rects: Record<string, RectTuple> }
   | { type: 'key'; phase: 'down' | 'up'; key: string; ctrl: boolean; shift: boolean; meta: boolean; alt: boolean; repeat: boolean; typing: boolean }
-  | { type: 'reply'; rid: number; data: unknown };
+  | { type: 'reply'; rid: number; data: unknown }
+  /** 조작 — 화면 뷰포트 좌표. key 는 보일 글자(조합이면 "Ctrl+S"), text 는 이어 친 글자인지 */
+  | { type: 'input'; ev: 'move' | 'down' | 'up' | 'key'; x: number; y: number; key?: string; text?: boolean };

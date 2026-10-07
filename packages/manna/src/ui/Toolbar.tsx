@@ -253,7 +253,7 @@ export function RecordButton() {
       class={`btn-icon ${rec ? 'is-rec' : ''}`}
       aria-pressed={!!rec}
       aria-label={rec ? '녹화 멈추기' : '화면 녹화'}
-      title={rec ? '녹화 멈추기' : '화면 녹화 — 선택한 Comment 에 붙이거나, 없으면 새 Comment 를 만듭니다 (최대 60초)'}
+      title={rec ? '녹화 멈추기' : '화면 녹화 — 조작(커서 · 클릭 · 키 입력)까지 함께. 쓰고 있는 Comment · 선택한 Comment 에 붙이거나, 없으면 새 Comment 를 만듭니다 (최대 2분)'}
       onClick={toggleRecording}
     >
       {rec ? <><Square {...ICON} size={14} fill="currentColor" /><span class="rec-time">{`${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`}</span></> : <Circle {...ICON} />}

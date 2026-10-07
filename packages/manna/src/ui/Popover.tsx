@@ -2,12 +2,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { RefObject } from 'preact';
 import { createPortal } from 'preact/compat';
-import { Camera, Circle, Film, Pin, Square, Trash2, X } from 'lucide-preact';
+import { Camera, Circle, Film, MonitorPlay, Pin, Square, Trash2, X } from 'lucide-preact';
 import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
-import { editAssignee, toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleSnipRecording } from '../actions';
+import { REC_MAX_MS, editAssignee, toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleRecording, toggleSnipRecording } from '../actions';
 import type { Host } from '../host';
-import { annotations, draft, draftClip, popHidden, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
+import { annotations, draft, draftClip, popHidden, recording, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
 import { MarkdownEditor } from './editor/MarkdownEditor';
 import { PeopleList, Who } from './Who';
@@ -142,7 +142,7 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
   return createPortal(
     <div
       ref={ref}
-      class={`popover-card pop-${moved ? 'moved' : pos?.side ?? 'right'}`}
+      class={`popover-card pop-${moved ? 'moved' : pos?.side ?? 'right'} ${recording.value ? 'is-rec-hidden' : ''}`}
       key={d ? 'draft' : sel?.id}
       style={{ left: `${at?.left ?? -9999}px`, top: `${at?.top ?? 0}px`, width: `${w0}px` }}
       role="dialog"
@@ -172,6 +172,8 @@ function Composer() {
         <button type="button" class="btn-icon btn-xs" aria-label="취소" onClick={() => (draft.value = null)}><X {...ICON} /></button>
       </div>
       <SnipBar />
+      <RecordButton />
+      {draftClip.value && <ClipView clip={draftClip.value} canRemove onRemove={() => (draftClip.value = null)} />}
       <input
         class="input title-input"
         placeholder="제목 (없어도 됩니다)"
@@ -225,7 +227,6 @@ function SnipBar() {
   // URL 화면 — 요소를 골라도 그 순간의 화면 전체를 찍는다. 붙이기는 없다
   const site = version.value?.source?.mode === 'site';
   const rec = snipRec.value;
-  const clip = draftClip.value;
   const [, tick] = useState(0);
   useEffect(() => {
     if (!rec) return;
@@ -245,10 +246,10 @@ function SnipBar() {
           type="button"
           class={`snip-btn ${rec ? 'is-rec' : ''}`}
           aria-pressed={!!rec}
-          title={rec ? '녹화 멈추기' : '그린 영역만 녹화합니다 (최대 30초)'}
+          title={rec ? '녹화 멈추기' : '그린 영역만 짧게 녹화합니다 (최대 30초). 화면 전체를 조작과 함께 녹화하려면 아래 "화면 녹화"'}
           onClick={() => toggleSnipRecording(stageRef.snip)}
         >
-          {rec ? <><Square {...ICON} size={12} fill="currentColor" /> 멈추기 {`${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`}</> : <><Circle {...ICON} /> 녹화</>}
+          {rec ? <><Square {...ICON} size={12} fill="currentColor" /> 멈추기 {`${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`}</> : <><Circle {...ICON} /> 영역 녹화</>}
         </button>
         {!site && (
           <button type="button" class="snip-btn" aria-pressed={m === 'pin'} title="실시간 화면의 이 자리에 마커를 붙입니다" onClick={() => (snipMode.value = 'pin')}>
@@ -256,8 +257,49 @@ function SnipBar() {
           </button>
         )}
       </div>
-      {clip && <ClipView clip={clip} canRemove onRemove={() => (draftClip.value = null)} />}
     </>
+  );
+}
+
+const mmss = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+
+/** 화면 녹화 — 화면 전체를 조작(커서 · 클릭 · 키 입력)과 함께. 버그를 재현해 보여줄 때 */
+function RecordButton({ label = '화면 녹화 — 조작 포함' }: { label?: string }) {
+  if (snipRec.value) return null;
+  return (
+    <button
+      type="button"
+      class="btn btn-secondary btn-sm rec-full"
+      title={`팝업이 접히고 화면을 그대로 만질 수 있습니다. 커서 · 클릭 · 키 입력이 함께 찍힙니다 (최대 ${mmss(REC_MAX_MS)}). 다시 누르거나 위 막대의 멈추기로 끝냅니다`}
+      onClick={() => toggleRecording()}
+    >
+      <MonitorPlay {...ICON} size={15} /> {label}
+    </button>
+  );
+}
+
+/** 녹화 중 — 창 위쪽 가운데에 떠 있는 막대 (녹화 영역 밖이라 영상에 찍히지 않는다) */
+export function RecordingBar() {
+  const r = recording.value;
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!r) return;
+    const t = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, [r]);
+  if (!r) return null;
+  const ms = Date.now() - r.startedAt;
+  return createPortal(
+    <div class="rec-bar" role="status" aria-label="화면 녹화 중">
+      <span class="rec-dot" />
+      <strong>녹화 중</strong>
+      <span class="mono">{mmss(ms)} / {mmss(REC_MAX_MS)}</span>
+      <span class="muted small">화면을 조작하세요 — 커서 · 클릭 · 키 입력이 함께 찍힙니다</span>
+      <button type="button" class="btn btn-sm rec-stop" onClick={() => toggleRecording()}>
+        <Square {...ICON} size={12} fill="currentColor" /> 멈추기
+      </button>
+    </div>,
+    document.body,
   );
 }
 
@@ -325,6 +367,7 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
         class="body-editor"
       />
       {(a.clips ?? []).map((c) => <ClipView key={c.id} clip={c} canRemove={c.author === me || host.author} onRemove={() => removeClip(a, c.id)} />)}
+      {user.value && <RecordButton label="화면 녹화 추가 — 조작 포함" />}
       {a.replies.length > 0 && (
         <ol class="replies">
           {a.replies.map((r) => (

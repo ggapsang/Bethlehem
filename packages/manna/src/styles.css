@@ -746,3 +746,30 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .tabs-detached { display: inline-flex; align-items: center; gap: 4px; align-self: center; margin-left: var(--unit-2); white-space: nowrap; }
 /* 탭의 작은 점 — 원본 폴더가 바뀐 화면 등 */
 .tab-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--warning-600); flex: none; margin-left: 2px; }
+/* 화면 녹화 — 조작 포함 */
+.rec-full { align-self: flex-start; gap: var(--unit-1); }
+.popover-card.is-rec-hidden { display: none; }
+.rec-bar {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 2000;
+  display: flex; align-items: center; gap: var(--unit-2); padding: 6px 8px 6px 12px;
+  border-radius: 999px; background: var(--bg-panel); border: 1px solid var(--error-500);
+  box-shadow: 0 6px 24px rgb(0 0 0 / .25); font-size: var(--text-sm); white-space: nowrap;
+}
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--error-600); animation: rec-blink 1s steps(2) infinite; }
+@keyframes rec-blink { 50% { opacity: .25; } }
+.rec-stop { background: var(--error-600); color: var(--white); border-color: transparent; border-radius: 999px; gap: 4px; }
+.trace-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+.trace-cursor { position: absolute; left: 0; top: 0; width: 22px; height: 22px; will-change: transform; }
+.trace-cursor svg path { fill: #111; stroke: #fff; stroke-width: 1.5; stroke-linejoin: round; }
+.trace-cursor.is-down svg path { fill: #dc2626; }
+.trace-ripple {
+  position: absolute; width: 36px; height: 36px; margin: -18px 0 0 -18px; border-radius: 50%;
+  border: 3px solid #dc2626; background: rgb(220 38 38 / .18); animation: trace-ripple .7s ease-out forwards;
+}
+@keyframes trace-ripple { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+.trace-keys { position: absolute; left: 16px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 6px; max-width: 70%; }
+.trace-key {
+  padding: 6px 12px; border-radius: 8px; background: rgb(17 17 17 / .82); color: #fff;
+  font: 600 18px/1.2 var(--font-mono, monospace); box-shadow: 0 2px 8px rgb(0 0 0 / .3); transition: opacity .3s;
+}
+.trace-key.is-out { opacity: 0; }

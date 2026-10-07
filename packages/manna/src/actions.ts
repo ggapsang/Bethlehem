@@ -325,7 +325,9 @@ export function removeNoteTab(id: string): boolean {
 /* ── 녹화 ─────────────────────────────────────────────────────────────── */
 
 let rec: Recorder | null = null;
-const MAX_MS = 60_000;
+/** 화면 녹화 — 버그 재현처럼 조작을 처음부터 끝까지 담을 수 있게 */
+export const REC_MAX_MS = 120_000;
+const MAX_MS = REC_MAX_MS;
 let limit: ReturnType<typeof setTimeout> | undefined;
 
 async function shaOf(bytes: Uint8Array): Promise<string> {
@@ -341,7 +343,7 @@ async function shaOf(bytes: Uint8Array): Promise<string> {
 
 export async function toggleRecording(): Promise<void> {
   if (rec) return stopRecording();
-  if (!screen.peek() || !stageRef.frame || needName()) return;
+  if (!screen.peek() || !stageRef.frame || needName() || snip) return;
   try {
     rec = await startRecording(stageRef.frame);
     rec.onEnded(() => stopRecording());
@@ -364,6 +366,12 @@ export async function stopRecording(): Promise<void> {
     const sha = await shaOf(clip.bytes);
     blobs.set(sha, { enc: 'b64', data: toBase64(clip.bytes) }); // webm 은 이미 압축되어 있어 gzip 하지 않는다
     const c: Clip = { id: uid(), sha, type: clip.type, ms: clip.ms, w: clip.w, h: clip.h, author: user.value!, at: now() };
+    // 쓰고 있는 새 Comment 가 있으면 그 Comment 와 함께 붙는다 (추가를 누를 때)
+    if (draft.peek()) {
+      draftClip.value = c;
+      notify(`녹화(${(clip.ms / 1000).toFixed(1)}초)를 이 Comment 에 붙였습니다. 설명을 적고 추가를 누르세요.`);
+      return;
+    }
     const s = screen.peek()!;
     const target = s.annotations.find((a) => a.id === selected.peek() && a.version === version.peek()?.v);
     if (target) {

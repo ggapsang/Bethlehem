@@ -227,6 +227,9 @@ declare global {
         picking = m.on;
         if (!m.on) stack = [];
         return;
+      case 'trace':
+        tracing = m.on;
+        return;
       case 'pause':
         return pause();
       case 'resume':
@@ -288,6 +291,33 @@ declare global {
     if (inFrame && e.source !== window.parent) return;
     handle(m);
   });
+
+  /* ── 조작 표시 — 화면 녹화 중 포인터 · 키 ─────────────────────────────── */
+  let tracing = false;
+  let lastMove = 0;
+  const point = (ev: 'move' | 'down' | 'up') => (e: PointerEvent) => {
+    if (!tracing) return;
+    // 움직임은 자주 오므로 솎는다 (멈춤 시계와 상관없이 원래 시계로)
+    const t = nativeNow();
+    if (ev === 'move' && t - lastMove < 30) return;
+    lastMove = t;
+    send({ type: 'input', ev, x: e.clientX, y: e.clientY });
+  };
+  window.addEventListener('pointermove', point('move'), true);
+  window.addEventListener('pointerdown', point('down'), true);
+  window.addEventListener('pointerup', point('up'), true);
+  const KEY_NAME: Record<string, string> = { ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' };
+  window.addEventListener('keydown', (e) => {
+    if (!tracing || /^(Control|Shift|Alt|Meta|CapsLock|Process|Unidentified)$/.test(e.key)) return;
+    const t = e.target;
+    const secret = t instanceof HTMLInputElement && t.type === 'password';
+    const text = e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
+    if (text) return send({ type: 'input', ev: 'key', x: 0, y: 0, key: secret ? '•' : e.key, text: true });
+    if (e.repeat && e.key !== 'Backspace') return;
+    const mods = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Meta'].filter(Boolean);
+    const name = KEY_NAME[e.key] ?? (e.key.length === 1 ? e.key.toUpperCase() : e.key);
+    send({ type: 'input', ev: 'key', x: 0, y: 0, key: [...mods, name].join('+') });
+  }, true);
 
   /* ── 클릭 경로 · 단축키 ─────────────────────────────────────────────── */
   document.addEventListener('click', (e) => !picking && recordClick(e), true);

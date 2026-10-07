@@ -30,6 +30,9 @@ for (const p of (process.env.BETHLEHEM_E2E_GRANT ?? '').split(';').filter(Boolea
 if (process.env.BETHLEHEM_USER_DATA) app.setPath('userData', resolve(process.env.BETHLEHEM_USER_DATA));
 
 app.setName('Terrarium');
+// 다른 창에 가려져도 화면을 계속 그린다 — 가려진 창은 Windows 가 그리기를 멈춰 녹화 · 멈춤 그림이 비는 일이 있다
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
 /** 실행본(run/)에서는 main 옆에, 소스 트리(out/)에서는 저장소 안의 자리에 있다 */
 const beside = (rel: string, inRepo: string) => (existsSync(join(here, '..', rel)) ? join(here, '..', rel) : join(root, inRepo));
 const ICON = beside('resources/icon-256.png', 'apps/bethlehem/resources/icon-256.png');
@@ -228,6 +231,7 @@ const WEB_PREFS = () => ({
   nodeIntegration: false,
   sandbox: true,
   webviewTag: true,
+  backgroundThrottling: false,
 });
 
 /** 창마다 같은 규칙 — 바깥 주소는 브라우저로, 페이지 이동 막기, F12, URL 화면 webview 의 preload · 격리 */

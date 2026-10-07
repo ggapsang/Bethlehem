@@ -16,11 +16,12 @@ import {
 import type { ComponentChildren } from 'preact';
 import { ago } from '../ui/labels';
 import { addPin, applySiteSnapshot, stopSnipRecording } from '../actions';
-import { StagePopover } from '../ui/Popover';
+import { RecordingBar, StagePopover } from '../ui/Popover';
 import { iframeBridge, webviewBridge, type Bridge, type WebviewLike } from './bridge';
 import { prepareScreen } from './loader';
 import { StageHeader } from './StageHeader';
 import { ScreenTabs, type WindowTools } from './ScreenTabs';
+import { TraceLayer, type TraceInput } from './Trace';
 import { whoText } from '../ui/Who';
 import { MarkerStrip } from './MarkerStrip';
 import { SiteGallery } from './SiteGallery';
@@ -112,7 +113,10 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   const vkey = versionKey.value;
   const scr = screen.value;
   const list = annotations.value;
-  const isPicking = picking.value || dragging;
+  // 화면 녹화 중에는 화면을 그대로 만질 수 있어야 한다 — 피커를 잠시 내린다
+  const recOn = !!recording.value;
+  const isPicking = (picking.value || dragging) && !recOn;
+  const traceFeed = useRef<((m: TraceInput) => void) | null>(null);
   const markerColor = doc.value.meta.marker ?? 'auto';
   const live = !!host.site && v?.source?.mode === 'site';
   const isImage = v?.source?.mode === 'image';
@@ -228,6 +232,11 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
     b.send(anchorsMsg());
     b.send({ type: 'picking', on: picking.peek() });
     b.send({ type: paused.peek() || picking.peek() || !!draft.peek() ? 'pause' : 'resume' });
+    if (recording.peek()) {
+      b.send({ type: 'picking', on: false });
+      b.send({ type: 'resume' });
+    }
+    b.send({ type: 'trace', on: !!recording.peek() });
   };
 
   /* ── 화면 불러오기 (폴더 화면) ──────────────────────────────────────── */
@@ -275,7 +284,11 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
       } else if (m.type === 'frame') {
         rects.current = m.rects;
         paint();
+      } else if (m.type === 'input') {
+        traceFeed.current?.(m);
       } else if (m.type === 'key') {
+        // 녹화 중 화면 안에서 누른 키는 그 화면의 조작이다 — 테라리움 단축키로 받지 않는다
+        if (recording.peek()) return;
         const ev = {
           key: m.key, ctrlKey: m.ctrl, metaKey: m.meta, shiftKey: m.shift, altKey: m.alt, repeat: m.repeat,
           target: m.typing ? { tagName: 'INPUT', isContentEditable: false } : null,
@@ -346,6 +359,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   /* ── 일시정지 · 피커 멈춤 그림 ───────────────────────────────────── */
   const freezeNo = useRef(0);
   useEffect(() => {
+    if (recording.peek()) return; // 녹화가 정한다 (아래)
     const b = bridge.current;
     const active = isPicking || !!draft.value;
     if (active) {
@@ -379,9 +393,22 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   }, [isPicking, !!draft.value]);
 
   useEffect(() => {
-    if (isPicking || draft.peek()) return;
+    if (isPicking || draft.peek() || recording.peek()) return;
     bridge.current?.send({ type: paused.value ? 'pause' : 'resume' });
   }, [paused.value]);
+
+  /* 화면 녹화 — 화면을 돌리고 조작(커서 · 클릭 · 키)을 알려 달라고. 끝나면 쓰던 Comment 가 있으면 다시 멈춘다 */
+  useEffect(() => {
+    const b = bridge.current;
+    b?.send({ type: 'trace', on: recOn });
+    if (recOn) {
+      b?.send({ type: 'picking', on: false });
+      b?.send({ type: 'resume' });
+    } else if (picking.peek() || draft.peek()) {
+      b?.send({ type: 'picking', on: picking.peek() });
+      b?.send({ type: 'pause' });
+    } else if (!paused.peek()) b?.send({ type: 'resume' });
+  }, [recOn]);
 
   /* ── 다른 화면 상태의 Comment 로 이동 ─────────────────────────────── */
   useEffect(() => {
@@ -653,7 +680,8 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
             style={innerStyle}
           />
         )}
-        {still.value && !snipRec.value && <img class="stage-still" src={still.value.url} alt="" draggable={false} />}
+        {still.value && !snipRec.value && !recOn && <img class="stage-still" src={still.value.url} alt="" draggable={false} />}
+        <TraceLayer on={recOn} scale={fit.s} feed={traceFeed} />
         {snipStyle && <div class={`snip-target ${snipRec.value ? 'is-rec' : ''}`} ref={snipBox} style={snipStyle} aria-hidden="true" />}
         {showShot && shotSrc && (
           <div class="shot-view">
@@ -715,6 +743,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
         )}
 
       </div>
+      <RecordingBar />
       <StagePopover
         host={host}
         fit={fit}
