@@ -356,6 +356,8 @@ export const tabPolicy = { author: false, persist: true };
 export const windowMode = signal<'main' | 'mirror'>('main');
 /** 별도 창으로 빼낸 화면들 — 본 창의 탭 줄에서는 잠시 빠진다(문서의 탭 배치는 그대로) */
 export const detachedTabs = signal<ReadonlySet<string>>(new Set());
+/** 탭에 붙이는 작은 점 (화면 id → 설명). Bethlehem: 원본 폴더가 바뀐 화면 */
+export const tabMarks = signal<Record<string, string>>({});
 
 /** 다른 창에서 고친 문서를 받아 들인다 — 제자리에서 바꾸고, 이 창의 되돌리기는 비운다(다른 창의 고침을 되돌리지 않게) */
 export function applyRemoteDoc(d: MannaDoc, entries: [string, EncodedBlob][], markDirty: boolean): void {

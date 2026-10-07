@@ -744,3 +744,5 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .tab.is-tearing { opacity: .55; outline: 2px dashed var(--accent); outline-offset: -2px; }
 .tabs-strip.is-tearing { cursor: copy; }
 .tabs-detached { display: inline-flex; align-items: center; gap: 4px; align-self: center; margin-left: var(--unit-2); white-space: nowrap; }
+/* 탭의 작은 점 — 원본 폴더가 바뀐 화면 등 */
+.tab-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--warning-600); flex: none; margin-left: 2px; }

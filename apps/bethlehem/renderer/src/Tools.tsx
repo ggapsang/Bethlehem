@@ -1,11 +1,11 @@
 /* 작성 도구 — 툴바(작업 폴더·문서 열기, 돌아온 문서), 탭 줄(화면 추가), 화면 막대(새 버전·화면 지우기) */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Plus, Trash2 } from 'lucide-preact';
+import { ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Plus, RefreshCw, Trash2 } from 'lucide-preact';
 import { rev, screen } from '@manna/store';
 import {
   addImageScreen, addScreenFromFolder, addScreensFromFiles, openUrl, urlAsk, askUrl, createWorkspace, mergeReturned, mode, openDocument, openFolder, placeName, placeUrl, recent, refreshRecent,
-  refreshReturned, removeScreen, returned,
+  refreshReturned, registerFromSource, removeScreen, returned, staleSources,
 } from './session';
 
 const ICON = { size: 18, strokeWidth: 1.5 };
@@ -193,7 +193,23 @@ export function NewVersionMenu() {
   rev.value;
   const scr = screen.value;
   if (!scr) return null;
-  return <SourceMenu title={`${scr.id} 새 버전`} icon={<Layers {...ICON} size={16} />} label="새 버전" screenId={scr.id} kind="bar" />;
+  const stale = staleSources.value[scr.id];
+  return (
+    <>
+      {stale && (
+        <button
+          type="button"
+          class="btn btn-sm src-stale"
+          aria-label="원본 바뀜 — 새 버전 등록"
+          title={`원본 폴더가 이 버전을 담은 뒤로 바뀌었습니다 — 눌러서 새 버전으로 등록\n${stale.slice(0, 12).map((c) => `${c.how === 'changed' ? '바뀜' : c.how === 'removed' ? '없어짐' : '새 파일'}  ${c.path}`).join('\n')}${stale.length > 12 ? `\n… 외 ${stale.length - 12}개` : ''}`}
+          onClick={() => registerFromSource(scr.id)}
+        >
+          <RefreshCw {...ICON} size={14} /> 원본 바뀜 · 새 버전 등록
+        </button>
+      )}
+      <SourceMenu title={`${scr.id} 새 버전`} icon={<Layers {...ICON} size={16} />} label="새 버전" screenId={scr.id} kind="bar" />
+    </>
+  );
 }
 
 /** 화면 막대 끝 — 화면 지우기 */

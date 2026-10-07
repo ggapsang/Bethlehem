@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 import { ChevronDown, Copy, Eye, EyeOff, Pencil, SquareArrowOutUpRight, Trash2, X } from 'lucide-preact';
-import { closeTab, detachedTabs, doc, moveTab, mutate, openTab, openTabs, rev, screenId, selectScreen, windowMode } from '../store';
+import { closeTab, detachedTabs, doc, tabMarks, moveTab, mutate, openTab, openTabs, rev, screenId, selectScreen, windowMode } from '../store';
 import { deleteScreen } from '../actions';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
@@ -134,6 +134,7 @@ export function ScreenTabs({ tools, canRename, windowTools }: { tools?: Componen
             >
               <span class="tab-id mono">{s.id}</span>
               <span class="tab-title ellipsis">{s.title}</span>
+              {tabMarks.value[id] && <span class="tab-mark" title={tabMarks.value[id]} aria-label={tabMarks.value[id]} />}
             </button>
             )}
             {mirror ? null : canRename ? (

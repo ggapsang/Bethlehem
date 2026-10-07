@@ -12,7 +12,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { EncodedBlob, MannaDoc } from '@core';
-import { packFolder, scanFolder, type Fetcher, type PackOptions } from '@core/node/pack';
+import { packFolder, scanFolder, sourceChanges, type Fetcher, type PackOptions } from '@core/node/pack';
 import { IMAGE_EXT, packImage } from './image';
 import { buildMenu } from './menu';
 import { killTerminal, setupTerminal } from './terminal';
@@ -400,6 +400,8 @@ ipcMain.handle('grant-dropped', async (_e, p: string) => {
 
 ipcMain.handle('scan-folder', async (_e, dir: string, entry?: string) => scanFolder(guard(dir), entry));
 ipcMain.handle('pack-folder', async (_e, opts: PackOptions) => packFolder({ ...opts, dir: guard(opts.dir) }, fetcher));
+ipcMain.handle('source-check', async (_e, o: { link: SourceLink; files: Record<string, { sha: string }>; since: string }) =>
+  allowed(o.link.dir) && existsSync(o.link.dir) ? sourceChanges({ ...o.link, dir: resolve(o.link.dir), files: o.files, since: o.since }) : null);
 
 /* 작업 폴더 */
 /* 그림 화면 */
@@ -467,6 +469,8 @@ ipcMain.handle('ws-open', async (_e, dir: string) => {
   const abs = guard(dir);
   const data = await readWorkspace(abs);
   current = { dir: abs, docId: data.doc.id, links: data.links };
+  // 이 작업 폴더의 화면들이 연결된 원본 폴더 — 바뀐 것을 비교하고 새 버전으로 다시 읽을 수 있게
+  for (const l of Object.values(data.links)) if (existsSync(l.dir)) granted.add(resolve(l.dir));
   remember('workspace', abs);
   watchWorkspace();
   return { ...data, last: settings.lastScreen?.[abs] ?? null };

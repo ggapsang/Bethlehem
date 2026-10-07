@@ -10,9 +10,9 @@ import type { Host } from '@manna/host';
 import { deleteScreen } from '@manna/actions';
 import { buildHtml, flushAutosave, save, suggestedName } from '@manna/host';
 import {
-  tabPolicy, addBlobs, blobs, dirty, doc, draft, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, undo, user, versionNo,
+  tabMarks, tabPolicy, addBlobs, blobs, dirty, doc, draft, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, undo, user, versionNo,
 } from '@manna/store';
-import type { RecentItem, RecentUrl, Returned, SourceLink } from '../../shared/api';
+import type { RecentItem, RecentUrl, Returned, SourceChange, SourceLink } from '../../shared/api';
 
 const api = window.bethlehem;
 
@@ -141,7 +141,57 @@ function afterLoad(): void {
   saveState.value = { kind: 'saved', at: Date.now() };
   refreshRecent();
   refreshReturned();
+  checkAllSources();
 }
+
+/* ── 원본 폴더가 바뀐 화면 ──────────────────────────────────────────
+ * 폴더로 등록한 화면은 원본 폴더와 연결돼 있다. 마지막 버전을 담은 뒤로 폴더가 바뀌었으면
+ * 새 버전으로 등록할 때까지 버전 줄 · 탭에 표시를 남긴다 (알림은 금방 사라지므로).
+ * 프로그램이 꺼져 있는 동안 바뀐 것도 작업 폴더를 열 때 비교해서 잡는다. */
+export const staleSources = signal<Record<string, SourceChange[]>>({});
+
+function setStale(id: string, list: SourceChange[] | null): void {
+  const cur = { ...staleSources.peek() };
+  if (list?.length) cur[id] = list;
+  else delete cur[id];
+  staleSources.value = cur;
+  tabMarks.value = Object.fromEntries(Object.entries(cur).map(([k, v]) => [k, `원본 폴더가 바뀌었습니다 (${v.length}개 파일) — 새 버전으로 등록하세요`]));
+}
+
+/** 그 화면의 원본 폴더를 마지막 버전과 비교한다. 새로 바뀐 것을 찾았으면 true */
+export async function checkSource(id: string): Promise<boolean> {
+  const l = links.peek()[id];
+  const s = doc.peek().screens.find((x) => x.id === id);
+  const v = s && latest(s);
+  // 마지막 버전이 그 폴더에서 온 것일 때만 (URL · 그림으로 올린 버전이면 비교할 것이 없다)
+  if (!l || !v || v.source || !Object.keys(v.files).length) {
+    setStale(id, null);
+    return false;
+  }
+  const before = staleSources.peek()[id]?.length ?? 0;
+  const list = await api.sourceCheck({ link: l, files: v.files, since: v.createdAt }).catch(() => null);
+  setStale(id, list);
+  return (list?.length ?? 0) > 0 && before === 0;
+}
+
+export async function checkAllSources(): Promise<void> {
+  const ids = Object.keys(links.peek());
+  for (const id of Object.keys(staleSources.peek())) if (!ids.includes(id)) setStale(id, null);
+  const found: string[] = [];
+  for (const id of ids) if (await checkSource(id)) found.push(id);
+  if (found.length) {
+    const first = found[0]!;
+    notify(`원본 폴더가 바뀐 화면 — ${found.join(', ')}. 버전 줄의 "원본 바뀜"을 눌러 새 버전으로 등록하세요.`, 'info', { label: `${first} 새 버전 등록`, run: () => registerFromSource(first) });
+  }
+}
+
+/** 원본 폴더를 그 화면의 새 버전으로 — 가져오기 창을 연다 */
+export function registerFromSource(id: string): void {
+  const l = links.peek()[id];
+  if (l) importing.value = { dir: l.dir, screenId: id, entry: l.entry };
+}
+
+const sourceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** 작업 폴더를 그대로 연다 */
 export async function openWorkspace(dir: string): Promise<boolean> {
@@ -442,6 +492,7 @@ export function applyImport(targetId: string | undefined, r: Imported, choice: I
   }, { label: targetId ? '새 버전 등록' : '화면 등록' });
   if (link) links.value = { ...links.peek(), [id!]: link };
   selectScreen(id!, v);
+  checkSource(id!);
 }
 
 /** URL 화면 — 편집기에서는 실시간 사이트가 돌고, 보낸 파일에는 마지막 사본이 들어간다 */
@@ -514,13 +565,13 @@ export async function reloadWorkspace(force = false): Promise<void> {
 }
 api.onWorkspaceChanged(() => reloadWorkspace());
 api.onSourceChanged(({ screenId: id }) => {
-  const l = links.peek()[id];
-  const s = doc.peek().screens.find((x) => x.id === id);
-  if (!l || !s) return;
-  notify(`${id} ${s.title} — 원본 폴더가 바뀌었습니다. 새 버전으로 등록할까요?`, 'info', {
-    label: '새 버전 등록',
-    run: () => (importing.value = { dir: l.dir, screenId: id, entry: l.entry }),
-  });
+  // 저장하는 동안 여러 번 온다 — 잠잠해지면 실제로 내용이 달라졌는지 비교한다
+  clearTimeout(sourceTimers.get(id));
+  sourceTimers.set(id, setTimeout(async () => {
+    const s = doc.peek().screens.find((x) => x.id === id);
+    if (!s || !(await checkSource(id))) return;
+    notify(`${id} ${s.title} — 원본 폴더가 바뀌었습니다. 새 버전으로 등록할까요?`, 'info', { label: '새 버전 등록', run: () => registerFromSource(id) });
+  }, 800));
 });
 api.onRequestSave(async () => {
   await flushAutosave(host).catch(() => {});

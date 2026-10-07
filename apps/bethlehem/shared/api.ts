@@ -1,11 +1,11 @@
 /* 렌더러에 노출하는 Bethlehem API — preload 와 렌더러가 같이 쓰는 타입 */
 import type { EncodedBlob, MannaDoc, Runtime } from '@core';
-import type { PackOptions, PackResult, ScanResult } from '@core/node/pack';
+import type { PackOptions, PackResult, ScanResult, SourceChange } from '@core/node/pack';
 import type { SiteSnapshot } from '../main/site';
 import type { Returned, SourceLink, WorkspaceData } from '../main/workspace';
 import type { MenuCommand } from '../main/menu';
 
-export type { MenuCommand, Returned, SiteSnapshot, SourceLink };
+export type { MenuCommand, Returned, SiteSnapshot, SourceChange, SourceLink };
 
 export interface OpenedFile {
   path: string;
@@ -48,6 +48,8 @@ export interface BethlehemApi {
   grantDropped(file: File): Promise<Granted | null>;
   scanFolder(dir: string, entry?: string): Promise<ScanResult>;
   packFolder(opts: PackOptions): Promise<PackResult>;
+  /** 연결된 원본 폴더가 그 버전을 담은 뒤로 바뀌었나 (폴더가 없으면 null) */
+  sourceCheck(o: { link: SourceLink; files: Record<string, { sha: string }>; since: string }): Promise<SourceChange[] | null>;
   /* 그림 화면 */
   pickImage(): Promise<string[]>;
   /** 화면으로 가져올 파일들 — 테라리움 문서 · 그림 */

@@ -385,6 +385,44 @@ export const appSpecs: Spec[] = [
       }
     },
   },
+  {
+    name: 'app-source',
+    kind: 'app',
+    files: [/^packages\/core\/node\/pack\.ts$/, new RegExp(`^${B}renderer/src/(session|Tools)\\.tsx?$`), new RegExp(`^${B}main/index\\.ts$`)],
+    async run() {
+      const ctx = await appWithScreen();
+      let { app, page } = ctx;
+      const { ws, ud, src } = ctx;
+      try {
+        await until(() => existsSync(join(ws, 'screens', 'SCR-001', 'screen.json')), 8000);
+        await wait(1500);
+        check('원본 그대로면 표시 없음', !(await page.$('.src-stale')) && !(await page.$('.tab-mark')));
+        // 꺼져 있는 동안 원본이 바뀌었다 → 다시 열면 표시. 원본 폴더 권한은 작업 폴더가 준다(따로 허락하지 않는다)
+        await app.close();
+        writeFileSync(join(src, 'index.html'), readFileSync(join(src, 'index.html'), 'utf8') + '\n<!-- 꺼진 동안 고침 -->\n');
+        ({ app, page } = await launchApp(ud, [ws]));
+        const name = ws.split(/[\\/]/).pop()!;
+        await page.click(`.recent-places .recent-item:has-text("${name}")`);
+        check('꺼진 동안 바뀐 원본 — 열 때 버전 줄에 "원본 바뀜"', !!(await until(() => page.$('.src-stale'), 10000)));
+        check('탭에도 표시', !!(await page.$('.tab[data-id="SCR-001"] .tab-mark')));
+        check('무엇이 바뀌었는지', ((await page.getAttribute('.src-stale', 'title')) ?? '').includes('index.html'));
+        check('알림으로도', ((await page.textContent('.toast').catch(() => '')) ?? '').includes('SCR-001'));
+        await page.click('.src-stale');
+        await page.waitForSelector('.file-list', { timeout: 10000 });
+        await page.click('.modal button[type=submit]');
+        check('눌러서 새 버전 등록 → v2, 표시가 걷힌다', !!(await until(async () => !(await page.$('.src-stale')) && !(await page.$('.tab-mark')) && existsSync(join(ws, 'screens', 'SCR-001', 'screen.json')) && JSON.parse(readFileSync(join(ws, 'screens', 'SCR-001', 'screen.json'), 'utf8')).versions?.length === 2, 15000)));
+        // 켜 둔 채로 원본이 바뀌면 — 알림이 사라져도 표시는 남는다
+        await wait(1500);
+        writeFileSync(join(src, 'index.html'), readFileSync(join(src, 'index.html'), 'utf8') + '\n<!-- 켜 둔 채 고침 -->\n');
+        check('켜 둔 채 바뀐 원본 — 표시', !!(await until(() => page.$('.src-stale'), 10000)));
+        // 새 파일을 하나 더해도 — 원본 폴더 안의 새 파일
+        writeFileSync(join(src, 'added.js'), 'console.log(1);');
+        check('새 파일도 목록에', !!(await until(async () => ((await page.getAttribute('.src-stale', 'title')) ?? '').includes('added.js'), 10000)));
+      } finally {
+        await app.close();
+      }
+    },
+  },
 ];
 
 // 쓰지 않는 도구를 가져오지 않았다고 타입 검사가 투덜대지 않게

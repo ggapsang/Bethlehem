@@ -120,3 +120,5 @@
 .recent-item svg { color: var(--text-secondary); }
 .recent-name { font-weight: 600; }
 .recent-at { white-space: nowrap; }
+/* 버전 줄 — 원본 폴더가 바뀌었다 */
+.src-stale { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--warning-600); border-color: currentColor; }

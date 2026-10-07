@@ -218,6 +218,42 @@ async function fetchExternal(root: string, fetcher: Fetcher, blobs: Map<string, 
   return out;
 }
 
+export interface SourceChange {
+  path: string;
+  how: 'changed' | 'removed' | 'added';
+}
+
+/** 원본 폴더가 마지막으로 담은 버전과 다른가 — 담은 파일의 내용이 바뀌었거나 없어졌거나,
+ *  담은 뒤에 생긴(고친) 새 파일이 있으면 그 목록. 폴더가 없으면 null */
+export async function sourceChanges(o: { dir: string; entry: string; include: string[]; notesFrom?: string; files: Record<string, { sha: string }>; since: string }): Promise<SourceChange[] | null> {
+  let all: string[];
+  try {
+    all = await walk(o.dir);
+  } catch {
+    return null;
+  }
+  const out: SourceChange[] = [];
+  const taken = new Set([...Object.keys(o.files), o.entry]);
+  const have = new Set(all);
+  for (const p of taken) {
+    const f = o.files[p];
+    if (!have.has(p)) {
+      out.push({ path: p, how: 'removed' });
+      continue;
+    }
+    if (!f) continue;
+    const sha = createHash('sha256').update(await readFile(join(o.dir, p))).digest('hex');
+    if (sha !== f.sha) out.push({ path: p, how: 'changed' });
+  }
+  const since = Date.parse(o.since) || 0;
+  for (const p of all) {
+    if (taken.has(p) || p === o.notesFrom) continue;
+    const st = await stat(join(o.dir, p)).catch(() => null);
+    if (st && st.mtimeMs > since + 1000) out.push({ path: p, how: 'added' });
+  }
+  return out;
+}
+
 export async function packFolder(opts: PackOptions, fetcher: Fetcher = nodeFetcher): Promise<PackResult> {
   const blobs = new Map<string, EncodedBlob>();
   const files: ScreenVersion['files'] = {};

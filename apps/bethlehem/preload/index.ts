@@ -23,6 +23,7 @@ const api: BethlehemApi = {
   },
   scanFolder: (dir, entry) => ipcRenderer.invoke('scan-folder', dir, entry),
   packFolder: (opts) => ipcRenderer.invoke('pack-folder', opts),
+  sourceCheck: (o) => ipcRenderer.invoke('source-check', o),
   pickImage: () => ipcRenderer.invoke('pick-image'),
   pickScreenFiles: () => ipcRenderer.invoke('pick-screen-files'),
   readDoc: (path) => ipcRenderer.invoke('read-doc', path),
