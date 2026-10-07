@@ -20,7 +20,9 @@ type Msg =
   | { t: 'save'; from: string; saveAs: boolean };
 
 const me = Math.random().toString(36).slice(2);
-const ch = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('terrarium-windows') : null;
+/** 이 프로젝트 창과 거기서 띄운 창들만 쓰는 채널 — 띄운 창은 주소로 받는다 */
+export const channelName = new URLSearchParams(location.search).get('channel') ?? `terrarium-${me}`;
+const ch = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(channelName) : null;
 const post = (m: Msg) => ch?.postMessage(m);
 
 let applying = false;

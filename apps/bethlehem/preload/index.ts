@@ -53,6 +53,7 @@ const api: BethlehemApi = {
   formatDoc: () => ipcRenderer.invoke('format-doc'),
   onWorkspaceChanged: (cb) => on('workspace-changed', cb as never),
   openScreenWindow: (o) => ipcRenderer.invoke('open-screen-window', o),
+  newWindow: (open) => ipcRenderer.invoke('new-window', open),
   onScreenWindowClosed: (cb) => on('screen-window-closed', cb),
   toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
   onMenu: (cb) => on('menu', cb as never),

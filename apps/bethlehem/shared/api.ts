@@ -4,8 +4,9 @@ import type { PackOptions, PackResult, ScanResult, SourceChange } from '@core/no
 import type { SiteSnapshot } from '../main/site';
 import type { Returned, SourceLink, WorkspaceData } from '../main/workspace';
 import type { MenuCommand } from '../main/menu';
+import type { OpenTarget } from '../main/index';
 
-export type { MenuCommand, Returned, SiteSnapshot, SourceChange, SourceLink };
+export type { MenuCommand, OpenTarget, Returned, SiteSnapshot, SourceChange, SourceLink };
 
 export interface OpenedFile {
   path: string;
@@ -86,12 +87,15 @@ export interface BethlehemApi {
   onWorkspaceChanged(cb: (file: string) => void): void;
   /* 창 */
   /** 화면 하나를 새 창으로 — detach 면 본 창의 탭 줄에서 잠시 빠진다(빼기), 아니면 복제 보기 */
-  openScreenWindow(o: { screen: string; detach: boolean; x?: number; y?: number }): Promise<boolean>;
+  openScreenWindow(o: { screen: string; detach: boolean; channel: string; x?: number; y?: number }): Promise<boolean>;
+  /** 새 프로젝트 창 — open 을 주면 거기서 그것을 연다. 이미 다른 창에서 열려 있으면 그 창을 앞으로('focused') */
+  newWindow(open?: OpenTarget): Promise<'opened' | 'focused'>;
   /** 띄운 창이 닫혔다 (어떻게 닫혔든) */
   onScreenWindowClosed(cb: (o: { screen: string; detach: boolean }) => void): void;
   toggleDevTools(): void;
   onMenu(cb: (cmd: MenuCommand) => void): void;
-  setState(s: { title: string; dirty: boolean }): void;
+  /** 창 제목 · 저장 안 한 고침 · 열린 곳(같은 곳을 두 창에서 열지 않게) */
+  setState(s: { title: string; dirty: boolean; place?: string | null }): void;
   onRequestSave(cb: () => void): void;
   closeNow(): void;
 }

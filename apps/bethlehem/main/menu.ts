@@ -10,7 +10,7 @@ export type MenuCommand =
   | 'add-folder' | 'add-url' | 'add-image' | 'add-files' | 'new-version' | 'picker' | 'pause'
   | 'panel' | 'theme' | 'guide' | 'zoom-in' | 'zoom-out' | 'zoom-fit';
 
-export function buildMenu(getWin: () => BrowserWindow | null): Menu {
+export function buildMenu(getWin: () => BrowserWindow | null, newWindow: () => void): Menu {
   const send = (cmd: MenuCommand) => getWin()?.webContents.send('menu', cmd);
   const item = (label: string, cmd: MenuCommand, accelerator?: string): MenuItemConstructorOptions => ({
     label,
@@ -22,9 +22,12 @@ export function buildMenu(getWin: () => BrowserWindow | null): Menu {
     {
       label: '파일(&F)',
       submenu: [
-        item('폴더 열기…', 'open-folder'),
-        item('문서 열기…', 'open-doc'),
-        item('URL 열기…', 'open-url'),
+        { label: '새 창', accelerator: 'Ctrl+Shift+N', click: () => newWindow() },
+        { type: 'separator' },
+        // 열기 = 새 프로젝트. 이 창에 프로젝트가 열려 있으면 새 창에서 연다 (지금 프로젝트에 더하려면 화면 메뉴)
+        item('폴더 열기 (새 프로젝트)…', 'open-folder'),
+        item('테라리움 문서 열기 (새 프로젝트)…', 'open-doc'),
+        item('URL 열기 (새 프로젝트)…', 'open-url'),
         { type: 'separator' },
         item('저장', 'save', 'Ctrl+S'),
         item('다른 이름으로 저장…', 'save-as', 'Ctrl+Shift+S'),
@@ -52,9 +55,12 @@ export function buildMenu(getWin: () => BrowserWindow | null): Menu {
     {
       label: '화면(&S)',
       submenu: [
+        { label: '이 프로젝트에 탭으로 추가', enabled: false },
         item('화면 폴더 추가…', 'add-folder'),
-        item('URL 추가…', 'add-url'),
-        item('파일에서 가져오기 — 테라리움 문서 · 그림…', 'add-files'),
+        item('URL 화면 추가…', 'add-url'),
+        item('그림 화면 추가…', 'add-image'),
+        item('파일에서 화면 가져오기 — 테라리움 문서 · 그림…', 'add-files'),
+        { type: 'separator' },
         item('지금 화면의 새 버전…', 'new-version'),
         { type: 'separator' },
         item('피커 켜기/끄기', 'picker'),

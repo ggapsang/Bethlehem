@@ -1,7 +1,7 @@
 /* 작성 도구 — 툴바(작업 폴더·문서 열기, 돌아온 문서), 탭 줄(화면 추가), 화면 막대(새 버전·화면 지우기) */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
-import { ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Plus, RefreshCw, Trash2 } from 'lucide-preact';
+import { AppWindow, ChevronDown, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, History, Image, Inbox, Layers, Plus, RefreshCw, Trash2 } from 'lucide-preact';
 import { rev, screen } from '@manna/store';
 import {
   addImageScreen, addScreenFromFolder, addScreensFromFiles, openUrl, urlAsk, askUrl, createWorkspace, mergeReturned, mode, openDocument, openFolder, placeName, placeUrl, recent, refreshRecent,
@@ -83,6 +83,7 @@ export function DocTools() {
       >
         {(close) => (
           <>
+            {m.kind !== 'none' && <span class="popover-label"><AppWindow {...ICON} size={14} /> 새 프로젝트 — 새 창에서 열기</span>}
             <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); openFolder(); }}>
               <FolderGit2 {...ICON} size={16} /> 폴더 열기…
             </button>
@@ -159,6 +160,7 @@ function SourceMenu({ title, icon, label, screenId, kind, align }: { title: stri
     <Menu title={title} icon={icon} label={label} onOpen={refreshRecent} kind={kind} align={align}>
       {(close) => (
         <>
+          <span class="popover-label">{screenId ? `${screenId} 의 새 버전으로` : '이 프로젝트에 탭으로 추가'}</span>
           <button type="button" role="menuitem" class="popover-item" onClick={() => { close(); addScreenFromFolder(screenId); }}>
             <FolderPlus {...ICON} size={16} /> 화면 폴더 선택…
           </button>

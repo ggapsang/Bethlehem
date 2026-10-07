@@ -5,7 +5,7 @@
  * 끌어다 놓은 경로, 예전에 그렇게 고른 최근 목록과 작업 폴더만 읽고 쓴다. URL 화면은 별도 세션의 webview 에서
  * 돌고 이 API 에 닿지 않는다.
  */
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { createHash } from 'node:crypto';
 import { existsSync, watch } from 'node:fs';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
@@ -24,9 +24,6 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const root = app.getAppPath();
 const granted = new Set<string>();
-let win: BrowserWindow | null = null;
-let dirty = false;
-let closing = false;
 
 /* 테스트용 — 미리 허용할 경로, 분리된 사용자 데이터 폴더 */
 for (const p of (process.env.BETHLEHEM_E2E_GRANT ?? '').split(';').filter(Boolean)) granted.add(resolve(p));
@@ -121,13 +118,55 @@ const withExt = (p: string) => (/\.terr\.html$/i.test(p) ? p : p.replace(/\.html
 
 /* ── 작업 폴더 감시 ────────────────────────────────────────────────── */
 
-let current: { dir: string; docId: string; links: Record<string, SourceLink> } | null = null;
+/* ── 프로젝트 창 ─────────────────────────────────────────────────────
+ * 창 하나 = 프로젝트 하나(작업 폴더 · 문서 · URL). 열린 곳, 감시, 저장 상태, 터미널, 띄운 창(빼낸 탭 · 복제 보기)을 창마다 따로 둔다.
+ * 같은 곳을 두 창에서 열지 않는다 — 이미 열려 있으면 그 창으로 옮긴다. */
+interface Project {
+  id: number;
+  win: BrowserWindow;
+  current: { dir: string; docId: string; links: Record<string, SourceLink> } | null;
+  /** 지금 열린 곳 (작업 폴더 · 문서 경로) — 같은 곳을 두 번 열지 않으려고 */
+  place: string | null;
+  unwatch: (() => void)[];
+  dirty: boolean;
+  closing: boolean;
+  screens: Set<BrowserWindow>;
+}
+const projects = new Map<number, Project>();
+/** 띄운 창(webContents id) → 그 창을 띄운 프로젝트 */
+const mirrorOwner = new Map<number, Project>();
+let lastProject: Project | null = null;
+
+function projectOf(sender: WebContents): Project | null {
+  return projects.get(sender.id) ?? mirrorOwner.get(sender.id) ?? null;
+}
+/** 메뉴 · 단축키가 향할 프로젝트 — 지금 앞에 있는 창 */
+function activeProject(): Project | null {
+  const f = BrowserWindow.getFocusedWindow();
+  const p = f && !f.isDestroyed() ? (projects.get(f.webContents.id) ?? mirrorOwner.get(f.webContents.id)) : undefined;
+  return p ?? (lastProject && !lastProject.win.isDestroyed() ? lastProject : null) ?? [...projects.values()][0] ?? null;
+}
+const send = (p: Project | null | undefined, channel: string, ...args: unknown[]) => {
+  if (p && !p.win.isDestroyed()) p.win.webContents.send(channel, ...args);
+};
+/** 대화상자의 부모 — 부른 창 */
+const parentOf = (e: IpcMainInvokeEvent | IpcMainEvent) => BrowserWindow.fromWebContents(e.sender) ?? activeProject()?.win ?? undefined;
+const samePlace = (a: string, b: string) => resolve(a).toLowerCase() === resolve(b).toLowerCase();
+function openedElsewhere(place: string, me?: Project | null): Project | null {
+  for (const p of projects.values()) if (p !== me && p.place && samePlace(p.place, place)) return p;
+  return null;
+}
+function focusProject(p: Project): void {
+  if (p.win.isMinimized()) p.win.restore();
+  p.win.show();
+  p.win.focus();
+}
+
 /** 작업 폴더가 만드는 것들 — 원본 폴더와 같은 곳이어도 화면 파일로 보지 않는다 */
 const WS_NAMES = new Set(['terrarium.json', 'screens', 'blobs', 'dist', 'returned']);
-let unwatch: (() => void)[] = [];
 
 /** 작업 폴더를 바깥에서 고쳤는가 (터미널의 Claude Code · 편집기) — 우리가 쓴 내용과 다르면 렌더러에 알린다 */
-function watchOwnFiles(dir: string): () => void {
+function watchOwnFiles(p: Project, dir: string): () => void {
   const changed = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let w: ReturnType<typeof watch> | null = null;
@@ -139,7 +178,7 @@ function watchOwnFiles(dir: string): () => void {
       const text = await readFile(abs, 'utf8').catch(() => null);
       const mine = ownWrites.get(abs);
       if (text === mine || (text === null && mine === undefined)) continue;
-      win?.webContents.send('workspace-changed', rel);
+      send(p, 'workspace-changed', rel);
       return;
     }
   };
@@ -160,19 +199,19 @@ function watchOwnFiles(dir: string): () => void {
   };
 }
 
-function watchWorkspace(): void {
-  unwatch.forEach((u) => u());
-  unwatch = [];
-  if (!current) return;
-  const { dir } = current;
-  unwatch.push(watchOwnFiles(dir));
-  unwatch.push(watchDir(join(dir, 'returned'), () => win?.webContents.send('returned-changed'), { delay: 800 }));
-  for (const [id, link] of Object.entries(current.links)) {
+function watchWorkspace(p: Project): void {
+  p.unwatch.forEach((u) => u());
+  p.unwatch = [];
+  if (!p.current || p.win.isDestroyed()) return;
+  const { dir } = p.current;
+  p.unwatch.push(watchOwnFiles(p, dir));
+  p.unwatch.push(watchDir(join(dir, 'returned'), () => send(p, 'returned-changed'), { delay: 800 }));
+  for (const [id, link] of Object.entries(p.current.links)) {
     if (!existsSync(link.dir)) continue;
-    unwatch.push(watchDir(link.dir, (file) => {
+    p.unwatch.push(watchDir(link.dir, (file) => {
       const first = file.split(/[\\/]/)[0];
       if (WS_NAMES.has(first) || file.endsWith('.terr.html') || file.endsWith('.tmp')) return;
-      win?.webContents.send('source-changed', { screenId: id, file });
+      send(p, 'source-changed', { screenId: id, file });
     }, { recursive: true, delay: 2000 }));
   }
 }
@@ -222,10 +261,9 @@ function guardWindow(w: BrowserWindow): void {
   });
 }
 
-/** 탭을 빼거나 복제해 띄운 창들 */
-const screenWindows = new Set<BrowserWindow>();
-
-ipcMain.handle('open-screen-window', (_e, o: { screen: string; detach: boolean; x?: number; y?: number }) => {
+ipcMain.handle('open-screen-window', (e, o: { screen: string; detach: boolean; channel: string; x?: number; y?: number }) => {
+  const owner = projects.get(e.sender.id);
+  if (!owner) return false;
   const w = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -241,24 +279,35 @@ ipcMain.handle('open-screen-window', (_e, o: { screen: string; detach: boolean; 
   w.setMenu(null);
   w.once('ready-to-show', () => w.show());
   guardWindow(w);
-  screenWindows.add(w);
+  owner.screens.add(w);
+  const wid = w.webContents.id;
+  mirrorOwner.set(wid, owner);
   w.on('closed', () => {
-    screenWindows.delete(w);
+    owner.screens.delete(w);
+    mirrorOwner.delete(wid);
     // beforeunload 가 못 가는 경우(멈춤 · 강제 종료)에도 본 창이 뺀 탭을 되찾게
-    if (!win?.isDestroyed()) win?.webContents.send('screen-window-closed', { screen: o.screen, detach: o.detach });
+    send(owner, 'screen-window-closed', { screen: o.screen, detach: o.detach });
   });
   const url = new URL(rendererUrl());
   url.searchParams.set('window', 'mirror');
+  url.searchParams.set('channel', o.channel);
   url.searchParams.set('screen', o.screen);
   url.searchParams.set('detach', o.detach ? '1' : '0');
   w.loadURL(url.href);
   return true;
 });
 
-function createWindow(): void {
-  win = new BrowserWindow({
+/** 새 프로젝트 창에서 열 것 — 없으면 첫 화면 */
+export type OpenTarget = { kind: 'folder' | 'doc'; path: string } | { kind: 'url'; url: string };
+
+function createWindow(open?: OpenTarget): Project {
+  // 앞 창에서 조금 비켜 연다 (겹쳐서 새 창이 뜬 줄 모르는 일이 없게)
+  const prev = activeProject()?.win;
+  const at = prev && !prev.isDestroyed() && !prev.isMaximized() ? prev.getBounds() : null;
+  const w = new BrowserWindow({
     width: 1600,
     height: 1000,
+    ...(at ? { x: at.x + 32, y: at.y + 32, width: at.width, height: at.height } : {}),
     minWidth: 1100,
     minHeight: 700,
     title: 'Terrarium',
@@ -267,33 +316,70 @@ function createWindow(): void {
     show: false,
     webPreferences: WEB_PREFS(),
   });
-  win.once('ready-to-show', () => win?.show());
-  guardWindow(win);
-  // 본 창을 닫으면 거기서 띄운 창(빼낸 탭 · 복제 보기)도 닫는다
-  win.on('closed', () => {
-    for (const w of screenWindows) if (!w.isDestroyed()) w.destroy();
-    screenWindows.clear();
+  const p: Project = { id: w.webContents.id, win: w, current: null, place: null, unwatch: [], dirty: false, closing: false, screens: new Set() };
+  projects.set(p.id, p);
+  lastProject = p;
+  w.once('ready-to-show', () => w.show());
+  guardWindow(w);
+  w.on('focus', () => (lastProject = p));
+  // 프로젝트 창을 닫으면 거기서 띄운 창(빼낸 탭 · 복제 보기), 감시, 터미널도 함께
+  w.on('closed', () => {
+    for (const s of p.screens) if (!s.isDestroyed()) s.destroy();
+    p.screens.clear();
+    p.unwatch.forEach((u) => u());
+    p.unwatch = [];
+    killTerminal(p.id);
+    projects.delete(p.id);
+    if (lastProject === p) lastProject = null;
   });
   // 자동 저장이 남아 있으면 마저 저장하고 닫는다
-  win.on('close', (e) => {
-    if (!dirty || closing) return;
+  w.on('close', (e) => {
+    if (!p.dirty || p.closing) return;
     e.preventDefault();
-    win?.webContents.send('request-save');
+    send(p, 'request-save');
     setTimeout(() => {
-      if (closing || !win) return;
-      const choice = dialog.showMessageBoxSync(win, {
+      if (p.closing || w.isDestroyed()) return;
+      const choice = dialog.showMessageBoxSync(w, {
         type: 'warning', buttons: ['닫기', '취소'], defaultId: 1, cancelId: 1, title: 'Terrarium',
         message: '아직 저장되지 않은 변경이 있습니다.', detail: '그래도 닫을까요?',
       });
       if (choice === 0) {
-        closing = true;
-        win?.close();
+        p.closing = true;
+        w.close();
       }
     }, 5000);
   });
 
-  win.loadURL(rendererUrl());
+  const url = new URL(rendererUrl());
+  if (open) {
+    url.searchParams.set('open', open.kind);
+    url.searchParams.set('target', open.kind === 'url' ? open.url : open.path);
+  }
+  w.loadURL(url.href);
+  return p;
 }
+
+/** URL 로 연 문서의 작업 폴더 자리 — 주소마다 하나 */
+function urlDir(url: string): string {
+  const u = new URL(url);
+  const slug = `${u.host}${u.pathname}`.replace(/[^a-z0-9가-힣.-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'site';
+  const hash = createHash('sha1').update(u.href).digest('hex').slice(0, 6);
+  return join(SITES(), `${slug}-${hash}`);
+}
+
+/** 새 프로젝트 창 — 이미 다른 창에서 열려 있으면 그 창을 앞으로 */
+ipcMain.handle('new-window', (_e, open?: OpenTarget) => {
+  if (open) {
+    if (open.kind !== 'url') guard(open.path);
+    const there = openedElsewhere(open.kind === 'url' ? urlDir(open.url) : open.path);
+    if (there) {
+      focusProject(there);
+      return 'focused';
+    }
+  }
+  createWindow(open);
+  return 'opened';
+});
 
 /* ── IPC ──────────────────────────────────────────────────────────────── */
 
@@ -322,9 +408,7 @@ ipcMain.handle('recent', () => ({
 
 ipcMain.handle('ws-for-url', async (_e, url: string) => {
   const u = new URL(url);
-  const slug = `${u.host}${u.pathname}`.replace(/[^a-z0-9가-힣.-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'site';
-  const hash = createHash('sha1').update(u.href).digest('hex').slice(0, 6);
-  const dir = join(SITES(), `${slug}-${hash}`);
+  const dir = urlDir(u.href);
   await mkdir(dir, { recursive: true });
   grant(dir);
   settings.recentUrls = [{ url: u.href, dir, at: new Date().toISOString() }, ...(settings.recentUrls ?? []).filter((r) => r.url !== u.href)].slice(0, 10);
@@ -333,8 +417,8 @@ ipcMain.handle('ws-for-url', async (_e, url: string) => {
 });
 
 /* 단일 문서 */
-ipcMain.handle('open-file', async () => {
-  const r = await dialog.showOpenDialog(win!, {
+ipcMain.handle('open-file', async (e) => {
+  const r = await dialog.showOpenDialog(parentOf(e)!, {
     title: '테라리움 문서 열기',
     defaultPath: settings.lastDocDir,
     filters: [{ name: '테라리움 문서', extensions: [EXT, 'html', 'htm'] }],
@@ -354,10 +438,10 @@ ipcMain.handle('open-path', async (_e, p: string) => {
 });
 
 /** 단일 문서 저장 — path 가 있으면 그대로 덮어쓰기, saveAs 이거나 path 가 없으면 대화상자 */
-ipcMain.handle('save-file', async (_e, o: { html: string; path: string | null; suggestedName: string; saveAs: boolean }) => {
+ipcMain.handle('save-file', async (e, o: { html: string; path: string | null; suggestedName: string; saveAs: boolean }) => {
   let target = o.path && !o.saveAs && allowed(o.path) ? resolve(o.path) : null;
   if (!target) {
-    const r = await dialog.showSaveDialog(win!, {
+    const r = await dialog.showSaveDialog(parentOf(e)!, {
       title: o.saveAs ? '다른 이름으로 저장' : '테라리움 문서 저장',
       defaultPath: join(o.path ? dirname(o.path) : (settings.lastDocDir ?? app.getPath('documents')), o.suggestedName),
       filters: DOC_FILTERS,
@@ -371,8 +455,8 @@ ipcMain.handle('save-file', async (_e, o: { html: string; path: string | null; s
 });
 
 /* 화면 폴더 */
-ipcMain.handle('pick-folder', async () => {
-  const r = await dialog.showOpenDialog(win!, {
+ipcMain.handle('pick-folder', async (e) => {
+  const r = await dialog.showOpenDialog(parentOf(e)!, {
     title: '화면 폴더 선택 (index.html 이 들어 있는 폴더)',
     defaultPath: settings.lastFolderDir,
     properties: ['openDirectory'],
@@ -405,8 +489,8 @@ ipcMain.handle('source-check', async (_e, o: { link: SourceLink; files: Record<s
 
 /* 작업 폴더 */
 /* 그림 화면 */
-ipcMain.handle('pick-image', async () => {
-  const r = await dialog.showOpenDialog(win!, {
+ipcMain.handle('pick-image', async (e) => {
+  const r = await dialog.showOpenDialog(parentOf(e)!, {
     title: '그림 열기 (png · jpg)',
     defaultPath: settings.lastFolderDir,
     filters: [{ name: '그림', extensions: IMAGE_EXT }],
@@ -416,8 +500,8 @@ ipcMain.handle('pick-image', async () => {
   return r.filePaths.map((f) => grant(f));
 });
 /* 화면으로 가져올 파일 — 다른 테라리움 문서(그 안의 화면들)나 그림, 여러 개 */
-ipcMain.handle('pick-screen-files', async () => {
-  const r = await dialog.showOpenDialog(win!, {
+ipcMain.handle('pick-screen-files', async (e) => {
+  const r = await dialog.showOpenDialog(parentOf(e)!, {
     title: '화면 가져오기 — 테라리움 문서 · 그림',
     defaultPath: settings.lastDocDir ?? settings.lastFolderDir,
     filters: [
@@ -431,14 +515,14 @@ ipcMain.handle('pick-screen-files', async () => {
   return r.filePaths.map((f) => grant(f));
 });
 ipcMain.handle('read-doc', async (_e, p: string) => readFile(guard(p), 'utf8'));
-ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools());
+ipcMain.on('toggle-devtools', (e) => e.sender.toggleDevTools());
 /** 터미널에서 Claude Code 를 띄울 때 읽힐 작업 폴더 형식 문서 */
 ipcMain.handle('format-doc', () => beside('resources/WORKSPACE_FORMAT.md', 'docs/WORKSPACE_FORMAT.md'));
 ipcMain.handle('pack-image', async (_e, path: string) => packImage(guard(path)));
 
 /** 폴더 고르기 — 비어 있지 않아도 된다. 무엇이 들었는지는 ws-inspect 로 본다 */
-ipcMain.handle('ws-pick', async (_e, o: { title?: string; defaultPath?: string } = {}) => {
-  const r = await dialog.showOpenDialog(win!, {
+ipcMain.handle('ws-pick', async (e, o: { title?: string; defaultPath?: string } = {}) => {
+  const r = await dialog.showOpenDialog(parentOf(e)!, {
     title: o.title ?? '폴더 열기 — 작업 폴더, 테라리움 문서가 든 폴더, 화면 폴더, 빈 폴더',
     defaultPath: o.defaultPath ?? (settings.lastWorkspace ? dirname(settings.lastWorkspace) : app.getPath('documents')),
     properties: ['openDirectory', 'createDirectory'],
@@ -465,35 +549,58 @@ ipcMain.handle('ws-inspect', async (_e, dir: string) => {
   return { isWorkspace: isWorkspace(abs), docs, prototype, empty: names.length === 0 };
 });
 
-ipcMain.handle('ws-open', async (_e, dir: string) => {
+ipcMain.handle('ws-open', async (e, dir: string) => {
   const abs = guard(dir);
+  const p = projects.get(e.sender.id);
+  const there = openedElsewhere(abs, p);
+  if (there) {
+    focusProject(there);
+    throw new Error(`${basename(abs)} 은 이미 다른 창에서 열려 있습니다 — 그 창으로 옮겼습니다.`);
+  }
   const data = await readWorkspace(abs);
-  current = { dir: abs, docId: data.doc.id, links: data.links };
+  if (!p) throw new Error('프로젝트 창이 아닙니다.');
+  p.current = { dir: abs, docId: data.doc.id, links: data.links };
+  p.place = abs;
   // 이 작업 폴더의 화면들이 연결된 원본 폴더 — 바뀐 것을 비교하고 새 버전으로 다시 읽을 수 있게
   for (const l of Object.values(data.links)) if (existsSync(l.dir)) granted.add(resolve(l.dir));
   remember('workspace', abs);
-  watchWorkspace();
+  watchWorkspace(p);
   return { ...data, last: settings.lastScreen?.[abs] ?? null };
 });
 
 ipcMain.handle('ws-last', () => (settings.lastWorkspace && existsSync(join(settings.lastWorkspace, 'terrarium.json')) ? settings.lastWorkspace : null));
 
-ipcMain.handle('ws-save', async (_e, o: { dir: string; doc: MannaDoc; blobs: [string, EncodedBlob][]; links: Record<string, SourceLink> }) => {
+ipcMain.handle('ws-save', async (e, o: { dir: string; doc: MannaDoc; blobs: [string, EncodedBlob][]; links: Record<string, SourceLink> }) => {
   const abs = guard(o.dir);
+  const p = projects.get(e.sender.id);
   await writeWorkspace(abs, o.doc, o.blobs, o.links);
-  const linksChanged = JSON.stringify(current?.links) !== JSON.stringify(o.links);
-  current = { dir: abs, docId: o.doc.id, links: o.links };
-  if (linksChanged) watchWorkspace();
+  if (p) {
+    const linksChanged = p.current?.dir !== abs || JSON.stringify(p.current?.links) !== JSON.stringify(o.links);
+    p.current = { dir: abs, docId: o.doc.id, links: o.links };
+    p.place = abs;
+    if (linksChanged) watchWorkspace(p);
+  }
   remember('workspace', abs);
   return true;
 });
 
 ipcMain.handle('ws-bake', async (_e, o: { dir: string; title: string; html: string }) => bakeDist(guard(o.dir), o.title, o.html));
 
-ipcMain.handle('ws-returned', async () => (current ? listReturned(current.dir, current.docId) : []));
-ipcMain.handle('ws-read-returned', async (_e, name: string) => (current ? readReturned(current.dir, name) : null));
-ipcMain.handle('ws-mark-merged', async (_e, name: string) => current && markMerged(current.dir, name));
-ipcMain.handle('ws-reveal', async (_e, what: 'dist' | 'returned' | 'root') => {
+const cur = (e: IpcMainInvokeEvent | IpcMainEvent) => projectOf(e.sender)?.current ?? null;
+ipcMain.handle('ws-returned', async (e) => {
+  const current = cur(e);
+  return current ? listReturned(current.dir, current.docId) : [];
+});
+ipcMain.handle('ws-read-returned', async (e, name: string) => {
+  const current = cur(e);
+  return current ? readReturned(current.dir, name) : null;
+});
+ipcMain.handle('ws-mark-merged', async (e, name: string) => {
+  const current = cur(e);
+  return current && markMerged(current.dir, name);
+});
+ipcMain.handle('ws-reveal', async (e, what: 'dist' | 'returned' | 'root') => {
+  const current = cur(e);
   if (!current) return;
   const p = what === 'root' ? current.dir : join(current.dir, what);
   await mkdir(p, { recursive: true });
@@ -505,16 +612,20 @@ ipcMain.on('ws-remember-screen', (_e, o: { dir: string; screen: string; version:
   saveSettings().catch(() => {});
 });
 
-ipcMain.on('ws-close', () => {
-  current = null;
-  watchWorkspace();
+ipcMain.on('ws-close', (e) => {
+  const p = projects.get(e.sender.id);
+  if (p) {
+    p.current = null;
+    p.place = null;
+    watchWorkspace(p);
+  }
   settings.lastWorkspace = undefined;
   saveSettings().catch(() => {});
 });
 
 /* 다른 이름으로 — 작업 폴더에서 보낼 파일을 원하는 곳에 */
-ipcMain.handle('export-as', async (_e, o: { html: string; suggestedName: string }) => {
-  const r = await dialog.showSaveDialog(win!, {
+ipcMain.handle('export-as', async (e, o: { html: string; suggestedName: string }) => {
+  const r = await dialog.showSaveDialog(parentOf(e)!, {
     title: '다른 이름으로 저장',
     defaultPath: join(settings.lastDocDir ?? app.getPath('documents'), o.suggestedName),
     filters: DOC_FILTERS,
@@ -529,7 +640,7 @@ ipcMain.handle('export-as', async (_e, o: { html: string; suggestedName: string 
 /* 창 안의 영역을 그림으로 — 피커 멈춤 그림과 Comment 의 '달 때 화면' (webview 픽셀도 들어간다) */
 ipcMain.handle('capture-rect', async (e, r: { x: number; y: number; width: number; height: number }) => {
   // 부른 창을 찍는다 — 빼낸 창에서 단 Comment 도 그 창의 화면이 들어간다
-  const w = BrowserWindow.fromWebContents(e.sender) ?? win;
+  const w = BrowserWindow.fromWebContents(e.sender);
   if (!w) return null;
   const img = await w.webContents.capturePage(r);
   const size = img.getSize();
@@ -538,26 +649,31 @@ ipcMain.handle('capture-rect', async (e, r: { x: number; y: number; width: numbe
 
 ipcMain.handle('site-snapshot', async (_e, guestId: number) => snapshotSite(guestId));
 
-ipcMain.on('set-state', (e, s: { title: string; dirty: boolean }) => {
-  if (e.sender !== win?.webContents) return; // 띄운 창은 저장을 본 창에 맡긴다
-  dirty = s.dirty;
-  win?.setTitle('Terrarium');
-  win?.setDocumentEdited(s.dirty);
+ipcMain.on('set-state', (e, s: { title: string; dirty: boolean; place?: string | null }) => {
+  const p = projects.get(e.sender.id);
+  if (!p) return; // 띄운 창은 저장을 본 창에 맡긴다
+  p.dirty = s.dirty;
+  if (s.place !== undefined) p.place = s.place;
+  // 창이 여럿이면 작업 표시줄에서 구분되게 — 열린 곳의 이름
+  p.win.setTitle(s.title ? `${s.title} — Terrarium` : 'Terrarium');
+  p.win.setDocumentEdited(s.dirty);
 });
 
-ipcMain.on('close-now', () => {
-  closing = true;
-  win?.close();
+ipcMain.on('close-now', (e) => {
+  const p = projects.get(e.sender.id);
+  if (!p) return;
+  p.closing = true;
+  p.win.close();
 });
 
 app.whenReady().then(async () => {
-  Menu.setApplicationMenu(buildMenu(() => win));
+  Menu.setApplicationMenu(buildMenu(() => activeProject()?.win ?? null, () => createWindow()));
   await loadSettings();
   // 녹화 — 화면 공유를 요청하면 묻지 않고 이 창(요청한 프레임)을 건넨다
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     callback({ video: request.frame ?? undefined });
   });
-  setupTerminal(() => win, () => current?.dir ?? null);
+  setupTerminal((sender) => projectOf(sender)?.current?.dir ?? null);
   createWindow();
 });
 

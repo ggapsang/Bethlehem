@@ -285,7 +285,8 @@ export const appSpecs: Spec[] = [
       try {
         const menu = await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.map((m) => m.label) ?? []);
         check('창 메뉴', ['파일', '편집', '화면', '보기', '도움말'].every((l) => menu.some((m) => m.startsWith(l))), menu.join(' '));
-        check('창 제목 Terrarium', (await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle())) === 'Terrarium');
+        const title = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle());
+        check('창 제목 — 열린 곳 이름 — Terrarium', / — Terrarium$/.test(title) && title.startsWith('terr-ws-'), title);
         await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.find((m) => m.label.startsWith('도움말'))?.submenu?.items.find((i) => i.label === '사용자 가이드')?.click());
         check('가이드 창 — 마크다운을 그린다', !!(await until(() => page.$('.guide-win .md-render table'), 5000)));
         const f0 = await page.$eval('.guide-body', (el) => parseFloat(getComputedStyle(el).fontSize));
@@ -418,6 +419,62 @@ export const appSpecs: Spec[] = [
         // 새 파일을 하나 더해도 — 원본 폴더 안의 새 파일
         writeFileSync(join(src, 'added.js'), 'console.log(1);');
         check('새 파일도 목록에', !!(await until(async () => ((await page.getAttribute('.src-stale', 'title')) ?? '').includes('added.js'), 10000)));
+      } finally {
+        await app.close();
+      }
+    },
+  },
+  {
+    name: 'app-projects',
+    kind: 'app',
+    files: [new RegExp(`^${B}main/(index|menu|terminal)\\.ts$`), new RegExp(`^${B}renderer/src/(session|Tools|main|sync)\\.tsx?$`), new RegExp(`^${B}(shared|preload)/`)],
+    async run() {
+      const { app, page, ws, src } = await appWithScreen();
+      try {
+        await until(() => existsSync(join(ws, 'screens', 'SCR-001', 'screen.json')), 8000);
+        await page.dblclick('.tab[data-id="SCR-001"] .tab-main');
+        await page.fill('.tab-input', '첫 프로젝트 화면');
+        await page.keyboard.press('Enter');
+        // 열기 = 새 프로젝트 — 프로젝트가 열린 창에서 폴더를 열면 새 창, 지금 것은 그대로
+        const wsB = tempDir('wsB');
+        await page.click('.tb-place');
+        check('열기 메뉴에 "새 프로젝트 — 새 창에서 열기"', !!(await page.$('.popover-label:has-text("새 창에서 열기")')));
+        await nextOpen(app, wsB);
+        const nwP = app.waitForEvent('window');
+        await page.click('.popover-item:has-text("폴더 열기")');
+        const pb = await nwP;
+        await pb.waitForSelector('.tb-place', { timeout: 15000 });
+        check('새 창에서 새 프로젝트가 열린다', !!(await until(() => existsSync(join(wsB, 'terrarium.json')), 10000)) && ((await pb.textContent('.tb-place')) ?? '').includes(wsB.split(/[\\/]/).pop()!));
+        check('원래 창의 프로젝트는 그대로', ((await page.textContent('.tb-place')) ?? '').includes(ws.split(/[\\/]/).pop()!) && !!(await page.$('.tab[data-id="SCR-001"]')));
+        const titles = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((w) => w.getTitle()));
+        check('창 제목으로 두 프로젝트가 구분된다', new Set(titles).size === 2, titles.join(' | '));
+        // ＋ = 이 프로젝트에 추가 — 새 창의 프로젝트에만 들어간다
+        await nextOpen(app, src);
+        await pb.click('.welcome button:has-text("화면 폴더 추가")');
+        await pb.waitForSelector('.file-list');
+        await pb.click('.modal button[type=submit]');
+        check('추가는 그 창의 프로젝트에만', !!(await until(() => existsSync(join(wsB, 'screens', 'SCR-001', 'screen.json')), 10000)) && readdirSync(join(ws, 'screens')).length === 1);
+        await pb.click('button[aria-label="화면 추가"]');
+        check('＋ 메뉴에 "이 프로젝트에 탭으로 추가"', !!(await pb.$('.popover-label:has-text("이 프로젝트에 탭으로 추가")')));
+        await pb.keyboard.press('Escape');
+        await wait(1500);
+        check('창마다 따로 저장 — 원래 프로젝트의 화면 이름 그대로', JSON.parse(readFileSync(join(ws, 'screens', 'SCR-001', 'screen.json'), 'utf8')).title === '첫 프로젝트 화면' && JSON.parse(readFileSync(join(wsB, 'screens', 'SCR-001', 'screen.json'), 'utf8')).title !== '첫 프로젝트 화면');
+        // 이미 열린 곳을 다시 열면 새 창 대신 그 창으로
+        await pb.click('.tb-place');
+        const before = app.windows().length;
+        await pb.click(`.popover-recent:has-text("${ws.split(/[\\/]/).pop()}")`);
+        await wait(1500);
+        check('이미 다른 창에 열린 프로젝트 — 새 창을 만들지 않는다', app.windows().length === before);
+        // 복제 보기는 그 창의 프로젝트에서 — 다른 프로젝트 창이 대답하지 않는다
+        await page.click('.tab[data-id="SCR-001"] .tab-main', { button: 'right' });
+        const dupP = app.waitForEvent('window');
+        await page.click('.popover-item:has-text("복제 보기")');
+        const dup = await dupP;
+        await dup.waitForSelector('.tab[data-id="SCR-001"]', { timeout: 10000 });
+        check('복제 보기는 자기 프로젝트의 화면', ((await dup.textContent('.tab[data-id="SCR-001"]')) ?? '').includes('첫 프로젝트 화면'));
+        await dup.close();
+        await pb.close();
+        check('새 창을 닫아도 원래 창은 그대로', !page.isClosed() && !!(await page.$('.tab[data-id="SCR-001"]')));
       } finally {
         await app.close();
       }

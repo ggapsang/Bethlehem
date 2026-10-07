@@ -9,8 +9,8 @@ import icon from '@manna/assets/favicon.png';
 import { askName, dirty, doc, rev, screenId, user, versionNo } from '@manna/store';
 import type { WindowTools } from '@manna/stage/ScreenTabs';
 import { ImportDialog } from './ImportDialog';
-import { docAsk, handleDrop, host, importing, mode, rememberScreen, save, start, urlAsk } from './session';
-import { mirrorHost, startMainSync, startMirror } from './sync';
+import { docAsk, handleDrop, host, importing, mode, openDocument, openFolder, openUrl, placeName, rememberScreen, save, start, urlAsk } from './session';
+import { channelName, mirrorHost, startMainSync, startMirror } from './sync';
 import { runMenu } from './menu';
 import { AddScreenMenu, DeleteScreenButton, DocTools, NewVersionMenu } from './Tools';
 import { UrlDialog } from './UrlDialog';
@@ -22,22 +22,31 @@ const api = window.bethlehem;
 
 /** 탭을 새 창으로 빼기 · 복제 보기 — 띄운 창은 본 창과 문서를 나눠 쓴다(sync.ts) */
 const windowTools: WindowTools = {
-  tearOff: (id, x, y) => void api.openScreenWindow({ screen: id, detach: true, x, y }),
-  duplicate: (id) => void api.openScreenWindow({ screen: id, detach: false }),
+  tearOff: (id, x, y) => void api.openScreenWindow({ screen: id, detach: true, channel: channelName, x, y }),
+  duplicate: (id) => void api.openScreenWindow({ screen: id, detach: false, channel: channelName }),
 };
 
 function Bethlehem() {
   const [dropping, setDropping] = useState(false);
 
   useEffect(() => {
-    window.bethlehem.setState({ title: 'Terrarium', dirty: dirty.value });
+    const m = mode.value;
+    window.bethlehem.setState({ title: m.kind === 'none' ? '' : placeName(), dirty: dirty.value, place: m.kind === 'workspace' ? m.dir : m.kind === 'file' ? m.path : null });
   }, [mode.value, dirty.value]);
 
   useEffect(rememberScreen, [screenId.value, versionNo.value]);
 
   useEffect(() => {
     if (!user.value) askName.value = true;
-    start();
+    // 새 창으로 연 프로젝트 — 주소로 받은 것을 이 창에서 연다
+    start().then(() => {
+      const kind = q.get('open');
+      const target = q.get('target');
+      if (!target) return;
+      if (kind === 'folder') openFolder(target);
+      else if (kind === 'doc') openDocument(target);
+      else if (kind === 'url') openUrl(target);
+    });
     // Ctrl+` — 터미널 펴기/접기 (VS Code 와 같다)
     const onTermKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && (e.key === '`' || e.code === 'Backquote')) {

@@ -12,7 +12,7 @@ import { buildHtml, flushAutosave, save, suggestedName } from '@manna/host';
 import {
   tabMarks, tabPolicy, addBlobs, blobs, dirty, doc, draft, fileName, loadDocument, mutate, notify, saveState, screenId, selectScreen, undo, user, versionNo,
 } from '@manna/store';
-import type { RecentItem, RecentUrl, Returned, SourceChange, SourceLink } from '../../shared/api';
+import type { OpenTarget, RecentItem, RecentUrl, Returned, SourceChange, SourceLink } from '../../shared/api';
 
 const api = window.bethlehem;
 
@@ -193,6 +193,16 @@ export function registerFromSource(id: string): void {
 
 const sourceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** 열기는 새 프로젝트다 — 이 창에 이미 프로젝트가 열려 있으면 새 창에서 열고 지금 것은 그대로 둔다.
+ *  지금 프로젝트에 화면을 더하는 것은 ＋ (화면 폴더 · URL · 파일). 처리했으면 true */
+async function inNewWindow(t: OpenTarget): Promise<boolean> {
+  if (mode.peek().kind === 'none') return false;
+  await flushAutosave(host).catch(() => {});
+  const r = await api.newWindow(t);
+  if (r === 'focused') notify('이미 다른 창에서 열려 있어 그 창을 앞으로 가져왔습니다.');
+  return true;
+}
+
 /** 작업 폴더를 그대로 연다 */
 export async function openWorkspace(dir: string): Promise<boolean> {
   try {
@@ -214,6 +224,7 @@ export async function openWorkspace(dir: string): Promise<boolean> {
 /** URL 을 문서로 연다 — 탭에 덧붙이지 않고 그 주소만의 문서. 작업 폴더는 프로그램 안에 두고, 같은 주소를 다시 열면 이어서 */
 export async function openUrl(url: string): Promise<boolean> {
   try {
+    if (await inNewWindow({ kind: 'url', url })) return true;
     await flushAutosave(host).catch(() => {});
     const { dir, exists } = await api.wsForUrl(url);
     await refreshRecent();
@@ -252,6 +263,7 @@ export async function openFolder(dir?: string): Promise<boolean> {
   try {
     const target = dir ?? (await api.wsPick());
     if (!target) return false;
+    if (await inNewWindow({ kind: 'folder', path: target })) return true;
     const info = await api.wsInspect(target);
     if (info.isWorkspace) return openWorkspace(target);
     if (info.docs.length > 1) {
@@ -303,7 +315,7 @@ export async function createWorkspace(dir?: string, quiet = false): Promise<bool
     }));
     if (!target) return false;
     if ((await api.wsInspect(target)).isWorkspace) {
-      notify(`${basename(target)} 은 이미 작업 폴더입니다.`, 'error', { label: '그 폴더 열기', run: () => openWorkspace(target) });
+      notify(`${basename(target)} 은 이미 작업 폴더입니다.`, 'error', { label: '그 폴더 열기', run: () => openFolder(target) });
       return false;
     }
     saved = new Set();
@@ -349,8 +361,10 @@ export function openHtml(path: string, name: string, html: string): void {
 export async function openDocument(path?: string): Promise<void> {
   try {
     await flushAutosave(host).catch(() => {});
+    if (path && (await inNewWindow({ kind: 'doc', path }))) return;
     const f = path ? await api.openPath(path) : await api.openFile();
-    if (f) openHtml(f.path, f.name, f.html);
+    if (!f || (await inNewWindow({ kind: 'doc', path: f.path }))) return;
+    openHtml(f.path, f.name, f.html);
   } catch (e) {
     notify(`문서를 열지 못했습니다: ${clean((e as Error).message)}`, 'error');
   }
@@ -379,7 +393,7 @@ export async function handleDrop(files: FileList): Promise<void> {
   if (!file) return;
   const g = await api.grantDropped(file);
   if (!g) return notify('끌어다 놓은 항목의 경로를 알 수 없습니다.', 'error');
-  if (g.isWorkspace) await openWorkspace(g.path);
+  if (g.isWorkspace) await openFolder(g.path); // 프로젝트가 열려 있으면 새 창으로
   else if (g.isDir) {
     if (mode.peek().kind === 'none') return void (await openFolder(g.path));
     importing.value = { dir: g.path };
@@ -387,7 +401,7 @@ export async function handleDrop(files: FileList): Promise<void> {
   } else if (/\.html?$/i.test(g.name)) {
     if (mode.peek().kind === 'workspace') {
       await addScreensFromFiles([g.path]);
-      notify(`${g.name} 의 화면을 이 문서로 가져왔습니다.`, 'info', { label: '대신 그 문서 열기', run: () => openDocument(g.path) });
+      notify(`${g.name} 의 화면을 이 문서로 가져왔습니다.`, 'info', { label: '새 창에서 그 문서 열기', run: () => openDocument(g.path) });
     } else await openDocument(g.path);
   }
   else if (IMAGE_RE.test(g.name)) {
