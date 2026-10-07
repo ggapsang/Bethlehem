@@ -1,7 +1,7 @@
 /* 연결 — 화면 위 연결 영역, 영역 그리기, 잇는 중 안내 막대, 화면의 연결 목록, 돌아가기 (links.ts) */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
-import { ArrowLeft, Link2, ListTree, Monitor, SquareDashed, X } from 'lucide-preact';
+import { ArrowLeft, Link2, ListTree, Monitor, Search, SquareDashed, X } from 'lucide-preact';
 import type { Connection, LinkEnd } from '@core';
 import { displayNo } from '@core';
 import {
@@ -116,6 +116,7 @@ export function LinkingBar() {
   const sel = selected.value;
   const start = useRef<string | null | undefined>(undefined);
   const [list, setList] = useState(false);
+  const query = useRef('');
   // 시작한 뒤에 새로 고른 Comment 가 반대쪽이다 (시작할 때 골라져 있던 것은 아니다)
   useEffect(() => {
     if (!l) {
@@ -137,6 +138,13 @@ export function LinkingBar() {
     const esc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.stopPropagation();
+      // 검색어가 있으면 먼저 지운다 (엑셀 필터처럼)
+      const box = document.activeElement as HTMLInputElement | null;
+      if (box?.classList.contains('link-search') && box.value) {
+        box.value = '';
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
       if (areaTool.peek()) areaTool.value = false;
       else cancelLinking();
     };
@@ -161,27 +169,82 @@ export function LinkingBar() {
       )}
       <span class="link-list-wrap">
         <button type="button" class="btn btn-sm" aria-expanded={list} onClick={() => setList(!list)}><ListTree {...ICON} size={14} /> 목록에서</button>
-        {list && (
-          <div class="popover link-list" role="menu">
-            {d.screens.map((x) => (
-              <div key={x.id} class="link-list-screen">
-                <button type="button" role="menuitem" class="popover-item" onClick={() => finishLinking({ kind: 'screen', screen: x.id })}>
-                  <Monitor {...ICON} size={14} /> <b class="mono">{x.id}</b> <span class="ellipsis">{x.title}</span> <span class="muted small">화면 전체</span>
-                </button>
-                {x.annotations.map((a) => (
-                  <button key={a.id} type="button" role="menuitem" class="popover-item link-list-ann" onClick={() => finishLinking({ kind: 'comment', screen: x.id, ann: a.id })}>
-                    <span class="mono">{x.versions.length > 1 ? `v${a.version} ` : ''}#{displayNo(x, a)}</span>
-                    <span class="ellipsis">{endLabel(d, { kind: 'comment', screen: x.id, ann: a.id }).text}</span>
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
+        {list && <LinkList query={query} />}
       </span>
       <button type="button" class="btn btn-sm btn-ghost" onClick={cancelLinking}>취소</button>
     </div>,
     document.body,
+  );
+}
+
+/** 목록에서 고르기 — 모든 탭의 화면 · Comment 를 펼쳐 두고, 위 검색칸으로 거른다 (엑셀 필터처럼).
+ *  탭 id · 화면 이름 · #번호 · 제목 · 본문 · 쓴 사람 · 담당에서 찾는다. 여러 낱말은 모두 들어 있는 것만. Enter 는 첫 결과 */
+function LinkList({ query }: { query: { current: string } }) {
+  const [q, setQ] = useState(query.current);
+  // 펼치면 바로 검색칸에 쓴다 (autoFocus 는 나중에 붙인 요소에는 듣지 않는다)
+  const box = useRef<HTMLInputElement>(null);
+  useEffect(() => box.current?.focus(), []);
+  const d = doc.value;
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = (text: string) => words.every((w) => text.includes(w));
+  const groups = d.screens
+    .map((x) => {
+      const head = `${x.id} ${x.title}`.toLowerCase();
+      const anns = x.annotations.filter((a) => {
+        const no = displayNo(x, a);
+        return hit(`${head} #${no} ${x.id} #${no} v${a.version} ${a.title ?? ''} ${a.body} ${a.author} ${a.assignee ?? ''}`.toLowerCase());
+      });
+      return { x, screenHit: hit(head), anns };
+    })
+    .filter((g) => g.screenHit || g.anns.length);
+  const count = groups.reduce((n, g) => n + g.anns.length, 0);
+  const first = groups[0];
+  const pickFirst = () => {
+    if (!first) return;
+    const a = first.anns[0];
+    finishLinking(a ? { kind: 'comment', screen: first.x.id, ann: a.id } : { kind: 'screen', screen: first.x.id });
+  };
+  return (
+    <div class="popover link-list" role="menu">
+      <div class="link-search-row">
+        <Search size={14} />
+        <input
+          class="input input-sm link-search"
+          placeholder="검색 — SCR-002, #3, 제목 · 본문 · 사람"
+          aria-label="연결할 곳 검색"
+          value={q}
+          ref={box}
+          onInput={(e) => {
+            query.current = e.currentTarget.value;
+            setQ(e.currentTarget.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              pickFirst();
+            }
+          }}
+        />
+        <span class="muted small">{words.length ? `${count}개` : ''}</span>
+      </div>
+      <div class="link-list-body">
+        {groups.length === 0 && <span class="popover-item muted small">맞는 것이 없습니다</span>}
+        {groups.map(({ x, anns }) => (
+          <div key={x.id} class="link-list-screen">
+            <button type="button" role="menuitem" class="popover-item" onClick={() => finishLinking({ kind: 'screen', screen: x.id })}>
+              <Monitor {...ICON} size={14} /> <b class="mono">{x.id}</b> <span class="ellipsis">{x.title}</span> <span class="muted small">화면 전체</span>
+            </button>
+            {anns.map((a) => (
+              <button key={a.id} type="button" role="menuitem" class="popover-item link-list-ann" onClick={() => finishLinking({ kind: 'comment', screen: x.id, ann: a.id })}>
+                <span class="mono">{x.versions.length > 1 ? `v${a.version} ` : ''}#{displayNo(x, a)}</span>
+                <span class="ellipsis">{endLabel(d, { kind: 'comment', screen: x.id, ann: a.id }).text}</span>
+                <span class="muted small link-list-who">{a.assignee ? `${a.author} → ${a.assignee}` : a.author}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

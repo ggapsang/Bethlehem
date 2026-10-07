@@ -42,7 +42,7 @@ export async function until<T>(fn: () => T | Promise<T>, ms = 15000): Promise<T 
 /* ── 스테이지 ─────────────────────────────────────────────────────── */
 export async function screenFrame(page: Page): Promise<Frame> {
   for (let i = 0; i < 300; i++) {
-    const h = await page.$('iframe.stage-iframe');
+    const h = await page.$('iframe.stage-iframe:not(.is-hidden)');
     const f = h && (await h.contentFrame());
     if (f && (await f.evaluate(() => !!(window as unknown as { __manna?: unknown }).__manna).catch(() => false))) return f;
     await page.waitForTimeout(100);

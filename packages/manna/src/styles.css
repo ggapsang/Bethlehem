@@ -800,7 +800,11 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .link-bar-from { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 .link-bar-from b, .link-row b { font-family: var(--font-mono, monospace); }
 .link-list-wrap { position: relative; }
-.link-list { position: absolute; top: calc(100% + 6px); right: 0; width: 380px; max-height: 60vh; overflow: auto; white-space: normal; }
+.link-list { position: absolute; top: calc(100% + 6px); right: 0; width: 420px; max-height: 64vh; display: flex; flex-direction: column; overflow: hidden; white-space: normal; padding: 0; }
+.link-search-row { display: flex; align-items: center; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); color: var(--text-secondary); flex: none; }
+.link-search { flex: 1; min-width: 0; }
+.link-list-body { overflow: auto; padding: 4px; }
+.link-list-who { margin-left: auto; flex: none; }
 .link-list-screen + .link-list-screen { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
 .link-list-ann { padding-left: 28px; gap: 8px; }
 .link-menu-btn { position: relative; }
@@ -815,3 +819,6 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .link-chip .link-x { border-radius: 0 4px 4px 0; }
 .link-chip .link-go:only-child { border-radius: 4px; }
 .link-add { gap: 4px; }
+/* 탭마다 띄워 둔 화면 틀 — 지금 탭이 아니면 숨겨 둔다 (내리지 않는다) */
+.stage-iframe.is-hidden, .stage-webview.is-hidden { visibility: hidden; pointer-events: none; }
+.stage.is-behind { position: absolute; left: 0; right: 0; bottom: 0; height: 0; visibility: hidden; pointer-events: none; }

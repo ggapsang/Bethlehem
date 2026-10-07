@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
 import { parseManna } from '../../packages/core/src';
 import {
-  CHROME, OUT, SITE, appWithScreen, splashDone, check, comments, ctrlPick, launchApp, nextOpen, openScreen, screenFrame, stagePoint, tempDir, typeIn, until, wait, type Spec,
+  CHROME, OUT, SITE, appWithScreen, splashDone, visibleMarkers, check, comments, ctrlPick, launchApp, nextOpen, openScreen, screenFrame, stagePoint, tempDir, typeIn, until, wait, type Spec,
 } from './lib';
 
 const B = 'apps/bethlehem/';
@@ -62,7 +62,7 @@ export const appSpecs: Spec[] = [
         await page.click('.welcome button:has-text("URL 추가")');
         await page.fill('.modal input[aria-label="주소"]', SITE);
         await page.click('.modal button[type=submit]');
-        await until(() => page.$('webview.stage-webview'), 8000);
+        await until(() => page.$('webview.stage-webview:not(.is-hidden)'), 8000);
         await until(async () => !(await page.$('.stage-note')), 30000);
         await wait(3000);
         await ctrlPick(page, await stagePoint(page, 800, 450));
@@ -99,11 +99,15 @@ export const appSpecs: Spec[] = [
         await page.click('.popover-item:has-text("URL")');
         await page.fill('.modal input[aria-label="주소"]', SITE);
         await page.click('.modal button[type=submit]');
-        check('다른 URL 탭은 실시간', !!(await until(async () => (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-002' && !!(await page.$('webview.stage-webview')) && !(await page.$('.gallery')), 8000)));
+        check('다른 URL 탭은 실시간', !!(await until(async () => (await page.getAttribute('.tab.is-on', 'data-id')) === 'SCR-002' && !!(await page.$('webview.stage-webview:not(.is-hidden)')) && !(await page.$('.gallery')), 8000)));
+        await until(async () => (await page.$eval('webview.stage-webview:not(.is-hidden)', (w) => (w as unknown as { executeJavaScript(c: string): Promise<unknown> }).executeJavaScript('document.readyState').catch(() => ''))) === 'complete', 30000);
+        await page.$eval('webview.stage-webview:not(.is-hidden)', (w) => (w as unknown as { executeJavaScript(c: string): Promise<unknown> }).executeJavaScript('window.__keep = 7'));
         await page.click('.tab[data-id="SCR-001"] .tab-main');
-        check('돌아오면 그 탭은 캡처 모음 그대로', !!(await until(async () => !!(await page.$('.gallery .gal-item')) && !(await page.$('webview.stage-webview')), 5000)));
+        check('돌아오면 그 탭은 캡처 모음 그대로', !!(await until(async () => !!(await page.$('.gallery .gal-item')) && !(await page.$('webview.stage-webview:not(.is-hidden)')), 5000)));
         await page.click('.tab[data-id="SCR-002"] .tab-main');
-        check('다시 가면 그 탭은 실시간 그대로', !!(await until(async () => !!(await page.$('webview.stage-webview')) && !(await page.$('.gallery')), 5000)));
+        check('다시 가면 그 탭은 실시간 그대로', !!(await until(async () => !!(await page.$('webview.stage-webview:not(.is-hidden)')) && !(await page.$('.gallery')), 5000)));
+        const kept = await page.$eval('webview.stage-webview:not(.is-hidden)', (w) => (w as unknown as { executeJavaScript(c: string): Promise<unknown> }).executeJavaScript('window.__keep'));
+        check('URL 탭을 다녀와도 사이트를 다시 불러오지 않는다 (그 상태 그대로)', kept === 7, String(kept));
         await page.click('.tab[data-id="SCR-001"] .tab-main');
         await page.click('.sc-bar .seg-btn:has-text("실시간")');
         // 받는 사람
@@ -584,6 +588,16 @@ export const appSpecs: Spec[] = [
         await page.waitForSelector('.area-place');
         await drag(200, 200, 600, 420);
         check('영역을 그리면 거기서 잇기 시작', !!(await until(() => page.$('.link-bar'), 3000)));
+        // 목록에서 — 펼친 채로 검색칸으로 거른다 (엑셀 필터처럼)
+        await page.click('.link-bar button:has-text("목록에서")');
+        check('목록 — 검색칸에 바로 쓸 수 있다', !!(await until(() => page.$('.link-list .link-search:focus'), 3000)));
+        const allAnn = (await page.$$('.link-list .link-list-ann')).length;
+        await page.keyboard.type('기획안');
+        const shown = await page.$$eval('.link-list .link-list-ann', (els) => els.map((e) => e.textContent ?? ''));
+        check('검색어가 든 Comment 만 남는다', allAnn === 2 && shown.length === 1 && shown[0]!.includes('기획안'), `${allAnn} → ${shown.length}`);
+        await page.keyboard.press('Escape');
+        check('Esc 는 먼저 검색어를 지운다 (잇기는 그대로)', (await page.inputValue('.link-list .link-search')) === '' && !!(await page.$('.link-bar')) && (await page.$$('.link-list .link-list-ann')).length === 2);
+        await page.click('.link-bar button:has-text("목록에서")');
         await page.click('.tab[data-id="SCR-001"] .tab-main');
         await page.click('.link-bar button:has-text("영역 그리기")');
         await page.waitForSelector('.area-place');
@@ -617,6 +631,106 @@ export const appSpecs: Spec[] = [
         await page.click('.cards > .card:has-text("제품 쪽 화면")');
         await page.keyboard.press('Delete');
         check('Comment 를 지우면 그 연결도 함께 걷힌다', !!(await until(() => conns().length === 1 && conns()[0]!.a.kind === 'area', 8000)), JSON.stringify(conns().map((c) => c.a.kind)));
+      } finally {
+        await app.close();
+      }
+    },
+  },
+  {
+    name: 'app-tabs-alive',
+    kind: 'app',
+    files: [/^packages\/manna\/src\/stage\/(Stage|bridge|loader)\.tsx?$/, /^packages\/manna\/src\/agent\//, /^packages\/manna\/src\/stage\/Links\.tsx$/],
+    async run() {
+      const { app, page, src } = await appWithScreen();
+      try {
+        await ctrlPick(page, await stagePoint(page, 960, 300));
+        await typeIn(page, '.popover-card .composer .cm-content', '첫 탭 Comment');
+        await page.keyboard.press('Control+Enter');
+        await page.keyboard.press('Escape');
+        const f1 = await screenFrame(page);
+        // 화면 안에서 상태를 바꿔 둔다 — 다시 불러오면 사라진다
+        await f1.evaluate(() => {
+          (window as unknown as { __keep: number }).__keep = 42;
+          document.body.dataset.keep = 'yes';
+        });
+        await page.click('button[aria-label="화면 추가"]');
+        await nextOpen(app, src);
+        await page.click('.popover-item:has-text("화면 폴더 선택")');
+        await page.waitForSelector('.file-list');
+        await page.click('.modal button[type=submit]');
+        await until(() => page.$('.tab[data-id="SCR-002"].is-on'), 10000);
+        await splashDone(await screenFrame(page));
+        check('두 탭의 틀이 함께 떠 있다 (지금 탭만 보인다)', (await page.$$('.stage-frame iframe.stage-iframe')).length === 2 && (await page.$$('.stage-frame iframe.stage-iframe.is-hidden')).length === 1);
+        await page.click('.tab[data-id="SCR-001"] .tab-main');
+        await wait(300);
+        check('돌아오면 불러오는 표시 없이 바로', !(await page.$('.stage-note')));
+        const f1b = await screenFrame(page);
+        const kept = await f1b.evaluate(() => [(window as unknown as { __keep?: number }).__keep, document.body.dataset.keep]);
+        check('탭을 바꿔도 화면을 다시 불러오지 않는다 (상태 그대로)', kept[0] === 42 && kept[1] === 'yes', JSON.stringify(kept));
+        check('돌아온 탭의 Comment 마커가 그대로', !!(await until(async () => (await visibleMarkers(page)).length === 1, 5000)));
+        // 숨은 탭은 멈춰 둔다 — 시계가 서 있다가 돌아오면 다시 간다
+        const t0 = await f1b.evaluate(() => performance.now());
+        await page.click('.tab[data-id="SCR-002"] .tab-main');
+        await wait(1500);
+        await page.click('.tab[data-id="SCR-001"] .tab-main');
+        const t1 = await f1b.evaluate(() => performance.now());
+        check('숨어 있는 동안은 멈춰 둔다', t1 - t0 < 1200, `${Math.round(t1 - t0)}ms`);
+        await wait(600);
+        const t2 = await f1b.evaluate(() => performance.now());
+        check('돌아오면 다시 돈다', t2 - t1 > 300, `${Math.round(t2 - t1)}ms`);
+        // 피커로 고르기도 바로 — 다시 불러오느라 못 고르는 일이 없다
+        await ctrlPick(page, await stagePoint(page, 700, 500));
+        check('돌아온 탭에서 바로 고를 수 있다', !!(await until(() => page.$('.popover-card .composer'), 5000)));
+        await page.keyboard.press('Escape');
+        // 새로 고침은 그 탭만 처음부터
+        await page.click('button[aria-label="새로 고침"]');
+        const f1c = await screenFrame(page);
+        await splashDone(f1c);
+        check('새로 고침하면 그 탭만 처음부터', (await f1c.evaluate(() => (window as unknown as { __keep?: number }).__keep)) === undefined);
+      } finally {
+        await app.close();
+      }
+    },
+  },
+  {
+    name: 'app-pointerlock',
+    kind: 'app',
+    files: [/^packages\/manna\/src\/agent\//],
+    async run() {
+      const { app, page } = await appWithScreen();
+      // 클릭하면 마우스를 잠그는 화면 (Unity 같은 게임 엔진이 하는 것처럼)
+      const game = tempDir('game');
+      writeFileSync(join(game, 'index.html'), `<!doctype html><html><head><title>게임</title></head><body style="margin:0">
+<canvas id="c" width="1920" height="1080" style="display:block;width:100vw;height:100vh;background:#234"></canvas>
+<script>
+window.__req = 0; window.__err = 0;
+c.addEventListener('pointerdown', () => {
+  window.__req++;
+  try { const r = c.requestPointerLock(); if (r && r.catch) r.catch(() => window.__err++); } catch (e) { window.__err++; }
+});
+</script></body></html>`);
+      try {
+        await page.click('button[aria-label="화면 추가"]');
+        await nextOpen(app, game);
+        await page.click('.popover-item:has-text("화면 폴더 선택")');
+        await page.waitForSelector('.file-list');
+        await page.click('.modal button[type=submit]');
+        await until(() => page.$('.tab[data-id="SCR-002"].is-on'), 10000);
+        const f = await screenFrame(page);
+        const locked = () => f.evaluate(() => !!document.pointerLockElement);
+        const at = await stagePoint(page, 960, 540);
+        // 화면이 클릭마다 마우스를 잠그려 해도 — 잠기지 않고, 오류도 받지 않는다 (오류 창 없음)
+        for (let i = 0; i < 5; i++) await page.mouse.click(at.x, at.y);
+        await wait(300);
+        const n = await f.evaluate(() => [(window as unknown as { __req: number }).__req, (window as unknown as { __err: number }).__err]);
+        check('품은 화면은 마우스를 잠그지 못한다 — 커서는 늘 보인다', !(await locked()) && n[0]! >= 5, JSON.stringify(n));
+        check('잠금 요청에 오류가 가지 않는다 (화면이 오류 창을 띄우지 않게)', n[1] === 0);
+        // 잠그려던 화면 다음에도 탭 · 고르기가 그대로
+        await page.click('.tab[data-id="SCR-001"] .tab-main');
+        check('잠그려던 화면 다음에도 탭을 누를 수 있다', !!(await until(() => page.$('.tab[data-id="SCR-001"].is-on'), 3000)));
+        await page.click('.tab[data-id="SCR-002"] .tab-main');
+        await ctrlPick(page, at);
+        check('잠그려던 화면에서도 Ctrl 로 고를 수 있다', !!(await until(() => page.$('.popover-card .composer'), 5000)));
       } finally {
         await app.close();
       }

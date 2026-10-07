@@ -60,8 +60,22 @@ declare global {
     }
     held = held.filter((h) => h[0] !== id);
   };
+  /* ── 마우스 잠금 (Pointer Lock) — 품은 화면은 마우스를 잠그지 못한다.
+   * 게임 엔진(Unity 등)이 커서를 잠그면 커서가 숨고 모든 클릭이 화면으로만 가서 탭 · 고르기 · Comment 를 쓸 수 없다.
+   * Esc 로 풀면 곧바로 다시 잠그려다 브라우저가 거절하고, 화면이 그 오류를 창으로 띄운다.
+   * 그래서 잠금 요청은 조용히 받아 넘긴다 (오류도 내지 않는다). 커서는 늘 테라리움 것 */
+  const releaseLock = () => {
+    if (document.pointerLockElement) document.exitPointerLock?.();
+  };
+  if (Element.prototype.requestPointerLock) {
+    Element.prototype.requestPointerLock = function () {
+      return Promise.resolve();
+    } as typeof Element.prototype.requestPointerLock;
+  }
+
   const pause = () => {
     if (paused) return;
+    releaseLock();
     paused = true;
     pausedAt = nativeNow();
     frozen = (document.getAnimations?.() ?? []).filter((a) => a.playState === 'running');
@@ -225,6 +239,7 @@ declare global {
         return;
       case 'picking':
         picking = m.on;
+        if (m.on) releaseLock();
         if (!m.on) stack = [];
         return;
       case 'trace':

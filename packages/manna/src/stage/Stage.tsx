@@ -2,7 +2,7 @@
  * 화면 안의 일은 에이전트(agent/agent.ts)가 하고, 스테이지는 메시지로 묻고 그린다 (docs/ARCHITECTURE.md §6).
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import type { Annotation, Screen } from '@core';
+import type { Annotation, Screen, ScreenVersion } from '@core';
 import { displayNo, pkgPath } from '@core';
 import type { Picked, RectTuple } from '../agent/protocol';
 import type { Host } from '../host';
@@ -97,10 +97,11 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   const readyWaiters = useRef<(() => void)[]>([]);
   const [fit, setFit] = useState<Fit>({ s: 1, ox: 0, oy: 0, h: 0 });
   const snipBox = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(false);
-  const [reloadNo, setReloadNo] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [warnings, setWarnings] = useState<string[]>([]);
+  /* 탭마다 띄운 화면 틀 — 한 번 띄우면 탭을 바꿔도 그대로 둔다 (숨기고 멈춰 두었다가 돌아오면 이어서) */
+  const aliveRecs = useRef(new Map<string, Alive>());
+  const [aliveKeys, setAliveKeys] = useState<string[]>([]);
+  const [, bump] = useState(0);
+  const refresh = () => bump((n) => n + 1);
   const [dragging, setDragging] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [popRect, setPopRect] = useState<Box | null>(null);
@@ -132,21 +133,48 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   const gallery = isSite && (host.site ? galleryView : !copyView);
   const hasCopy = !!v && v.source?.mode === 'site' && v.external.length > 0; // 사본은 그 페이지와 리소스를 external 로 담는다
   /* 지금 보고 있는 페이지 — 폴더 화면은 패키지 안의 다른 HTML 로 옮겨 갈 수 있고, URL 화면은 사이트 안에서 이동한다 */
-  const [page, setPage] = useState<string | null>(null);
-  const [liveUrl, setLiveUrl] = useState<string | null>(null);
+  const activeKey = v && scr && !gallery ? vkey : null;
+  let rec = activeKey ? aliveRecs.current.get(activeKey) : undefined;
+  if (activeKey && !rec && scr && v) {
+    rec = { key: activeKey, seq: ++aliveSeq, screen: scr.id, v: v.v, live, page: null, reload: 0, ready: false, liveUrl: null, error: null, warnings: [], style: null, bridge: null, el: null };
+    aliveRecs.current.set(activeKey, rec);
+  }
+  const activeRef = useRef(rec);
+  activeRef.current = rec;
+  // 살아 있는 틀 — 지금 탭이 맨 뒤(가장 최근). 지운 화면 · 버전의 틀은 내린다. 너무 많으면 오래된 것부터
+  const aliveNow = [...aliveKeys.filter((k) => k !== activeKey), ...(activeKey ? [activeKey] : [])]
+    .filter((k) => {
+      const r = aliveRecs.current.get(k);
+      return !!r && doc.value.screens.some((x) => x.id === r.screen && x.versions.some((y) => y.v === r.v));
+    })
+    .slice(-MAX_ALIVE);
+  useEffect(() => {
+    if (aliveNow.join('|') === aliveKeys.join('|')) return;
+    for (const k of [...aliveRecs.current.keys()]) if (!aliveNow.includes(k)) aliveRecs.current.delete(k);
+    setAliveKeys(aliveNow);
+  });
+  const page = rec?.page ?? null;
+  const liveUrl = rec?.liveUrl ?? null;
+  const loading = !!rec && !rec.ready;
+  const error = rec?.error ?? null;
+  const warnings = rec?.warnings ?? [];
+  const setPage = (p: string | null) => {
+    const r = activeRef.current;
+    if (!r || r.page === p) return;
+    r.page = p;
+    refresh();
+  };
   const currentPage = live ? (liveUrl ?? v?.source?.url ?? '') : (page ?? v?.entry ?? '');
   const pageRef = useRef(currentPage);
   pageRef.current = currentPage;
   useEffect(() => {
-    setPage(null);
-    setLiveUrl(null);
     setCopyView(false);
   }, [vkey]);
   useEffect(() => {
     stagePage.value = currentPage;
   }, [currentPage]);
   // 캡처 모음 ↔ 사본을 오가면 화면을 새로 띄운다 (모음일 때는 iframe 이 없다)
-  const frameKey = `${vkey}#${page ?? ''}#${reloadNo}${gallery ? '#gallery' : ''}`;
+  const frameKey = `${vkey}#${page ?? ''}#${rec?.reload ?? 0}${gallery ? '#gallery' : ''}`;
   const sel = list.find((a) => a.id === selected.value) ?? null;
   const showShot = !!sel?.shot && shotView.value && !draft.value;
   const shotSrc = useBlobUrl(sel?.shot?.sha, 'image/jpeg');
@@ -194,7 +222,15 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   /* 새로 고침 — URL 화면은 사이트를 다시 불러오고(지금 사이트 그대로), 폴더 화면은 처음 상태로 */
   const reloadScreen = () => {
     if (live) (webview.current as unknown as { reload?: () => void } | null)?.reload?.();
-    else setReloadNo((n) => n + 1);
+    else reloadFrame();
+  };
+
+  /** 지금 틀을 처음부터 다시 */
+  const reloadFrame = () => {
+    const r = activeRef.current;
+    if (!r) return;
+    r.reload++;
+    refresh();
   };
 
   /* Ctrl+휠 — 화면 배율 (프레임 밖 여백에서. 화면 안의 휠은 화면이 쓴다) */
@@ -241,43 +277,18 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
     b.send({ type: 'trace', on: !!recording.peek() });
   };
 
-  /* ── 화면 불러오기 (폴더 화면) ──────────────────────────────────────── */
-  useEffect(() => {
-    const f = iframe.current;
-    const ver = version.peek();
-    if (live || !ver || !f) return;
-    let alive = true;
-    let dispose: (() => void) | undefined;
-    setLoading(true);
-    setError(null);
-    setWarnings([]);
-    prepareScreen(ver, blobs, live ? undefined : (page ?? undefined))
-      .then((p) => {
-        if (!alive) return p.dispose();
-        dispose = p.dispose;
-        setWarnings(p.warnings);
-        f.srcdoc = p.srcdoc;
-      })
-      .catch((e: Error) => {
-        setLoading(false);
-        setError(e.message);
-      });
-    return () => {
-      alive = false;
-      dispose?.();
-    };
-  }, [frameKey, live]);
-
-  /* ── 에이전트와 잇기 ─────────────────────────────────────────────── */
+  /* ── 에이전트와 잇기 — 지금 탭의 틀(FrameItem 이 띄워 둔 것)에 붙는다 ─────────── */
   useLayoutEffect(() => {
-    const b = live ? (webview.current ? webviewBridge(webview.current) : null) : iframe.current ? iframeBridge(iframe.current) : null;
-    if (!b) return;
+    const r = activeRef.current;
+    const b = r?.bridge;
+    if (!r || !b) return;
     bridge.current = b;
+    if (r.live) webview.current = r.el as WebviewLike;
+    else iframe.current = r.el as HTMLIFrameElement;
     rects.current = {};
     const off = b.on((m) => {
       if (m.type === 'ready') {
-        setLoading(false);
-        if (live) setLiveUrl(m.url);
+        refresh();
         syncAgent();
         takeSnapshot(4000);
         readyWaiters.current.splice(0).forEach((w) => w());
@@ -288,7 +299,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
           if (annotations.peek().some((x) => x.id === want)) requestReveal(want);
         }
       } else if (m.type === 'nav') {
-        if (live) setLiveUrl(m.url);
+        refresh();
       } else if (m.type === 'frame') {
         rects.current = m.rects;
         paint();
@@ -306,12 +317,31 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
         else onKeyUp(ev);
       }
     });
+    // 이미 떠 있던 틀로 돌아왔다 — 지금 상태(Comment 자리 · 피커 · 멈춤)를 다시 알린다
+    if (r.ready) {
+      syncAgent();
+      // 연결을 따라 이 탭으로 왔다 — 화면은 이미 떠 있으니 바로 자리를 찾는다
+      const want = revealAfterLoad.peek();
+      if (want) {
+        revealAfterLoad.value = null;
+        if (annotations.peek().some((x) => x.id === want)) requestReveal(want);
+      }
+    }
     return () => {
       off();
-      b.dispose();
       if (bridge.current === b) bridge.current = null;
+      if (iframe.current === r.el) iframe.current = null;
+      if (webview.current === r.el) webview.current = null;
+      // 숨는 틀은 멈춰 둔다 — 돌아오면 이어서 돈다 (화면 상태는 그대로)
+      try {
+        b.send({ type: 'picking', on: false });
+        b.send({ type: 'trace', on: false });
+        b.send({ type: 'pause' });
+      } catch {
+        /* 이미 내린 틀 */
+      }
     };
-  }, [frameKey, live]);
+  }, [activeKey]);
 
   const waitReady = () => new Promise<void>((r) => readyWaiters.current.push(r));
 
@@ -419,12 +449,16 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   }, [recOn]);
 
   /* ── 다른 화면 상태의 Comment 로 이동 ─────────────────────────────── */
+  const revealDone = useRef<unknown>(null);
   useEffect(() => {
     const req = reveal.value;
     if (!req) return;
     const a = annotations.peek().find((x) => x.id === req.id);
     const b = bridge.current;
-    if (!a?.anchor || !b || loading) return;
+    if (revealDone.current === req) return;
+    if (!b || loading) return; // 다 뜬 뒤에 (아래)
+    revealDone.current = req;
+    if (!a?.anchor) return;
     const anchor = a.anchor;
     let alive = true;
     const msg = { type: 'reveal' as const, fp: anchor.fp, ...(anchor.region ? { region: anchor.region } : {}), steps: anchor.path ?? [] };
@@ -444,7 +478,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
       if (!alive || quick?.ok) return;
       // 빠른 길로 안 되면 처음부터 다시 불러와 경로를 다시 누른다
       const ready = waitReady();
-      setReloadNo((n) => n + 1);
+      reloadFrame();
       await ready;
       if (!alive || !bridge.current) return;
       await bridge.current.ask({ ...msg, quick: false }, 60000);
@@ -456,6 +490,12 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
       revealing.value = false;
     };
   }, [reveal.value]);
+  // 화면이 뜨는 중이라 못 했으면 다 뜬 뒤에 다시
+  useEffect(() => {
+    const req = reveal.peek();
+    if (loading || !req || revealDone.current === req) return;
+    requestReveal(req.id);
+  }, [loading]);
 
   /* ── 마커 그리기 (에이전트가 보낸 위치) ──────────────────────────────── */
   const paint = () => {
@@ -647,47 +687,40 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
         siteView={host.site && isSite ? { gallery: galleryView, set: setGalleryView } : undefined} scale={fit.s} versionTools={versionTools} screenActions={screenActions} />
       <MarkerStrip />
       </div>
-    {gallery ? (
+    {gallery && (
       <div class="stage stage-gallery">
         <SiteGallery host={host} scr={scr} v={v} hasCopy={host.site ? true : hasCopy} copyLabel={host.site ? '실시간 사이트 보기' : '마지막 사본 보기'} onCopy={() => (host.site ? setGalleryView(false) : setCopyView(true))} />
       </div>
-    ) : (
-    <div class={`stage ${scrolls ? 'stage-scroll' : ''}`} ref={area} onWheel={onStageWheel}>
+    )}
+    <RecordingBar />
+    <LinkingBar />
+    {/* 캡처 모음을 보는 동안에도 띄워 둔 틀은 내리지 않는다 — 뒤에 숨겨 둔다 */}
+    <div class={`stage ${scrolls ? 'stage-scroll' : ''} ${gallery ? 'is-behind' : ''}`} ref={area} onWheel={onStageWheel} aria-hidden={gallery || undefined}>
       {copyView && (
         <button type="button" class="stage-badge stage-badge-shot gal-back" onClick={() => setCopyView(false)}>캡처 모음으로</button>
       )}
       {scrolls && <div class="stage-spacer" style={spacer} />}
       <div class={`stage-frame ${recording.value || capturing || snipRec.value ? 'is-recording' : ''}`} style={frameStyle} ref={frameBox}>
-        {live ? (
-          <webview
-            key={frameKey}
-            ref={webview as never}
-            class="stage-webview"
-            src={page ?? v.source!.url}
-            partition={host.site!.partition}
-            webpreferences="contextIsolation=yes,sandbox=yes"
-            style={innerStyle}
-          />
-        ) : (
-          <iframe
-            key={frameKey}
-            ref={iframe}
-            onLoad={() => {
-              // 스크립트가 location 으로 다른 페이지로 갔다 — srcdoc 밖이면 같은 이름의 패키지 페이지를 연다
-              try {
-                const href = iframe.current?.contentWindow?.location.href ?? '';
-                if (!href || href.startsWith('about:')) return;
-                const rel = decodeURIComponent(new URL(href).pathname.split('/').pop() ?? '');
-                if (rel && v.files[rel]) setPage(rel);
-              } catch {
-                /* 다른 출처 — 어쩔 수 없다 */
-              }
-            }}
-            class="stage-iframe"
-            title={`${scr.id} ${scr.title} v${v.v}`}
-            style={innerStyle}
-          />
-        )}
+        {/* 처음 띄운 순서 그대로 그린다 — iframe · webview 는 DOM 에서 자리를 옮기면 다시 불러온다 */}
+        {[...aliveNow].sort((x, y) => aliveRecs.current.get(x)!.seq - aliveRecs.current.get(y)!.seq).map((k) => {
+          const r = aliveRecs.current.get(k)!;
+          const s2 = doc.value.screens.find((x) => x.id === r.screen)!;
+          const ver = s2.versions.find((x) => x.v === r.v)!;
+          const on = k === activeKey;
+          if (on) r.style = innerStyle;
+          return (
+            <FrameItem
+              key={k}
+              rec={r}
+              ver={ver}
+              title={`${s2.id} ${s2.title} v${ver.v}`}
+              active={on}
+              style={r.style ?? innerStyle}
+              partition={host.site?.partition}
+              onChange={refresh}
+            />
+          );
+        })}
         {still.value && !snipRec.value && !recOn && <img class="stage-still" src={still.value.url} alt="" draggable={false} />}
         <TraceLayer on={recOn} scale={fit.s} feed={traceFeed} />
         {snipStyle && <div class={`snip-target ${snipRec.value ? 'is-rec' : ''}`} ref={snipBox} style={snipStyle} aria-hidden="true" />}
@@ -753,25 +786,138 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
         )}
 
       </div>
-      <RecordingBar />
-      <LinkingBar />
-      <StagePopover
-        host={host}
-        fit={fit}
-        target={draft.value ? tupleBox(draft.value.picked.rect) : shotTarget ?? popRect}
-        areaRef={area}
-      />
-      {error && (
+      {!gallery && (
+        <StagePopover
+          host={host}
+          fit={fit}
+          target={draft.value ? tupleBox(draft.value.picked.rect) : shotTarget ?? popRect}
+          areaRef={area}
+        />
+      )}
+      {error && !gallery && (
         <div class="stage-error" role="alert">
           <strong>화면을 열지 못했습니다.</strong>
           <span>{error}</span>
           <span>테라리움에서 이 화면 버전을 다시 등록해 주세요.</span>
         </div>
       )}
-      {(misses.value.length > 0 || warnings.length > 0) && <Diagnostics warnings={warnings} />}
+      {!gallery && (misses.value.length > 0 || warnings.length > 0) && <Diagnostics warnings={warnings} />}
     </div>
-    )}
     </div>
+  );
+}
+
+/** 띄워 둔 화면 틀 하나 — 한 탭(화면 · 버전). 다리(에이전트와 잇기)는 틀이 살아 있는 동안 그대로다 */
+interface Alive {
+  key: string;
+  /** 처음 띄운 차례 — 그리는 순서 */
+  seq: number;
+  screen: string;
+  v: number;
+  live: boolean;
+  /** 패키지 안의 다른 페이지로 옮겨 갔으면 그 페이지 (URL 화면은 주소) */
+  page: string | null;
+  /** 처음부터 다시 불러온 횟수 */
+  reload: number;
+  ready: boolean;
+  liveUrl: string | null;
+  error: string | null;
+  warnings: string[];
+  /** 마지막으로 보일 때의 크기 — 숨은 동안 그대로 둔다 (크기가 바뀌어 화면이 다시 배치되지 않게) */
+  style: Record<string, string> | null;
+  bridge: Bridge | null;
+  el: HTMLElement | null;
+}
+const MAX_ALIVE = 8;
+let aliveSeq = 0;
+
+function FrameItem({ rec, ver, title, active, style, partition, onChange }: {
+  rec: Alive; ver: ScreenVersion; title: string; active: boolean; style: Record<string, string>; partition?: string; onChange: () => void;
+}) {
+  const el = useRef<HTMLElement>(null);
+  // 다리 — 틀이 살아 있는 동안 하나. 다 떴는지 · 주소가 바뀌었는지는 숨어 있어도 기억한다
+  useLayoutEffect(() => {
+    const e = el.current;
+    if (!e) return;
+    rec.el = e;
+    const b = rec.live ? webviewBridge(e as WebviewLike) : iframeBridge(e as HTMLIFrameElement);
+    rec.bridge = b;
+    const off = b.on((m) => {
+      if (m.type === 'ready') {
+        rec.ready = true;
+        if (rec.live) rec.liveUrl = m.url;
+      } else if (m.type === 'nav' && rec.live) rec.liveUrl = m.url;
+    });
+    return () => {
+      off();
+      b.dispose();
+      if (rec.bridge === b) rec.bridge = null;
+      if (rec.el === e) rec.el = null;
+    };
+  }, []);
+  // 폴더 화면 — 처음 한 번, 그리고 다른 페이지로 가거나 처음부터 다시 할 때만 불러온다
+  useEffect(() => {
+    const f = el.current as HTMLIFrameElement | null;
+    if (rec.live || !f) return;
+    let alive = true;
+    let dispose: (() => void) | undefined;
+    rec.ready = false;
+    rec.error = null;
+    rec.warnings = [];
+    onChange();
+    prepareScreen(ver, blobs, rec.page ?? undefined)
+      .then((p) => {
+        if (!alive) return p.dispose();
+        dispose = p.dispose;
+        rec.warnings = p.warnings;
+        if (p.warnings.length) onChange();
+        f.srcdoc = p.srcdoc;
+      })
+      .catch((e: Error) => {
+        rec.error = e.message;
+        rec.ready = true;
+        onChange();
+      });
+    return () => {
+      alive = false;
+      dispose?.();
+    };
+  }, [rec.page, rec.reload]);
+  const cls = active ? '' : 'is-hidden';
+  if (rec.live) {
+    return (
+      <webview
+        ref={el as never}
+        class={`stage-webview ${cls}`}
+        src={rec.page ?? ver.source!.url}
+        partition={partition}
+        webpreferences="contextIsolation=yes,sandbox=yes"
+        style={style}
+      />
+    );
+  }
+  return (
+    <iframe
+      ref={el as never}
+      onLoad={() => {
+        // 스크립트가 location 으로 다른 페이지로 갔다 — srcdoc 밖이면 같은 이름의 패키지 페이지를 연다
+        try {
+          const href = (el.current as HTMLIFrameElement | null)?.contentWindow?.location.href ?? '';
+          if (!href || href.startsWith('about:')) return;
+          const rel = decodeURIComponent(new URL(href).pathname.split('/').pop() ?? '');
+          if (rel && ver.files[rel] && rec.page !== rel) {
+            rec.page = rel;
+            onChange();
+          }
+        } catch {
+          /* 다른 출처 — 어쩔 수 없다 */
+        }
+      }}
+      class={`stage-iframe ${cls}`}
+      title={title}
+      tabIndex={active ? undefined : -1}
+      style={style}
+    />
   );
 }
 
