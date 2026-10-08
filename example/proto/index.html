@@ -1491,6 +1491,109 @@ button.chip:hover{border-color:var(--border);color:var(--text-1)}
   border:1px solid var(--brand-a32);border-radius:99px;padding:2px var(--u2)}
 .live-tag i{width:5px;height:5px;border-radius:50%;background:var(--brand);animation:blink 1.2s steps(2) infinite}
 
+/* ══════════════════════════════════════════════════════════════════════════
+   § 모니터링 우측 패널 — 제품(semicon-europa /monitor)의 2열 카드
+   패널 폭 720px(제품과 같음) · 안쪽 16px · 두 열 사이 12px.
+   A열은 넘치면 스스로 스크롤하고, B열은 차량 리스트 한 장이 높이를 다 쓴다.
+   ══════════════════════════════════════════════════════════════════════════ */
+.mon-right{flex:0 0 720px;min-width:0;min-height:0;display:flex;gap:var(--u3);padding:var(--u4);
+  overflow:hidden;background:var(--bg-header);border-left:1px solid var(--border-soft)}
+.mon-rc{flex:1 1 0;min-width:0;min-height:0}
+.mon-rc-a{overflow-y:auto}
+.mon-rc-b{display:flex;flex-direction:column}
+.mon-right .mon-card{padding:var(--u3);margin-bottom:var(--u3)}
+.mon-right .mon-card:last-of-type{margin-bottom:0}
+.mon-card .card-h{margin-bottom:var(--u2)}
+.mon-ic{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;
+  color:var(--text-3);flex:none}
+.card-sub{margin-left:auto;font-size:11px;color:var(--text-3)}
+.card-sub[hidden]{display:none}
+.mon-chip{flex:none;padding:1px 7px;border-radius:99px;border:1px solid var(--border-soft);
+  background:none;color:var(--text-3);font:inherit;font-size:9.5px;line-height:1.6;cursor:pointer}
+.mon-chip:hover{color:var(--text-1);border-color:var(--border)}
+.mon-cap{margin-top:var(--u2);text-align:left}
+
+/* 경고 감지 — 한 줄 = 한 건. 이상(err) 은 왼쪽 띠로 가른다. */
+.mon-alerts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--u1);
+  max-height:132px;overflow-y:auto}
+.mon-empty{font-size:11px;color:var(--text-4);padding:var(--u1) 0}
+.mon-alerts button{width:100%;display:flex;align-items:center;gap:var(--u2);padding:5px var(--u2);
+  border:1px solid var(--border-soft);border-radius:var(--r-sm);background:var(--bg-canvas);
+  color:var(--text-1);font:inherit;text-align:left;cursor:pointer}
+.mon-alerts button:hover{border-color:var(--border)}
+.mon-alerts button[data-lv="err"]{border-left:3px solid var(--err)}
+.mon-alerts .ak{flex:1;min-width:0;font-size:11px;font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mon-alerts .at{flex:none;font-size:10px;color:var(--text-4);font-variant-numeric:tabular-nums}
+
+/* OHT 건강도 */
+.mon-health{display:flex;flex-direction:column;align-items:center}
+.mon-health #radar{width:100%;max-width:200px}
+.mon-health .radar-cap{margin-top:var(--u2)}
+
+/* AI 모니터링 에이전트 — 제품 카드 크기(제목 14px · 본문 12px)로 고정한다.
+   예전 열은 높이 비례(cqh)로 글자를 키웠는데, 카드 안에서는 높이가 내용을 따른다. */
+.mon-right .agent-bd{padding:0;container-type:normal;overflow:visible}   /* 높이 = 내용 */
+.mon-right .agf-report{margin-top:0;min-height:0}
+.mon-right .agr-ic{width:34px;height:34px}
+.mon-right .agr-h{margin-bottom:var(--u1)}
+.mon-right .agr-h b{font-size:14px}
+.mon-right .agr-tx{font-size:12px;line-height:1.55}
+
+/* 미니맵 — 6:5 상자 하나에 보기 탭 */
+.mon-mini .eq-mini-tabs{display:flex;flex-wrap:wrap;gap:2px;margin-bottom:var(--u2)}
+.mon-mini .eq-mini-tabs button{flex:auto;height:auto;padding:2px var(--u1);border-radius:var(--r-sm);
+  border:1px solid var(--border-soft);background:none;color:var(--text-3);
+  font:inherit;font-size:10px;font-weight:400;white-space:nowrap;cursor:pointer}
+.mon-mini .eq-mini-tabs button:hover{color:var(--text-2);background:var(--brand-a08);border-color:var(--border-soft)}
+.mon-mini .eq-mini-tabs button[aria-pressed="true"]{border-color:var(--brand);background:var(--brand-a16);
+  color:var(--text-1);font-weight:600}
+.mon-mini .eq-mini-box{flex:none;width:100%;aspect-ratio:6 / 5;min-height:0;
+  border:1px solid var(--border-soft);border-radius:var(--r-sm)}
+.mon-mini #hmCv{cursor:pointer}
+.mon-mini .hm-sub{padding:0;margin-top:var(--u1);font-size:9.5px;color:var(--text-3)}
+
+/* 차량 리스트 — 카드가 열 높이를 다 쓰고 표 본문만 스크롤 */
+.mon-right .mon-rc-b .mon-vlist{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
+.mon-vlist .fl-bar{flex:none}
+.mon-vlist-acts{flex:none;display:flex;gap:var(--u2);margin-bottom:var(--u2)}
+.mon-vlist .mon-act{flex:1 1 0;min-width:0;display:inline-flex;align-items:center;
+  justify-content:space-between;gap:var(--u2);white-space:nowrap;overflow:hidden}
+.fl-act.alt{background:none;border-color:var(--brand)}
+.fl-act.alt:hover:not(:disabled){background:var(--brand);border-color:var(--brand)}
+.fl-act.alt:disabled{border-color:var(--border-soft)}
+.mon-act .l{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mon-act .id{flex:none;width:5.5ch;text-align:right;font-weight:600;opacity:.85}
+.mon-vlist-body{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
+.mon-vlist-scroll{flex:1;min-height:0;overflow-y:auto}
+.mon-vlist-scroll thead th{position:sticky;top:0;z-index:1;background:var(--bg-panel)}
+.mon-vlist-toast{position:absolute;top:0;left:0;right:0;z-index:2;display:flex;align-items:flex-start;
+  gap:var(--u2);padding:var(--u2) var(--u3);border:1px solid var(--ok-a28);border-left:3px solid var(--ok);
+  border-radius:var(--r-sm);background:linear-gradient(var(--ok-a12),var(--ok-a12)),var(--bg-panel);
+  color:var(--ok-300);font-size:12px;font-weight:500;line-height:1.45;box-shadow:0 4px 16px rgba(0,0,0,.35)}
+.mon-vlist-toast[hidden]{display:none}
+.mon-vlist-toast > span{flex:1;min-width:0;overflow-wrap:anywhere}
+.mon-vlist-toast button{flex:none;padding:0 var(--u1);background:none;border:0;color:inherit;
+  font:inherit;opacity:.7;cursor:pointer}
+.mon-vlist-toast button:hover{opacity:1}
+
+/* 차량 · 설비 리스트 공통 — 상태 말, 임무 칩, 점수 */
+.fl-tbl td.st,.fl-tbl td.mo{white-space:nowrap;color:var(--text-2)}
+.fl-tbl .st-t[data-lv="ok"]{color:var(--ok-300)}
+.fl-tbl .st-t[data-lv="toMaint"]{color:var(--brand-300)}
+.fl-tbl .st-t[data-lv="maint"],.fl-tbl .st-t[data-lv="warn"]{color:var(--warn-300)}
+.fl-tbl .st-t[data-lv="err"],.fl-tbl .num[data-s="err"]{color:var(--err-300)}
+.dst{display:inline-block;margin-right:6px;padding:0 5px;border:1px solid var(--border-soft);
+  border-radius:var(--r-sm);font-size:10px;line-height:16px;color:var(--text-3);vertical-align:1px}
+.dst[data-k="mt"]{border-color:var(--warn-a28);background:var(--warn-a12);color:var(--warn-300)}
+.fl-tbl .sc-max{color:var(--text-4)}
+.fl-tbl .sc-bar i[data-s="err"]{background:var(--err)}
+.fl-tbl tbody tr.is-maint td{opacity:.5}
+.fl-tbl tbody tr.is-maint td.st{opacity:1}
+/* 다음 점검 예정일 — 날짜 뒤에 남은 날 수 */
+.fl-tbl td.nx{white-space:nowrap}
+.fl-tbl td.nx .nx-d{margin-left:6px;font-size:10px;color:var(--text-4)}
+
 /* ── 접근성: 모션 최소화 시 애니메이션 정지 ────────────────────────────── */
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;
@@ -1680,60 +1783,56 @@ button.chip:hover{border-color:var(--border);color:var(--text-1)}
     <!-- ⑧ 타임라인 · REC — 맵 하단 도킹 바. REC 일 때만 열린다. -->
     </div><!-- /pane-map -->
 
-    <!-- ─────────── 우측: 데이터 대시보드 + AI 에이전트 ─────────── -->
-    <!-- ── 우측 열 — 개발 제품(rcis.daim.co.kr)의 세로 4단을 그대로 따른다 ──
-         ① 수집 → ② 판정(경고 감지 · 건강도) → ③ 보고(에이전트) → ④ 위치(미니맵 · 상세)
-         읽는 순서가 곧 데이터가 흐르는 순서다. 단 사이에는 아래로 향하는 화살표를 둔다.
+    <!-- ─────────── 우측: 모니터링 데이터 패널 ─────────── -->
+    <!-- ── 우측 패널 — 제품(semicon-europa /monitor)의 2열 카드 배치를 따른다 ──
+         A열: 경고 감지 → OHT 건강도 → AI 모니터링 에이전트 → 미니맵 (넘치면 이 열만 스크롤)
+         B열: 차량 리스트 — 열 높이를 다 쓰고, 표 본문만 스크롤한다.
+         예전의 세로 흐름(① → ② → ③ 화살표)과 따로 서 있던 미니맵 열은 제품에 없어 걷어냈다.
 
          ※ 예전 시안의 ③ 상태/판정 카드와 ④ 교차판정(3축) 게이지는 제품에 없다.
             같은 판정을 에이전트가 문장으로 말하고(구동 · 이/적재 · 레일 3계통),
-            건수는 ② 경고 감지가 센다. 파이프라인은 그대로 두고 DOM 만 하단에 숨겼다. -->
-    <div class="pane-right">
+            건수는 경고 감지가 센다. 파이프라인은 그대로 두고 DOM 만 하단에 숨겼다. -->
+    <aside class="mon-right" aria-label="모니터링 데이터 패널">
+     <div class="mon-rc mon-rc-a">
 
-      <!-- 구성안 §2.3 — 상단의 스파크라인·데이터 수집 영역은 통째로 뺐다.
-           남는 넷을 세로로 쌓는다: 경고 감지 → OHT 건강도 → AI 에이전트 → 미니맵. -->
-      <!-- ② 경고 감지 · ③ OHT 건강도 — 가로로 나란히 -->
-      <section class="pane pane-judge">
-          <div class="pane-h2"><span class="no">①</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-alert"/></svg>
-            경고 감지
-            <span class="as-n num" id="asN">0건</span>
-            <button type="button" class="chip as-reset" id="asReset"
-              title="지금까지 감지된 경고 목록과 누적 건수를 모든 화면에서 비웁니다 (붙인 라벨은 남습니다)">CLEAR</button></div>
-          <div class="as-body" id="asBody">
-            <div class="alm-empty">아직 감지된 경고가 없습니다</div>
-          </div>
-        </section>
-
-      <div class="rp-link" aria-hidden="true"><i class="rp-beam"></i><i class="rp-arrow"></i></div>
-
-      <section class="pane pane-dash">
-          <div class="pane-h2"><span class="no">②</span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-gauge"/></svg>
-            OHT 건강도</div>
-          <div class="dash-box">
-            <div class="radar-wrap">
-              <canvas id="radar" aria-label="5축 실시간 레이더 차트"></canvas>
-              <div class="radar-cap">각 축 0~100점 · 관측 없는 축은 “데이터 없음”</div>
-            </div>
-          </div>
+      <!-- 경고 감지 — 한 줄이 감지 한 건이다(종류별로 묶지 않는다, 제품과 같음).
+           최근 것이 위. 누르면 그 대상이 3D 맵에서 선택된다. -->
+      <section class="card mon-card pane-judge" aria-label="경고 감지">
+        <div class="card-h">
+          <svg class="mon-ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-alert"/></svg>
+          <span class="t">경고 감지</span>
+          <span class="card-sub num" id="asN">0건</span>
+          <button type="button" class="mon-chip as-reset" id="asReset"
+            title="지금까지 감지된 경고 목록과 누적 건수를 모든 화면에서 비웁니다 (붙인 라벨은 남습니다)">CLEAR</button>
+        </div>
+        <ul class="mon-alerts" id="asBody">
+          <li class="mon-empty">아직 감지된 경고가 없습니다</li>
+        </ul>
       </section>
-      <div class="rp-link" aria-hidden="true"><i class="rp-beam"></i><i class="rp-arrow"></i></div>
 
-      <!-- ③ AI 모니터링 에이전트 -->
-      <section class="pane pane-agent">
-        <div class="pane-h2"><span class="no">③</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sparkles"/></svg>
-          AI 모니터링 에이전트</div>
-        <!-- 제품(rcis)의 에이전트 패널에는 이것 하나뿐이다.
-             예전 시안의 관찰 한 줄(.agf-watch)과 4단계 다이어그램(.agf-step/.agf-link)은
-             제품에 없어 걷어냈다 — 단계는 화면이 아니라 보고 문장이 말한다.
-             주기(관찰 → 정리 → 보고)는 그대로 돌고, 끝날 때 이 카드만 갱신된다. -->
-        <div class="pane-bd agent-bd" id="agentBd">
+      <section class="card mon-card" aria-label="OHT 건강도">
+        <div class="card-h">
+          <svg class="mon-ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gauge"/></svg>
+          <span class="t">OHT 건강도</span>
+          <span class="card-sub num" id="monHealthSub"></span>
+        </div>
+        <div class="mon-health">
+          <canvas id="radar" aria-label="전 차량 평균 5축 퍼포먼스"></canvas>
+          <div class="radar-cap">각 축 0~100점 · 운영 중 차량의 평균</div>
+        </div>
+      </section>
 
+      <!-- AI 모니터링 에이전트 — 제품의 에이전트 카드에는 감시 보고 한 장뿐이다.
+           주기(관찰 → 정리 → 보고)는 그대로 돌고, 끝날 때 이 카드만 갱신된다. -->
+      <section class="card mon-card pane-agent" aria-label="AI 모니터링 에이전트">
+        <div class="card-h">
+          <svg class="mon-ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sparkles"/></svg>
+          <span class="t">AI 모니터링 에이전트</span>
+        </div>
+        <div class="agent-bd" id="agentBd">
           <!-- 감시 보고 — 왕복 1회를 종합해 최신 1건. 쌓이지 않는다. -->
           <div class="agf-report" id="agReport">
-            <span class="agr-ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-headset"/></svg></span>
+            <span class="agr-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-headset"/></svg></span>
             <div class="agr-bd">
               <div class="agr-h"><b id="agrTitle">첫 감시 보고를 준비하고 있습니다</b>
                 <span class="lv" id="agrLv"></span><span class="tm" id="agrTime"></span></div>
@@ -1741,51 +1840,71 @@ button.chip:hover{border-color:var(--border);color:var(--text-1)}
             </div>
           </div>
         </div>
+        <div class="radar-cap mon-cap">사전 생성 템플릿 · 상태가 바뀌거나 왕복 1회마다 갱신</div>
       </section>
-      <div class="rp-link" aria-hidden="true"><i class="rp-beam"></i><i class="rp-arrow"></i></div>
 
-      <!-- 옛 ④ 미니맵 슬롯은 걷어냈다 — 같은 지도가 우측 패널의 '일반' 보기로 옮겨
-           갔다. 한 화면에 위에서 본 지도가 둘일 이유가 없고, 옮긴 자리에서는
-           진동·속도·소음·변위를 같은 지도 위에 겹쳐 볼 수 있다. -->
+      <!-- 미니맵 — 같은 지도를 네 가지로 본다. '일반' 은 위에서 본 레일(차량·핀·점검 경로),
+           나머지는 **차량이 지나가며 측정한 값** 을 레일 위치에 쌓아 칠한 분포다.
+           레일에 붙은 센서는 없으므로, 한 번도 차량이 지나지 않은 칸은 칠하지 않는다.
+           재생 시각까지 쌓인 값이라 되감으면 비우고 다시 쌓는다. -->
+      <section class="card mon-card mon-mini" aria-label="미니맵">
+        <div class="card-h">
+          <svg class="mon-ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-route"/></svg>
+          <span class="t" id="cmpT">미니맵</span>
+          <span class="card-sub" id="cmpSub" hidden></span>
+        </div>
+        <div class="eq-mini-tabs hm-tabs" id="hmTabs" role="group" aria-label="미니맵 보기"></div>
+        <div class="eq-mini-box">
+          <canvas id="hmCv" aria-label="구역 미니맵"></canvas>
+          <div class="hm-lg" id="hmLg" hidden>
+            <span id="hmL0">—</span><i class="bar" id="hmBar"></i><span id="hmL1">—</span>
+          </div>
+        </div>
+        <p class="hm-sub" id="hmSub"></p>
+      </section>
 
       <div class="dash-spk" id="dashSpk" hidden></div>
-    </div><!-- /pane-right -->
+     </div><!-- /mon-rc-a -->
 
-    <!-- ─────── 우: 레일 상태 히트맵 ───────
-         자기 재생 컨트롤을 두지 않는다. 좌측 실시간 뷰·하단 리플레이 바와 **같은 시계**를
-         보고, 그 시각까지 통과하며 잰 값을 쌓는다. 컨트롤이 둘이면 왼쪽과 오른쪽이
-         서로 다른 시각을 가리키게 되어, 같은 화면인데 숫자가 어긋나 보였다. -->
-    <section class="pane-cmp">
-      <div class="cmp-top">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-route"/></svg>
-        <span class="t" id="cmpT">미니맵</span>
-        <span class="sub" id="cmpSub">위에서 본 레일 · 차량 위치 · 감지 핀</span>
-      </div>
-
-      <!-- ═══ 미니맵 ═══════════════════════════════════════════════════════
-           같은 지도를 다섯 가지로 본다. '일반' 은 위에서 본 레일(차량·핀), 나머지
-           넷은 **차량이 지나가며 측정한 값** 을 레일 위치에 쌓아 칠한 분포다.
-           레일에 붙은 센서는 없으므로, 한 번도 차량이 지나지 않은 칸은 칠하지 않고
-           미측정으로 남긴다. 재생 시각까지 쌓인 값이라 되감으면 비우고 다시 쌓는다.
-           한 번에 한 장만 띄운다 — 두 장을 포개면 둘 다 작아져서 아무것도 안 읽혔다. -->
-      <div class="cmp-bd" id="cmpBody">
-        <div class="cmp-case hm">
-          <div class="cmp-h">
-            <span class="hm-tabs" id="hmTabs" role="group" aria-label="미니맵 보기"></span>
-          </div>
-          <p class="hm-sub" id="hmSub"></p>
-          <div class="mrow" id="hmStat"></div>
-          <div class="cmp-view">
-            <canvas id="hmCv" aria-label="미니맵"></canvas>
-            <div class="hm-lg" id="hmLg" hidden>
-              <span id="hmL0">—</span><i class="bar" id="hmBar"></i><span id="hmL1">—</span>
-            </div>
-          </div>
-          <div class="slot-cap" id="hmCap"><i></i>눌러서 선택 · 3D 맵과 같게 동작<span class="sp" id="hmT">0:00</span></div>
+     <!-- 차량 리스트 — 행을 누르면 그 차량이 점검 / 점검 완료 대상이 된다(한 대).
+          점검은 지시를 **넣기 전에 보여 주는** 화면이다 — 미니맵에 정비 구역까지 가는 길을
+          그리고 그 위를 움직인다. 실제 이동은 OCS 가 한다(§ 점검 이동). -->
+     <div class="mon-rc mon-rc-b">
+      <section class="card mon-card mon-vlist" aria-label="차량 리스트">
+        <div class="card-h">
+          <svg class="mon-ic" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-table"/></svg>
+          <span class="t">차량 리스트</span>
+          <span class="card-sub num" id="mvN">5대</span>
         </div>
-      </div><!-- /cmpBody -->
-
-    </section>
+        <div class="fl-bar">
+          <label class="fl-q">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="mvQ" type="search" placeholder="차량 검색" autocomplete="off" aria-label="차량 검색">
+          </label>
+        </div>
+        <div class="mon-vlist-acts">
+          <button type="button" class="fl-act mon-act" id="mvInsp" disabled
+            title="행을 누르면 그 차량이 점검 / 점검 완료 대상이 됩니다"><span class="l">점검</span><span class="id num" id="mvInspId">-</span></button>
+          <button type="button" class="fl-act alt mon-act" id="mvDone" disabled
+            title="행을 누르면 그 차량이 점검 / 점검 완료 대상이 됩니다"><span class="l">점검 완료</span><span class="id num" id="mvDoneId">-</span></button>
+        </div>
+        <div class="mon-vlist-body">
+          <div class="mon-vlist-toast" id="mvToast" hidden></div>
+          <div class="mon-vlist-scroll">
+            <table class="tbl fl-tbl mv-tbl">
+              <thead><tr>
+                <th class="s" data-mv="nm">차량</th>
+                <th class="s" data-mv="st">차량상태</th>
+                <th class="s" data-mv="job">임무상태</th>
+                <th class="s num" data-mv="sc">퍼포먼스 점수</th>
+              </tr></thead>
+              <tbody id="mvBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+     </div><!-- /mon-rc-b -->
+    </aside>
    </div><!-- /split2 -->
 
     <!-- ⑧ 리플레이 바 — 제품(rcis)은 맵 안이 아니라 화면 전체 폭 하단에 고정한다.
@@ -1975,29 +2094,32 @@ button.chip:hover{border-color:var(--border);color:var(--text-1)}
               </div>
             </div>
 
-            <div class="eq-side-h">OHT 리스트 <em>퍼포먼스 500점 만점</em></div>
+            <div class="eq-side-h">OHT 리스트 <em>건강도 500점 만점</em></div>
             <div class="fl-bar">
               <label class="fl-q">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
                 <input id="flQ" type="search" placeholder="차량 검색" autocomplete="off" aria-label="차량 검색">
               </label>
               <span class="fl-n" id="flN"></span>
-              <button type="button" class="fl-act" id="flInsp" disabled
-                title="고른 차량을 정비 구역으로 이동시킵니다 (화면정의서 — 동작 미구현)">점검</button>
             </div>
-            <div class="fl-msg" id="flMsg" hidden></div>
-            <table class="tbl fl-tbl">
+            <!-- 보기 전용 — 점검 지시는 모니터링 차량 리스트로 옮겼다(제품과 같다).
+                 지금 상태(차량상태 · 동작 · 임무)는 모니터링 쪽이 보이고, 여기는 **누적과 정비 일정**
+                 — 이 차를 계속 굴려도 되는가 — 를 본다. -->
+            <table class="tbl fl-tbl eq-oht-tbl">
               <thead><tr>
-                <th class="ck"><input type="checkbox" id="flAll" aria-label="전체 선택"></th>
                 <th class="s" data-s="nm">차량</th>
-                <th>경로</th>
-                <th class="s num" data-s="sc">퍼포먼스 점수</th>
                 <th class="s num" data-s="od">주행 거리(누적)</th>
+                <th class="s num" data-s="done">임무 수행 횟수(누적)</th>
+                <th class="s num" data-s="lt">평균 리드타임</th>
+                <th class="s num" data-s="sc">OHT 건강도</th>
+                <th class="s num" data-s="nx">다음 점검 예정일</th>
               </tr></thead>
               <tbody id="flBody"></tbody>
             </table>
-            <p class="note">퍼포먼스 점수는 오각형 5축의 합입니다(축마다 100점 · 합 500점).
-              관측이 없는 축은 0 으로 셉니다. 열 제목을 누르면 정렬됩니다.</p>
+            <p class="note">임무 수행 횟수는 반송을 끝까지 마친 건수, 평균 리드타임은 반송 요청부터
+              하역 완료까지 걸린 시간의 평균입니다. OHT 건강도는 오각형 5축의 합입니다(축마다 100점 ·
+              합 500점, 관측이 없는 축은 0). 다음 점검 예정일은 <b>예시 값</b>입니다(오늘부터 5일 이후).
+              열 제목을 누르면 정렬됩니다.</p>
           </div>
 
           <!-- 오른쪽 — 고른 설비의 데이터시트. 차량이면 그 차량의 오각형이 위에 붙는다. -->
@@ -2596,7 +2718,7 @@ function detectPoints(){
                        (§ 합성 고지), 여기서는 그 자리를 실측처럼 다시 찾아낼 뿐이다.
                        결과는 벌어짐 0.38 → 충격 0.66 → 단차 1.00 으로 실물 리그 배치와 같다. */
   /* 레일 이상 세 종류 — 벌어짐 · 단차 · 진동. 라벨은 제품(rcis)의 경고 종류
-     표기를 그대로 쓰되, 충격축이 잡는 것은 화면에서 '진동 주의(레일)' 로 말한다.
+     표기를 그대로 쓰되, 충격축이 잡는 것은 화면에서 '진동 이상(레일)' 로 말한다.
      차량 쪽 진동과 이름이 겹치면 경고 목록에서 둘이 한 종류로 묶여 버리므로,
      괄호로 **어디서 난 진동인지** 를 이름에 박아 둔다 —
      실물 리그에서 그 충격을 낸 것이 레일 위 이물질이라 예전에는 '이물질 충격' 으로
@@ -2606,7 +2728,7 @@ function detectPoints(){
   const SPEC = [
     { axis:'track', label:'레일 벌어짐', icon:'\u2194' },
     { axis:'track', label:'레일 단차',   icon:'\u2195' },
-    { axis:'shock', label:'진동 주의(레일)', icon:'\u25c6' }
+    { axis:'shock', label:'진동 이상(레일)', icon:'\u25c6' }
   ];
   const GAP = 0.15;
   const picked = [];
@@ -2890,7 +3012,7 @@ const SCN = [
     desc:'같은 지점에서 통과 차량 진동 급증 · 적재 FOUP 손상 리스크 상승' },
   { id:'N3', key:'slowpass', at:50, lv:'warn', label:'레일 정비 대상 등록',
     desc:'OCS(xMS) 반영 — 운행은 그대로 · 해당 지점 정비 계획 수립' },
-  { id:'N4', key:'degrade', at:84,  lv:'err',  label:'OHT-03 진동 주의(차량)',
+  { id:'N4', key:'degrade', at:84,  lv:'err',  label:'OHT-03 진동 이상(차량)',
     desc:'차체 진동 이상선 초과 — 주행 속도는 정상 범위' },
   { id:'N5', key:'jam',     at:98,  lv:'err',  label:'OHT-03 2차 손상 우려',
     desc:'적재 FOUP 손상·주행 레일 마모 우려 · 신규 배차 중단' },
@@ -3067,7 +3189,7 @@ function simulate(policy){
     const pos = RING/N_VEH*i;
     const onUpper = pos < PATHS.UPPER.len;
     veh.push({ id:i, path:onUpper ? 'UPPER' : 'LOWER', s:onUpper ? pos : pos - PATHS.UPPER.len,
-               v:0, job:null, leg:null, dwell:0, done:0, slow:false, od:0,
+               v:0, job:null, leg:null, dwell:0, done:0, lt:0, slow:false, od:0,
                toMaint:false, parked:false, handoff:false,   // N6 조치 — 인계 / 이동 / 정지
                /* 차량별 건강도 누적 — 개별 오각형은 순간값이 아니라 이 누적으로 낸다.
                   순간값으로 그리면 직선에 있는 동안 곡선 축이 '데이터 없음' 이 되어
@@ -3220,7 +3342,8 @@ function simulate(policy){
         if(v.leg === v.job.from) v.leg = v.job.to;
         /* job 소요는 **요청된 순간(j.at)부터** 잰다. 배차된 순간부터 재면 큐에서 기다린
            시간이 통째로 빠져, 차가 모자라 배차조차 못 한 쪽이 오히려 좋아 보인다. */
-        else { v.done++; v.job.doneT = T; done.push({ t:T, dur:T - v.job.at }); v.job = null; v.leg = null; }
+        else { v.done++; v.lt += T - v.job.at;          // 리드타임 — 요청부터 하역 완료까지
+               v.job.doneT = T; done.push({ t:T, dur:T - v.job.at }); v.job = null; v.leg = null; }
         return;
       }
       /* 정비 스퍼 분기 — 숏컷의 이 지점에서 본선을 벗어난다 */
@@ -3255,6 +3378,8 @@ function simulate(policy){
                          /* FOUP 을 지고 있는가 — 집은 뒤부터 놓기 전까지 */
                          foup:!!(v.job && v.leg === v.job.to),
                          done:v.done, leg:v.leg, od:v.od,
+                         /* 평균 리드타임(초) — 끝낸 반송만. 아직 하나도 못 끝냈으면 null */
+                         lt: v.done ? v.lt / v.done : null,
                          /* 지금 맡은 반송의 출발 → 도착 (설비 리스트의 '경로' 칸) */
                          jr: v.job ? [v.job.from, v.job.to] : null,
                          /* 수행능력 대표값 — 최근 PERF_N 회의 중앙/p90 (정의서 집계 그대로).
@@ -4381,14 +4506,14 @@ const fmtMS = sec => Math.floor(sec/60) + ':' + String(Math.floor(sec%60)).padSt
 /** 차량 한 대의 상태 한 단어 — 네 곳이 같은 말을 쓰게 한 자리에 모았다 */
 const vehState = v => v.park ? '정비 구역 격리'
                     : v.maint ? '정비 구역 이송 중'
-                    : v.slow ? '진동 주의(차량)'
+                    : v.slow ? '진동 이상(차량)'
                     : v.dwell ? '이적재 중'
                     : v.busy ? '주행 중' : '유휴';
 
 /* ── ① 경고 감지 ─────────────────────────────────────────────────────────
    종류는 이 화면이 정의한 이상 네 가지뿐이다. 다른 말을 새로 만들지 않는다.
-     레일 — 레일 벌어짐 · 레일 단차 · 진동 주의(레일)   (순찰 로봇이 지나며 발견)
-     차량 — 진동 주의(차량)                             (OHT 한 대)
+     레일 — 레일 벌어짐 · 레일 단차 · 진동 이상(레일)   (순찰 로봇이 지나며 발견)
+     차량 — 진동 이상(차량)                             (OHT 한 대)
    'FOUP 손상 리스크' 같은 **결과·영향** 은 종류가 아니라 사유(why) 로 내려 적는다.
    종류를 결과로 적으면 같은 이상이 이름 두 개로 늘어나 건수가 부풀려진다.
 
@@ -4398,11 +4523,11 @@ function syncAlarms(){
   const T = liveT(), rows = [];
   /* 차량 이상 — 지금 고장난 OHT */
   if(T >= T_S2) rows.push({
-    kind:'진동 주의(차량)', icon:'\u25c6', tag:VNAME(SLOW_VEH), pick:'veh:' + SLOW_VEH,
+    kind:'진동 이상(차량)', icon:'\u25c6', tag:VNAME(SLOW_VEH), short:VNAME(SLOW_VEH), pick:'veh:' + SLOW_VEH,
     t:T_S2, time:fmtMS(T_S2), level:T >= T_CALM ? 'warn' : 'err',
     why: T >= T_CALM ? '정비 구역 격리 완료 · 본선 이탈'
        : T >= T_ACT  ? '본선 이탈 후 정비 구역 이송 중'
-       : T >= T_JAM  ? '이상선 초과 유지 · 적재 FOUP·주행 레일 2차 손상 우려'
+       : T >= T_JAM  ? '차체 진동 평시의 ' + DEG_VIB.toFixed(1) + '배 · 이상선 초과 유지'
        : '차체 진동 평시의 ' + DEG_VIB.toFixed(1) + '배 · 이상선 초과 (주행 속도는 정상 범위)' });
   /* 레일 이상 — 순찰 로봇이 발견한 지점 세 곳이 전부다.
      따로 '이상 구간' 줄을 두지 않는다 — 구간은 이상이 아니라 그 이상이 있는 자리다. */
@@ -4412,11 +4537,12 @@ function syncAlarms(){
     const ft = p._foundT || 0;
     const sg = (typeof SEGS !== 'undefined')
       ? SEGS.find(g => g.path === p.path && p.s >= g.s0 && p.s <= g.s1) : null;
-    rows.push({ kind:p.label, icon:p.icon, pick:'point:' + i,
-      tag:(sg ? sg.id + ' · ' : '') + PATH_NM[p.path] + ' ' + (p.s/1000).toFixed(1) + ' m',
+    rows.push({ kind:p.label, icon:p.icon, pick:'point:' + i, short:sg ? sg.id : '—',
+      tag:sg ? sg.id : '—',
       t:ft, time:fmtMS(ft), level:lv === 'ok' ? 'warn' : lv,
       why:(T >= T_SLOWP ? '정비 대상 등록 · 운행 영향 없음(서행·우회 없음) · ' : '순찰 로봇 통과 시 감지 · ')
-          + A.noun + ' ' + axVal(p.axis, p.val) + ' (경고선 ' + axVal(p.axis, A.warn) + ')' });
+          + A.noun + ' ' + axVal(p.axis, p.val) + ' (정상 범위 ≤' + axVal(p.axis, A.warn)
+          + ' 대비 ' + (p.val / A.warn).toFixed(1) + '배)' });
   });
   const sig = rows.map(r => r.kind + r.level + r.why).join('|');
   if(sig !== store._almSig){ store._almSig = sig; store.alarms = rows; renderAlarms(); }
@@ -4504,7 +4630,7 @@ function agentSay(T){
     'OCS(xMS)에 반영했습니다. <b>' + WH + '</b> 지점은 <b>정비 대상</b>으로 등록되었고, '
     + '통과 차량의 속도·경로는 바꾸지 않았습니다 — 운행 영향 없이 진동 추이만 계속 봅니다.',
     '진동이 이상선을 넘으면 그때 통과 제한을 겁니다.'] };
-  if(T < T_JAM) return { lv:'err', h:V + ' 진동 주의(차량)', ps:[
+  if(T < T_JAM) return { lv:'err', h:V + ' 진동 이상(차량)', ps:[
     '<b>' + V + '</b> 의 차체 진동이 평시의 <span class="q">' + DEG_VIB.toFixed(1) + '배</span>'
     + '(<span class="q">' + (D.vib.rms.stat.avg*DEG_VIB).toFixed(2) + ' g</span>)로 올라 이상선 '
     + AXIS.vehicle.err.toFixed(2) + ' g 를 넘었습니다. 주행 속도는 '
@@ -4583,11 +4709,17 @@ function drawMap2D(cv, _k){
     c.fillStyle = cssVar('--ok');
     c.beginPath(); c.arc(x, y, 3.4, 0, Math.PI*2); c.fill();
     c.strokeStyle = cssVar('--ok-300'); c.lineWidth = 1; c.stroke(); })();
-  fr.v.forEach((v,i) => { const q = pointAt(v.p, v.s), [x,y] = P(q.x,q.y);
+  /* 점검 이동 — 차량 리스트에서 지시한 차는 정비 구역까지 가는 길 위에 찍는다 */
+  const moving = drawInspRuns(c, P, line);
+  fr.v.forEach((v,i) => { if(moving.has(i)) return;
+    const q = pointAt(v.p, v.s), [x,y] = P(q.x,q.y);
     const selected = store.sel && store.sel.kind === 'oht' && store.sel.idx === i;
     c.fillStyle = v.slow ? cssVar('--err') : (v.busy ? cssVar('--brand') : cssVar('--text-3'));
     c.beginPath(); c.arc(x, y, selected ? 4.6 : 3.4, 0, Math.PI*2); c.fill();
     if(selected){ c.strokeStyle = cssVar('--text-1'); c.lineWidth = 1.2; c.stroke(); }
+    /* 차량 리스트에서 점검 대상으로 고른 차 — 고리 하나로 어디 있는지 보인다 */
+    if(MON.tgt === i){ c.strokeStyle = cssVar('--brand-300'); c.lineWidth = 1.4;
+      c.beginPath(); c.arc(x, y, 7.5, 0, Math.PI*2); c.stroke(); }
   });
 }
 
@@ -4627,11 +4759,10 @@ function sideHead(S){
     const p = S.p, A = AXIS[p.axis], lv = axisLevel(p.axis, p.val);
     return '<div class="seg-stat">'
       + g('관측값', axVal(p.axis, p.val), LVL_COLOR[lv])
-      + g('판정', LVL_WORD[lv], LVL_COLOR[lv])
-      + g('경고선', axVal(p.axis, A.warn))
-      + g('이상선', axVal(p.axis, A.err))
+      + g('정상 범위', '≤' + axVal(p.axis, A.warn))
+      + g('기준 대비', (p.val / A.warn).toFixed(1) + '배')
       + '</div><div class="seg-note">' + A.src + ' 실측에서 <b>' + p.label
-      + '</b> 이 가장 크게 잡힌 지점입니다. 추정 원인 — ' + A.reason + '.</div>';
+      + '</b> 이 가장 크게 잡힌 지점입니다.</div>';
   }
   return '';
 }
@@ -4663,17 +4794,19 @@ function paintSide(k){
   const box = $('#sideCh'); if(!box) return;
   if(box._kind !== S.kind) buildSide();                 // 다른 종류를 골랐으면 틀부터 다시
   const fr = liveFrame(), vals = $('#sideVals'); if(!vals) return;
-  /* 판정 요약 — 이상 지점을 골랐을 때만. 무엇을 근거로 이 등급인지 한 문장으로. */
+  /* 판정 요약 — 이상 지점을 골랐을 때만. 잰 값과 기준 대비만 적는다.
+     원인 추론(예: '이물질 접촉으로 판단') 과 주의/경고 등급 글자는 넣지 않는다 —
+     기준선을 넘었으면 등급과 상관없이 모두 '이상' 이다. */
   const mj = $('#miniJudge');
   if(mj){
     mj.hidden = S.kind !== 'point';
     if(S.kind === 'point'){
       const p = S.p, A = AXIS[p.axis], lv = axisLevel(p.axis, p.val);
       mj.innerHTML = '<div class="mj-h"><i style="background:var(' + LVL_COLOR[lv] + ')"></i>'
-        + '<b>판정 요약 · ' + LVL_WORD[lv] + '</b><span class="mj-t">순찰 통과 시</span></div>'
+        + '<b>판정 요약</b><span class="mj-t">순찰 통과 시</span></div>'
         + '<p class="mj-txt">' + A.noun + ' 지표가 ' + axVal(p.axis, p.val) + ' 까지 올라 '
         + '정상 범위(≤' + axVal(p.axis, A.warn) + ') 대비 '
-        + (p.val/A.warn).toFixed(1) + '배입니다. ' + A.reason + ' 으로 판단합니다.</p>'
+        + (p.val/A.warn).toFixed(1) + '배입니다.</p>'
         + '<div class="mj-act">조치 · ' + A.act + '</div>';
     }
   }
@@ -4682,14 +4815,17 @@ function paintSide(k){
 
   if(S.kind === 'oht'){
     const v = fr.v[S.idx], q = pointAt(v.p, v.s);
-    const PN = PATH_NM[v.p];
+    /* 위치는 경로 이름(하부 루프 …) 대신 맵에 적힌 레일 번호(S-1 … S-7)로 말한다 */
+    const sg = (typeof SEGS !== 'undefined')
+      ? SEGS.find(g => g.path === v.p && v.s >= g.s0 && v.s <= g.s1) : null;
+    const PN = sg ? sg.id : PATH_NM[v.p];
     $('#sideSum').textContent = VNAME(S.idx) + ' · ' + PN + (v.slow ? ' · 진동 이상' : '');
     vals.innerHTML =
         row('상태', vehState(v))
       + row('차체 진동', (D.vib.rms.stat.avg * (v.slow ? DEG_VIB : 1)).toFixed(2), ' g')
       + row('현재 속도', v.v.toFixed(1), ' m/s')
       + row('자유 속도 대비', Math.round(v.v / ((q.curve?V_CURVE:V_RUN)*(v.slow?K_SLOW:1)) * 100), ' %')
-      + row('경로', PN)
+      + row('레일 위치', PN)
       + row('구간 진행', ((v.s/PATHS[v.p].len)*100).toFixed(0), ' %')
       + row('완료 job', v.done, ' 건')
       + row('목적지', v.leg || '—');
@@ -4712,15 +4848,17 @@ function paintSide(k){
   } else if(S.kind === 'point'){
     const p = S.p, A = AXIS[p.axis], lv = axisLevel(p.axis, p.val);
     const found = store.pins.includes(S.idx);
-    $('#sideSum').textContent = p.label + ' · ' + PATH_NM[p.path] + ' ' + (p.s/1000).toFixed(1) + ' m';
+    /* 레일 위치는 경로 이름(하부 루프 …) 대신 맵에 적힌 레일 번호(S-1 … S-7)로 말한다 */
+    const sg = (typeof SEGS !== 'undefined')
+      ? SEGS.find(g => g.path === p.path && p.s >= g.s0 && p.s <= g.s1) : null;
+    const railNo = sg ? sg.id : '—';
+    $('#sideSum').textContent = p.label + ' · ' + railNo;
     vals.innerHTML =
         row('종류', p.label)
-      + row('판정', LVL_WORD[lv])
       + row('기준 대비', (p.val / A.warn).toFixed(1), ' 배')
-      + row('레일 위치', PATH_NM[p.path] + ' ' + (p.s/1000).toFixed(1) + ' m')
+      + row('레일 위치', railNo)
       + row('OPS Tag', String(p.tag))
       + row('발견', found ? '순찰 통과 시 확인' : '미확인')
-      + row('원인 추정', A.reason)
       + row('조치', A.act);
   } else {
     const PN = PATH_NM[S.path];
@@ -5067,7 +5205,9 @@ function paintHeat(i){
 /** 보기 버튼 */
 function bindMM(){
   const host = $('#hmTabs'); if(!host) return;
-  host.innerHTML = MM_MODES.map(m =>
+  /* 제품의 보기는 넷이다(일반 · 진동 · 소음 · 레이저 변위). '속도' 분포는 정의만 남기고
+     버튼은 내지 않는다 — 다시 살리려면 이 거름만 걷으면 된다. */
+  host.innerHTML = MM_MODES.filter(m => m.id !== 'vel').map(m =>
     `<button type="button" data-mm="${m.id}" aria-pressed="${m.id === store.mmMode}">${m.nm}</button>`).join('');
   $$('#hmTabs button').forEach(b => b.addEventListener('click', ()=>{
     store.mmMode = b.dataset.mm;
@@ -5414,51 +5554,28 @@ function updateEvents(k){
   });
 }
 /* ══════════════════════════════════════════════════════════════════════════
-   § ② 경고 감지 — 종류별 그룹 · 펼치면 시간대별 기록
-   제품(rcis)의 '경고 감지' 패널과 같은 규칙이다: 종류로 묶고, 그룹마다 건수와
-   가장 최근 시각을 적고, 누르면 그 종류의 기록이 시간 순으로 펼쳐진다.
+   § 경고 감지 — 한 줄에 한 건 (제품 semicon-europa /monitor 와 같다)
+   종류로 묶지 않는다 — 줄마다 '종류 · 대상' 과 감지 시각을 적고, 최근 것이 위로 온다.
+   이상(err) 은 줄 왼쪽 띠로 가른다. 사유(why)는 말풍선으로 내린다.
+   누르면 그 대상이 3D 맵에서 열린다(차량이면 상세 패널).
    CLEAR 는 목록과 누적 건수를 비운다(맵에 떨어진 핀은 그대로 둔다 — 제품의 라벨과 같다).
    ══════════════════════════════════════════════════════════════════════════ */
-const _almOpen = new Set();
+const _almOpen = new Set();          // 예전 그룹 펼침 상태 — CLEAR 가 아직 비운다
 function renderAlarms(){
   const body = $('#asBody'), n = $('#asN'); if(!body) return;
   if(n) n.textContent = store.alarms.length + '건';
   if(!store.alarms.length){
-    body.innerHTML = '<div class="alm-empty">아직 감지된 경고가 없습니다</div>';
+    body.innerHTML = '<li class="mon-empty">아직 감지된 경고가 없습니다</li>';
     return;
   }
-  /* 종류별로 묶는다 — 순서는 '가장 최근에 걸린 종류' 가 위로 */
-  const groups = new Map();
-  store.alarms.forEach(a=>{
-    if(!groups.has(a.kind)) groups.set(a.kind, { kind:a.kind, icon:a.icon, items:[], level:'warn' });
-    const g = groups.get(a.kind);
-    g.items.push(a);
-    if(a.level === 'err') g.level = 'err';
-  });
-  body.innerHTML = [...groups.values()].map(g=>{
-    const open = _almOpen.has(g.kind);
-    const head = `<div class="alm-g" data-k="${g.kind}" data-lv="${g.level}"
-        title="${g.kind} · ${g.items.length}건 · 최근 ${g.items[0].time} (누르면 시간대별 기록이 펼쳐집니다)">
-        <span class="ai">${g.icon || ''}</span><span class="ak">${g.kind}</span>
-        <span class="at">${g.items[0].time}</span><span class="an">${g.items.length}건</span></div>`;
-    const sub = open
-      ? `<div class="alm-sub">` + g.items.slice(0, 8).map(a =>
-          `<span data-pick="${a.pick || ''}" title="누르면 맵에서 이 대상을 엽니다">`
-          + `${a.time} · ${a.tag} — ${a.why || ''}</span>`).join('') + `</div>`
-      : '';
-    return head + sub;
-  }).join('');
-  $$('.alm-g', body).forEach(el => el.addEventListener('click', ()=>{
-    const k = el.dataset.k;
-    _almOpen.has(k) ? _almOpen.delete(k) : _almOpen.add(k);
-    renderAlarms();
-  }));
-  /* 펼친 줄을 누르면 그 대상이 3D 맵에서 열린다 */
-  $$('.alm-sub span', body).forEach(el => {
-    if(!el.dataset.pick) return;
-    el.style.cursor = 'pointer';
-    el.addEventListener('click', e => { e.stopPropagation(); pickAlarm(el.dataset.pick); });
-  });
+  const rows = [...store.alarms].sort((a, b) => (b.t || 0) - (a.t || 0));
+  body.innerHTML = rows.map(a =>
+    `<li><button type="button" data-pick="${a.pick || ''}" data-lv="${a.level}"
+       title="${a.tag} — ${a.why || ''}${a.pick && a.pick.startsWith('veh') ? ' · 누르면 차량 상태값을 엽니다' : ''}">`
+    + `<span class="ak">${a.kind} · ${a.short || a.tag}</span>`
+    + `<span class="at num">${a.time}</span></button></li>`).join('');
+  $$('button[data-pick]', body).forEach(el =>
+    el.addEventListener('click', () => pickAlarm(el.dataset.pick)));
 }
 
 /** ⑥ 최근 감지 로그 렌더 */
@@ -5541,9 +5658,11 @@ function buildB(){
      이 정의서의 근거다. 가운데 미니캠은 도해 옆에서 같은 차량을 쫓는다. */
   buildEqLists();
   bindFleet();
-  $('#rawgrid').innerHTML = CH_DEFS.map(d=>`
+  /* 제품의 RAW 는 차량 탑재 센서 열 채널이다 — 속도(OPS)는 센서가 아니라 운행 값이라
+     여기서는 빼고(상세 패널에는 남는다), 보조 표기는 소스와 수신율을 함께 적는다. */
+  $('#rawgrid').innerHTML = CH_DEFS.filter(d => d.id !== 'vel').map(d=>`
     <div class="raw" data-ch="${d.id}">
-      <div class="rt"><b>${d.nm}</b><span>${d.src.split(' ')[1]||''}</span></div>
+      <div class="rt"><b>${d.nm}</b><span>${d.src}</span></div>
       <div class="rv num" style="color:var(${d.col})">—<em>${d.unit}</em></div>
       <canvas></canvas>
     </div>`).join('');
@@ -5630,9 +5749,7 @@ function paintB(k){
             const g = (typeof SEGS !== 'undefined')
               ? SEGS.find(x => x.path === v.p && v.s >= x.s0 && v.s <= x.s1) : null;
             return g ? ' · ' + g.nm : ''; })()}</dd>`
-      + `<dt>통신</dt><dd>${commOf(v).up ? '연결됨' : '연결 끊김'}</dd>`
-      + `<dt>현재 속도</dt><dd>${v.v.toFixed(1)} m/s</dd>`
-      + `<dt>완료 job</dt><dd>${v.done}건</dd>`;
+      + `<dt>통신</dt><dd>${commOf(v).up ? '정상' : '끊김'}</dd>`;
     drawEqRadar();
     /* RAW 스파크라인 — 고른 차량 기준 */
     $$('#rawgrid .raw').forEach(el => {
@@ -6202,7 +6319,7 @@ function updateMiniMeta(){
     mj.hidden = !J;
     if(J){
       mj.innerHTML = `<div class="mj-h"><i style="background:var(${LVL_COLOR[J.level]})"></i>`
-        + `<b>판정 요약 · ${LVL_WORD[J.level]}</b><span class="mj-t">t ${J.t.toFixed(1)}s 감지</span></div>`
+        + `<b>판정 요약</b><span class="mj-t">t ${J.t.toFixed(1)}s 감지</span></div>`
         + `<p class="mj-txt">${J.text}</p>`
         + `<div class="mj-act">조치 · ${J.act}</div>`;
     }
@@ -6500,8 +6617,9 @@ function loop(now){
     tickClock(); tickLogAgo();
     if(store.view === 'A'){
       syncAlarms();                                     // ① 경고 감지
-      drawRadar(k);                                     // ② OHT 건강도 (전 차량 평균)
-      paintAgent();                                     // ③ AI 모니터링 에이전트
+      drawRadar(k);                                     // OHT 건강도 (전 차량 평균)
+      paintMon();                                       // 건강도 머리글 · 차량 리스트
+      paintAgent();                                     // AI 모니터링 에이전트
       paintSide(k);                                     // 보조 창(선택 대상 상세)
       if(store.open.mini) updateMiniMeta();
     }else{
@@ -7084,8 +7202,8 @@ function eqLogs(vi, partId){
 
 /* ── 선택 상태 ──────────────────────────────────────────────────────────── */
 const EQ = { kind:'oht', veh:0, seg:0, dsPage:'1',
-             /* OHT 리스트 — 검색어 · 정렬(열, 방향) · 체크된 차량 */
-             q:'', sort:{ k:'nm', d:1 }, pick:new Set(), sig:'' };
+             /* OHT 리스트 — 검색어 · 정렬(열, 방향) */
+             q:'', sort:{ k:'nm', d:1 }, sig:'' };
 
 function buildEqLists(){
   $('#ohtList').innerHTML = Array.from({ length:N_VEH }, (_, n) =>
@@ -7531,24 +7649,36 @@ function paintDs(){
 /* ── 왼쪽 칸 — OHT 전체 퍼포먼스 + 차량 리스트 ────────────────────────────
    고른 설비가 차량이든 레일 구간이든 이 칸은 바뀌지 않는다. 설비정보 탭에 들어온
    사람이 가장 먼저 묻는 것이 '지금 어느 차가 문제인가' 라서다. */
-const FL_COLS = { nm:'차량', sc:'퍼포먼스 점수', od:'주행 거리(누적)' };
+const FL_COLS = { nm:'차량', od:'주행 거리(누적)', done:'임무 수행 횟수(누적)', lt:'평균 리드타임',
+                  sc:'OHT 건강도', nx:'다음 점검 예정일' };
+/* 다음 점검 예정일 — **예시 값** 이다. 정비 계획 데이터가 없어 화면을 연 날을 기준으로
+   차량마다 5~27일 뒤의 날짜를 낸다. 차량 번호로 정해지므로 다시 열어도 같은 차가
+   같은 간격을 받는다(난수로 하면 열 때마다 순서가 바뀌어 정렬을 설명할 수 없다). */
+const NEXT_INSP_D = n => 5 + ((n * 37 + 11) % 23);
+function nextInsp(n){
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const d = NEXT_INSP_D(n); t.setDate(t.getDate() + d);
+  const ymd = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0');
+  return { d, ymd };
+}
 function flRows(){
   const fr = liveFrame();
   const q = EQ.q.trim().toLowerCase();
-  const rows = fr.v.map((v, n) => ({ n, nm:VNAME(n), sc:vehScore(n), od:v.od || 0, v }))
+  const rows = fr.v.map((v, n) => ({ n, nm:VNAME(n), od:v.od || 0, done:v.done || 0,
+      lt:v.lt == null ? Infinity : v.lt, sc:vehScore(n), nx:NEXT_INSP_D(n), v }))
     .filter(r => !q || r.nm.toLowerCase().includes(q));
   const { k, d } = EQ.sort;
-  rows.sort((a, b) => (k === 'nm' ? a.nm.localeCompare(b.nm) : a[k] - b[k]) * d);
+  rows.sort((a, b) => ((k === 'nm' ? a.nm.localeCompare(b.nm) : (a[k] - b[k]) || 0) * d) || (a.n - b.n));
   return rows;
 }
 /* ── 점검 이동 ───────────────────────────────────────────────────────────
-   '점검' 을 누르면 고른 차량이 **정비 구역으로 가는 길**을 미니맵에 그리고 그 길을
-   따라 움직이기 시작한다. 시뮬레이션에는 손대지 않는다 — 이것은 OCS 에 지시를
-   넣기 전에 '이 차를 빼면 이렇게 간다' 를 보여 주는 화면이고, 실제 이동은 OCS 가
-   한다(§ bindFleet 의 점검 버튼 주석).
+   모니터링 차량 리스트에서 '점검' 을 누르면 고른 차량이 **정비 구역으로 가는 길**을
+   미니맵에 그리고 그 길을 따라 움직이기 시작한다. 시뮬레이션에는 손대지 않는다 —
+   이것은 OCS 에 지시를 넣기 전에 '이 차를 빼면 이렇게 간다' 를 보여 주는 화면이고,
+   실제 이동은 OCS 가 한다. '점검 완료' 는 그 지시를 거둬 운행으로 돌려보낸다.
    경로는 지어내지 않는다. 트랙이 단방향이라 지금 자리에서 정비 스퍼까지 가는 길은
    하나뿐이고, 그 길을 그대로 잇는다. */
-const INSP_RUN = { list:[], t0:0 };
+const INSP_RUN = { list:[] };
 /** 지금 자리 → 정비 구역 끝. 앞으로만 도는 구조라 경로가 하나로 정해진다. */
 function maintRoute(p, s){
   const legs = [];
@@ -7571,14 +7701,40 @@ function routeAt(rt, d){
   const L = rt.legs[rt.legs.length-1];
   return { p:L.p, s:L.s1 };
 }
-/** 점검 지시 — 고른 차량마다 경로를 잡고 움직이기 시작한다 */
-function inspStart(){
-  const fr = liveFrame();
-  INSP_RUN.t0 = performance.now();
-  INSP_RUN.list = [...EQ.pick].sort().map(n => {
-    const v = fr.v[n];
-    return { veh:n, rt:maintRoute(v.p, v.s), from:(v.jr ? v.jr[0] : vehSegName(v)), done:false };
+const inspRun = n => INSP_RUN.list.find(r => r.veh === n);
+/** 점검 지시 — 그 차량의 경로를 잡고 움직이기 시작한다. 이미 가는 중이면 그대로 둔다. */
+function inspStart(n){
+  if(inspRun(n)) return;
+  const v = liveFrame().v[n];
+  INSP_RUN.list.push({ veh:n, rt:maintRoute(v.p, v.s), t0:performance.now(),
+                       from:(v.jr ? v.jr[0] : vehSegName(v)), done:false });
+}
+/** 점검 완료 — 지시를 거둬 운행으로 돌려보낸다 */
+function inspDone(n){ INSP_RUN.list = INSP_RUN.list.filter(r => r.veh !== n); }
+/** 그 지시가 지금 경로 위 어디까지 왔는가 — 도착하면 run.done */
+function inspAt(run){
+  const d = Math.min(run.rt.len, (performance.now() - run.t0)/1000 * V_RUN * 1000);
+  run.done = d >= run.rt.len;
+  return routeAt(run.rt, d);
+}
+/** 미니맵 위에 점검 경로와 그 위를 가는 차량을 얹는다 — 두 미니맵이 같은 그림을 쓴다.
+    돌려주는 집합의 차량은 시뮬레이션 자리에 다시 찍지 않는다. */
+function drawInspRuns(c, P, line){
+  const moving = new Set();
+  INSP_RUN.list.forEach(run => {
+    moving.add(run.veh);
+    c.setLineDash([4,3]);
+    run.rt.legs.forEach(g2 => line(g2.p, g2.s0, g2.s1, hexA(cssVar('--brand'), .85), 2.4));
+    c.setLineDash([]);
+    const at = inspAt(run), q = pointAt(at.p, at.s), [x,y] = P(q.x,q.y);
+    c.fillStyle = cssVar('--brand');
+    c.beginPath(); c.arc(x, y, 4.2, 0, Math.PI*2); c.fill();
+    c.strokeStyle = '#fff'; c.lineWidth = 1.2; c.stroke();
+    c.font = '700 9px Pretendard,system-ui'; c.textAlign = 'center';
+    c.fillStyle = cssVar('--brand-300');
+    c.fillText(VNAME(run.veh), x, y - 8);
   });
+  return moving;
 }
 /** 미니맵 — 평소에는 지금 위치, 점검 중에는 그 차량이 가는 길 */
 function drawEqMap(){
@@ -7608,24 +7764,7 @@ function drawEqMap(){
 
   const fr = liveFrame();
   /* 점검 이동 — 경로를 깔고 그 위를 움직인다 */
-  const el = (performance.now() - INSP_RUN.t0)/1000;
-  const moving = new Set();
-  INSP_RUN.list.forEach(run => {
-    moving.add(run.veh);
-    run.legs = run.rt.legs;
-    c.setLineDash([4,3]);
-    run.rt.legs.forEach(g2 => line(g2.p, g2.s0, g2.s1, hexA(cssVar('--brand'), .85), 2.4));
-    c.setLineDash([]);
-    const d = Math.min(run.rt.len, el * V_RUN * 1000);
-    run.done = d >= run.rt.len;
-    const at = routeAt(run.rt, d), q = pointAt(at.p, at.s), [x,y] = P(q.x,q.y);
-    c.fillStyle = cssVar('--brand');
-    c.beginPath(); c.arc(x, y, 4.2, 0, Math.PI*2); c.fill();
-    c.strokeStyle = '#fff'; c.lineWidth = 1.2; c.stroke();
-    c.font = '700 9px Pretendard,system-ui'; c.textAlign = 'center';
-    c.fillStyle = cssVar('--brand-300');
-    c.fillText(VNAME(run.veh), x, y - 8);
-  });
+  const moving = drawInspRuns(c, P, line);
   /* 나머지 차량 — 지금 위치 */
   fr.v.forEach((v, i) => {
     if(moving.has(i)) return;
@@ -7642,75 +7781,198 @@ function drawEqMap(){
     ? (INSP_RUN.list.every(r => r.done) ? '정비 구역 도착' : '점검 이동 중')
     : '현재 위치';
 }
+
+/* ── 차량 한 대의 칸 — 모니터링 · 설비 두 리스트가 같은 말을 쓰게 한 자리에 모았다 ──
+   차량상태  정상 · 이상(진동 이상) · 정비 이송 · 정비 중
+             점검 지시(INSP_RUN)와 시뮬레이션의 격리 조치(N6)를 같은 말로 적는다.
+   동작      이동 · 정지 · 이적재 · 안전 정지(반송 중인데 앞차에 막혀 선 것)
+   임무상태  Load(집으러 감) / Unload(지고 감) + 그 포트. 반송이 없으면 대기. */
+function vehStat(v, n){
+  const run = inspRun(n);
+  if(v.park || (run && run.done)) return { t:'정비 중',   lv:'maint',   o:2 };
+  if(v.maint || run)              return { t:'정비 이송', lv:'toMaint', o:1 };
+  if(v.slow)                      return { t:'이상',      lv:'err',     o:3 };
+  return { t:'정상', lv:'ok', o:0 };
+}
+function vehMotion(v, n){
+  const run = inspRun(n);
+  if(v.park || (run && run.done)) return '정지';
+  if(v.dwell) return '이적재';
+  if(v.v > 0.05) return '이동';
+  return v.busy ? '안전 정지' : '정지';
+}
+function vehJobHTML(v, n){
+  if(v.park || v.maint || inspRun(n)) return '<span class="dst" data-k="mt">정비</span>정비 구역';
+  if(!v.jr) return '<span class="idle">대기</span>';
+  return v.foup ? `<span class="dst">Unload</span>${v.jr[1]}`
+                : `<span class="dst">Load</span>${v.jr[0]}`;
+}
+const vehJobKey = (v, n) => (v.park || v.maint || inspRun(n)) ? '~' : (v.jr ? (v.foup ? v.jr[1] : v.jr[0]) : '~~');
+/** 점수 칸 — 한 축이라도 저하(0점)면 붉게 */
+function vehScoreHTML(n, fr, bar){
+  const sc = vehScore(n, fr), bad = vehPerf(n, fr).some(x => x.s === 0);
+  return (bar ? `<span class="sc-bar"><i style="width:${(sc/5).toFixed(1)}%"${bad ? ' data-s="err"' : ''}></i></span>` : '')
+    + `<span class="num"${bad ? ' data-s="err"' : ''}>${sc}<span class="sc-max">/500</span></span>`;
+}
+/** 운영 대수 · 평균 퍼포먼스 — 건강도 카드와 설비 화면 요약이 같은 값을 쓴다 */
+function fleetSum(fr){
+  fr = fr || liveFrame();
+  const H = fleetPerf(fr);
+  return { H, run:fr.v.filter(v => !v.park).length, n:fr.v.length,
+           tot:H.reduce((a, x) => a + (x || 0), 0),
+           insp:fr.v.filter((v, i) => v.park || v.maint || inspRun(i)).length };
+}
+
+/* ── 모니터링 · 차량 리스트 ───────────────────────────────────────────────
+   제품(semicon-europa /monitor) 우측 B열. 행을 누르면 그 차량이 점검 / 점검 완료
+   대상이 된다(한 대 — 다시 누르면 풀린다). 버튼에 대상 차량 이름이 붙는다.
+   표는 순서가 바뀔 때만 다시 세우고, 평소에는 칸 내용만 갈아 끼운다 — 10Hz 로
+   통째로 다시 쓰면 누르는 사이에 행이 바뀌어 클릭이 사라진다. */
+const MON = { q:'', sort:{ k:'nm', d:1 }, tgt:null, sig:'', toastT:0 };
+function monRows(fr){
+  const q = MON.q.trim().toLowerCase();
+  const rows = fr.v.map((v, n) => ({ n, v, nm:VNAME(n), st:vehStat(v, n), sc:vehScore(n, fr) }))
+    .filter(r => !q || r.nm.toLowerCase().includes(q));
+  const { k, d } = MON.sort;
+  const key = r => k === 'st' ? r.st.o : k === 'job' ? vehJobKey(r.v, r.n) : k === 'sc' ? r.sc : r.nm;
+  rows.sort((a, b) => { const x = key(a), y = key(b);
+    return ((typeof x === 'string' ? x.localeCompare(y) : x - y) * d) || (a.n - b.n); });
+  return rows;
+}
+function paintMon(){
+  const fr = liveFrame(), S = fleetSum(fr);
+  const hs = $('#monHealthSub');
+  if(hs) hs.textContent = `운영 ${S.run} / ${S.n}대 · 평균 ${S.tot}/500`;
+
+  const body = $('#mvBody'); if(!body) return;
+  const rows = monRows(fr);
+  const sig = rows.map(r => r.n).join(',');
+  if(sig !== MON.sig){
+    MON.sig = sig;
+    body.innerHTML = rows.length ? rows.map(r =>
+      `<tr data-mv="${r.n}" aria-selected="false">
+        <td>${r.nm}</td>
+        <td class="st"><span class="st-t" data-mst="${r.n}"></span></td>
+        <td class="rt" data-mjob="${r.n}"></td>
+        <td class="num" data-msc="${r.n}"></td></tr>`).join('')
+      : '<tr><td colspan="4" class="fl-empty">검색 결과가 없습니다</td></tr>';
+  }
+  rows.forEach(r => {
+    const st = $(`[data-mst="${r.n}"]`, body);
+    if(st){ st.textContent = r.st.t; st.dataset.lv = r.st.lv; }
+    const jb = $(`[data-mjob="${r.n}"]`, body); if(jb) jb.innerHTML = vehJobHTML(r.v, r.n);
+    const sc = $(`[data-msc="${r.n}"]`, body); if(sc) sc.innerHTML = vehScoreHTML(r.n, fr, false);
+    const tr = $(`tr[data-mv="${r.n}"]`, body);
+    if(tr){ tr.setAttribute('aria-selected', String(MON.tgt === r.n));
+            tr.classList.toggle('is-maint', r.st.lv === 'maint'); }
+  });
+  const nEl = $('#mvN'); if(nEl) nEl.textContent = rows.length + '대';
+
+  /* 점검 / 점검 완료 — 대상이 없으면 둘 다 꺼 두고 '-' */
+  const t = MON.tgt, v = t == null ? null : fr.v[t], run = t == null ? null : inspRun(t);
+  const ib = $('#mvInsp'), db = $('#mvDone');
+  if(ib) ib.disabled = !v || !!run || v.park || v.maint;
+  if(db) db.disabled = !run;
+  const nm = t == null ? '-' : VNAME(t);
+  const a = $('#mvInspId'), b = $('#mvDoneId');
+  if(a) a.textContent = nm; if(b) b.textContent = nm;
+  /* 알림은 몇 초 뒤 저절로 접힌다 */
+  const ts = $('#mvToast');
+  if(ts && !ts.hidden && performance.now() > MON.toastT) ts.hidden = true;
+}
+function monToast(html, s){
+  const ts = $('#mvToast'); if(!ts) return;
+  ts.dataset.s = s || 'ok';
+  ts.innerHTML = `<span>${html}</span><button type="button" aria-label="알림 닫기">×</button>`;
+  ts.hidden = false;
+  MON.toastT = performance.now() + 6000;
+  ts.querySelector('button').addEventListener('click', () => { ts.hidden = true; });
+}
+function bindMon(){
+  const q = $('#mvQ');
+  if(q) q.addEventListener('input', () => { MON.q = q.value; MON.sig = ''; paintMon(); });
+  $$('.mv-tbl th.s').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.mv;
+    MON.sort = { k, d: MON.sort.k === k ? -MON.sort.d : (k === 'nm' || k === 'job' ? 1 : -1) };
+    $$('.mv-tbl th.s').forEach(o => o.removeAttribute('data-dir'));
+    th.dataset.dir = MON.sort.d;
+    MON.sig = ''; paintMon();
+  }));
+  { const th0 = $('.mv-tbl th.s[data-mv="nm"]'); if(th0) th0.dataset.dir = 1; }
+  const body = $('#mvBody');
+  if(body) body.addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-mv]'); if(!tr) return;
+    const n = +tr.dataset.mv;
+    MON.tgt = MON.tgt === n ? null : n;
+    paintMon();
+  });
+  const ib = $('#mvInsp'), db = $('#mvDone');
+  if(ib) ib.addEventListener('click', () => {
+    if(MON.tgt == null) return;
+    inspStart(MON.tgt);
+    monToast(`<b>${VNAME(MON.tgt)}</b> 정비 구역 이동 지시 — 반송 배정을 끊고 본선에서 빼냅니다.`
+      + ` <span style="color:var(--text-3)">(미니맵에 경로 표시 · 실제 이동은 OCS)</span>`);
+    EQ.sig = ''; paintMon();
+  });
+  if(db) db.addEventListener('click', () => {
+    if(MON.tgt == null) return;
+    inspDone(MON.tgt);
+    monToast(`<b>${VNAME(MON.tgt)}</b> 점검 완료 — 정비 구역에서 나와 운행에 복귀합니다.`);
+    EQ.sig = ''; paintMon();
+  });
+}
+
+/* ── 설비정보 · OHT 리스트 ────────────────────────────────────────────────
+   보기 전용이다(제품과 같다) — 점검 지시는 모니터링 차량 리스트로 옮겼다.
+   행을 누르면 그 차량의 진단이 오른쪽에 열린다. */
 function paintFleet(){
-  /* 전체 퍼포먼스 오각형 — 모니터링 화면 ② 와 같은 값이다(§ fleetPerf) */
-  const fr = liveFrame(), H = fleetPerf(fr);
-  drawPent($('#eqFleetRadar'), H);
-  const run = fr.v.filter(v => !v.park).length;
-  const tot = H.reduce((a, x) => a + (x || 0), 0);
+  /* 전체 퍼포먼스 오각형 — 모니터링 화면 건강도와 같은 값이다(§ fleetPerf) */
+  const fr = liveFrame(), S = fleetSum(fr);
+  drawPent($('#eqFleetRadar'), S.H);
   const fm = $('#eqFleetMeta');
   if(fm) fm.innerHTML =
-      `<dt>운영 대수</dt><dd>${run} / ${fr.v.length}대</dd>`
-    + `<dt>평균 퍼포먼스</dt><dd>${tot}/500</dd>`
-    + `<dt>경고 차량</dt><dd>${fr.v.filter(v => v.slow).length}대</dd>`
+      `<dt>운영 대수</dt><dd>${S.run} / ${S.n}대</dd>`
+    + `<dt>평균 퍼포먼스</dt><dd>${S.tot}/500</dd>`
+    + `<dt>점검 차량</dt><dd>${S.insp}대</dd>`
     + `<dt>누적 주행</dt><dd>${(fr.v.reduce((a, v) => a + (v.od||0), 0)/1000).toFixed(2)} km</dd>`;
 
-  /* 리스트 — 순서가 바뀔 때만 다시 세우고, 평소에는 숫자만 갈아 끼운다 */
+  /* 리스트 — 순서가 바뀔 때만 다시 세우고, 평소에는 칸 내용만 갈아 끼운다 */
   const rows = flRows(), body = $('#flBody'); if(!body) return;
-  const sig = rows.map(r => r.n).join(',') + '|' + [...EQ.pick].sort().join(',');
+  const sig = rows.map(r => r.n).join(',');
   if(sig !== EQ.sig){
     EQ.sig = sig;
-    body.innerHTML = rows.length ? rows.map(r => {
-      return `<tr data-fv="${r.n}" class="${EQ.pick.has(r.n) ? 'pick' : ''}">
-        <td class="ck"><input type="checkbox" data-fck="${r.n}"${EQ.pick.has(r.n) ? ' checked' : ''}
-          aria-label="${r.nm} 선택"></td>
+    body.innerHTML = rows.length ? rows.map(r =>
+      `<tr data-fv="${r.n}">
         <td>${r.nm}</td>
-        <td class="rt" data-frt="${r.n}">—</td>
-        <td class="num"><span class="sc-bar"><i data-fbar="${r.n}"></i></span>
-          <b data-fsc="${r.n}">${r.sc}</b><span style="color:var(--text-4)">/500</span></td>
-        <td class="num" data-fod="${r.n}">—</td></tr>`;
-    }).join('') : '<tr><td colspan="5" class="fl-empty">검색 결과가 없습니다</td></tr>';
+        <td class="num" data-fod="${r.n}">—</td>
+        <td class="num" data-fdn="${r.n}">—</td>
+        <td class="num" data-flt="${r.n}">—</td>
+        <td class="num" data-fsc="${r.n}"></td>
+        <td class="num nx">${(x => `${x.ymd}<span class="nx-d">D-${x.d}</span>`)(nextInsp(r.n))}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="fl-empty">검색 결과가 없습니다</td></tr>';
     $$('#flBody tr[data-fv]').forEach(tr => {
-      tr.addEventListener('click', e => {
-        if(e.target.matches('input')) return;
+      tr.addEventListener('click', () => {
         EQ.kind = 'oht'; EQ.veh = +tr.dataset.fv;
         store.selVeh = EQ.veh; store.selOht = VNAME(EQ.veh);
         paintEq();
       });
     });
-    $$('#flBody input[data-fck]').forEach(ck => ck.addEventListener('change', () => {
-      const n = +ck.dataset.fck;
-      ck.checked ? EQ.pick.add(n) : EQ.pick.delete(n);
-      EQ.sig = ''; paintFleet();
-    }));
   }
   rows.forEach(r => {
-    const a = $(`[data-fsc="${r.n}"]`), b = $(`[data-fod="${r.n}"]`);
+    const s = vehStat(r.v, r.n);
+    const dn = $(`[data-fdn="${r.n}"]`); if(dn) dn.textContent = r.done.toLocaleString() + '회';
+    const lt = $(`[data-flt="${r.n}"]`);
+    if(lt) lt.textContent = r.v.lt == null ? '—' : r.v.lt.toFixed(1) + ' s';
     /* 막대는 숫자와 **같은 프레임**에 갱신한다. 틀을 다시 세울 때만 폭을 넣었더니
        첫 렌더(점수가 아직 덜 쌓인 시각)의 길이로 굳어, 471점이 60%만 차 보였다. */
-    const bar = $(`[data-fbar="${r.n}"]`);
-    if(bar) bar.style.width = (r.sc/5).toFixed(1) + '%';
-    /* 경로 — 지금 맡은 반송의 출발 → 도착. 점검을 건 차량은 도착이 정비 구역으로 바뀐다. */
-    const rt = $(`[data-frt="${r.n}"]`);
-    if(rt){
-      const run = INSP_RUN.list.find(x => x.veh === r.n);
-      const a = run ? run.from : (r.v.jr ? r.v.jr[0] : null);
-      const b = run ? '정비 구역' : (r.v.jr ? r.v.jr[1] : null);
-      rt.innerHTML = a ? `<span class="a">${a}</span><i>→</i><span class="b${run ? ' mt' : ''}">${b}</span>`
-                       : '<span class="idle">대기</span>';
-    }
-    if(a) a.textContent = r.sc;
-    if(b) b.textContent = r.od >= 1000 ? (r.od/1000).toFixed(2) + ' km' : r.od.toFixed(0) + ' m';
+    const sc = $(`[data-fsc="${r.n}"]`); if(sc) sc.innerHTML = vehScoreHTML(r.n, fr, true);
+    const od = $(`[data-fod="${r.n}"]`);
+    if(od) od.textContent = r.od >= 1000 ? (r.od/1000).toFixed(2) + ' km' : r.od.toFixed(0) + ' m';
     const tr = $(`#flBody [data-fv="${r.n}"]`);
-    if(tr) tr.classList.toggle('sel-eq', EQ.kind === 'oht' && EQ.veh === r.n);
+    if(tr){ tr.classList.toggle('sel-eq', EQ.kind === 'oht' && EQ.veh === r.n);
+            tr.classList.toggle('is-maint', s.lv === 'maint'); }
   });
-  const n = $('#flN');
-  if(n) n.textContent = rows.length + '대' + (EQ.pick.size ? ` · 선택 ${EQ.pick.size}` : '');
-  const btn = $('#flInsp');
-  if(btn){ btn.disabled = EQ.pick.size === 0;
-           btn.textContent = EQ.pick.size ? `점검 (${EQ.pick.size}대)` : '점검'; }
-  const all = $('#flAll');
-  if(all) all.checked = rows.length > 0 && rows.every(r => EQ.pick.has(r.n));
+  const n = $('#flN'); if(n) n.textContent = rows.length + '대';
 }
 function bindFleet(){
   /* 5축 상세 — 머리 행을 누르면 접고 편다 (기본 접힘) */
@@ -7724,36 +7986,15 @@ function bindFleet(){
   { const n = $('#eqPerfNote'); if(n) n.hidden = true; }
   const q = $('#flQ');
   if(q) q.addEventListener('input', () => { EQ.q = q.value; EQ.sig = ''; paintFleet(); });
-  $$('.fl-tbl th.s').forEach(th => th.addEventListener('click', () => {
+  $$('.eq-oht-tbl th.s').forEach(th => th.addEventListener('click', () => {
     const k = th.dataset.s;
-    EQ.sort = { k, d: EQ.sort.k === k ? -EQ.sort.d : (k === 'nm' ? 1 : -1) };
-    $$('.fl-tbl th.s').forEach(o => o.removeAttribute('data-dir'));
+    /* 처음 누를 때 — 차량 · 리드타임 · 점검 예정일은 작은 것(가까운 것)부터, 나머지는 큰 것부터 */
+    EQ.sort = { k, d: EQ.sort.k === k ? -EQ.sort.d : (['nm','lt','nx'].includes(k) ? 1 : -1) };
+    $$('.eq-oht-tbl th.s').forEach(o => o.removeAttribute('data-dir'));
     th.dataset.dir = EQ.sort.d;
     EQ.sig = ''; paintFleet();
   }));
-  const all = $('#flAll');
-  if(all) all.addEventListener('change', () => {
-    const rows = flRows();
-    if(all.checked) rows.forEach(r => EQ.pick.add(r.n));
-    else rows.forEach(r => EQ.pick.delete(r.n));
-    EQ.sig = ''; paintFleet();
-  });
-  /* 점검 — 지시를 **넣기 전에 보여 주는** 화면이다. 시뮬레이션(실제 배차·주행)에는
-     손대지 않고, 미니맵에 '이 차를 빼면 이렇게 간다' 를 그려 움직인다.
-     실제 이동은 OCS 가 하므로 여기서 차량의 운행을 바꾸지는 않는다.
-     2대 이상 고른 경우의 표현(순서·동시 이동)은 아직 정하지 않았다 — 지금은
-     고른 차량 모두에 같은 경로를 깔고 함께 움직인다. */
-  const btn = $('#flInsp'), msg = $('#flMsg');
-  if(btn) btn.addEventListener('click', () => {
-    if(!EQ.pick.size || !msg) return;
-    inspStart();
-    const nm = [...EQ.pick].sort().map(VNAME).join(' · ');
-    msg.hidden = false;
-    msg.innerHTML = `<b>${nm}</b> 정비 구역 이동 지시 — 반송 배정을 끊고 본선에서 빼냅니다.`
-      + ` <span style="color:var(--text-4)">(미니맵에 경로 표시 · 실제 이동은 OCS)</span>`;
-    EQ.sig = ''; paintFleet();
-  });
-  const th0 = $('.fl-tbl th.s[data-s="nm"]'); if(th0) th0.dataset.dir = 1;
+  const th0 = $('.eq-oht-tbl th.s[data-s="nm"]'); if(th0) th0.dataset.dir = 1;
 }
 
 /* ── 오른쪽 칸 — 고른 설비의 데이터시트 ─────────────────────────────────── */
@@ -7791,9 +8032,7 @@ function paintEq(){
             const g = (typeof SEGS !== 'undefined')
               ? SEGS.find(x => x.path === v.p && v.s >= x.s0 && v.s <= x.s1) : null;
             return g ? ' · ' + g.nm : ''; })()}</dd>`
-      + `<dt>통신</dt><dd>${commOf(v).up ? '연결됨' : '연결 끊김'}</dd>`
-      + `<dt>현재 속도</dt><dd>${v.v.toFixed(1)} m/s</dd>`
-      + `<dt>완료 job</dt><dd>${v.done}건</dd>`;
+      + `<dt>통신</dt><dd>${commOf(v).up ? '정상' : '끊김'}</dd>`;
     drawEqRadar();
   } else {
     const g = SEGS[EQ.seg], bad = segFaulted(g);
@@ -7884,6 +8123,7 @@ function drawPent(cv, pts0){
   });
   buildTlMarks();                            // ⑧ 감지 지점 마커·라벨·눈금
   bindMM();                                  // 우측 미니맵 보기 전환
+  bindMon(); paintMon();                     // 우측 차량 리스트 · 점검 / 점검 완료
   bindMapClick();                            // 미니맵 클릭 = 3D 맵 클릭
   bindFab();
   bindBackFab();                                 // FAB 조망 — ★ 구역 클릭
