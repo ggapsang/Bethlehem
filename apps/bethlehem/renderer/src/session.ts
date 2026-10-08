@@ -489,8 +489,9 @@ export function applyImport(targetId: string | undefined, r: Imported, choice: I
       if (r.notes != null) existing.notes = r.notes;
       existing.title = choice.title || existing.title;
       if (choice.moveAnnotations) {
+        // 예전 버전을 보며 단 Comment 도 함께 — 바로 앞 버전 것만 옮기면 나머지는 새 버전에서 사라진 것처럼 보인다
         for (const a of existing.annotations) {
-          if (a.version === v - 1) {
+          if (a.version < v) {
             a.history.push({ at: t, by: user.value ?? '', field: 'version', from: a.version, to: v });
             a.version = v;
           }

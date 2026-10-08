@@ -175,10 +175,10 @@ export function ImportDialog({ target }: { target: ImportTarget }) {
               </section>
             )}
 
-            {existing && existing.annotations.some((a) => a.version === existing.versions[existing.versions.length - 1].v) && (
+            {existing && existing.annotations.length > 0 && (
               <label class="row">
                 <input type="checkbox" checked={move} onChange={() => setMove(!move)} />
-                <span>기존 Comment 를 새 버전으로 옮기기<span class="muted">— 요소 지문으로 새 화면에서 다시 찾습니다</span></span>
+                <span>기존 Comment {existing.annotations.length}개를 새 버전으로 옮기기<span class="muted">— 이전 모든 버전의 것을. 요소 지문으로 새 화면에서 다시 찾습니다</span></span>
               </label>
             )}
           </>

@@ -54,8 +54,17 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
             onClick={() => selectScreen(scr.id, x.v)}
           >
             v{x.v}
+            {(() => {
+              const k = scr.annotations.filter((a) => a.version === x.v && !a.done).length;
+              return k > 0 ? <span class="ver-count" title={`v${x.v} 의 Comment ${k}개`}>{k}</span> : null;
+            })()}
           </button>
         ))}
+        {v.v !== scr.versions[scr.versions.length - 1]!.v && (
+          <button type="button" class="btn btn-sm ver-old" title="예전 버전을 보고 있습니다 — 여기서 단 Comment 는 이 버전에 붙습니다" onClick={() => selectScreen(scr.id, scr.versions[scr.versions.length - 1]!.v)}>
+            예전 v{v.v} 보는 중 · 최신 v{scr.versions[scr.versions.length - 1]!.v} 로
+          </button>
+        )}
       </div>
       {versionTools}
       {page && page !== v.entry && (

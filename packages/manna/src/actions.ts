@@ -213,6 +213,24 @@ export function editReply(a: Annotation, id: string, body: string): void {
   }, { label: '답글 수정', merge: `reply:${id}` });
 }
 
+/** 다른 버전에 달린 Comment 를 이 버전으로 — from 이 없으면 다른 모든 버전에서. 번호는 이 버전의 끝에 이어진다 */
+export function moveCommentsHere(from?: number): number {
+  const s = screen.peek();
+  const v = version.peek();
+  if (!s || !v) return 0;
+  const list = s.annotations.filter((a) => a.version !== v.v && (from == null || a.version === from));
+  if (!list.length) return 0;
+  const t = now();
+  mutate(() => {
+    for (const a of list) {
+      a.history.push({ at: t, by: user.peek() ?? '', field: 'version', from: a.version, to: v.v });
+      a.version = v.v;
+    }
+  }, { label: `Comment ${list.length}개를 v${v.v} 로` });
+  notify(`Comment ${list.length}개를 v${v.v} 로 옮겼습니다.`);
+  return list.length;
+}
+
 export function removeComment(a: Annotation): void {
   const s = screen.peek();
   if (!s) return;

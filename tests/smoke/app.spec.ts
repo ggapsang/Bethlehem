@@ -751,6 +751,69 @@ c.addEventListener('pointerdown', () => {
       }
     },
   },
+  {
+    name: 'app-versions',
+    kind: 'app',
+    files: [new RegExp(`^${B}renderer/src/(session|ImportDialog)\\.tsx?$`), /^packages\/manna\/src\/ui\/Panel\.tsx$/, /^packages\/manna\/src\/stage\/StageHeader\.tsx$/, /^packages\/manna\/src\/actions\.ts$/],
+    async run() {
+      const { app, page, ws, src } = await appWithScreen();
+      const vers = () => (comments(ws, 'SCR-001') as { version: number; body: string }[]).map((c) => c.version);
+      const add = async (text: string, x: number, y: number) => {
+        await ctrlPick(page, await stagePoint(page, x, y));
+        await typeIn(page, '.popover-card .composer .cm-content', text);
+        await page.keyboard.press('Control+Enter');
+        await until(async () => ((await page.textContent('.cards')) ?? '').includes(text), 8000);
+        await page.keyboard.press('Escape');
+      };
+      const touch = (tag: string) => writeFileSync(join(src, 'index.html'), readFileSync(join(src, 'index.html'), 'utf8') + `\n<!-- ${tag} -->\n`);
+      const register = async (move = true) => {
+        await page.click('.src-stale');
+        await page.waitForSelector('.file-list');
+        const box = await page.$('.modal label.row:has-text("새 버전으로 옮기기") input');
+        if (box && (await box.isChecked()) !== move) await box.click();
+        await page.click('.modal button[type=submit]');
+        await until(async () => !(await page.$('.modal')), 15000);
+      };
+      try {
+        await until(() => existsSync(join(ws, 'screens', 'SCR-001', 'screen.json')), 8000);
+        await add('v1 에서 단 것', 960, 300);
+        await wait(1500);
+        touch('v2');
+        await until(() => page.$('.src-stale'), 15000);
+        await register();
+        check('새 버전 — Comment 가 따라온다', !!(await until(() => vers().join() === '2', 8000)), vers().join());
+        // 예전 버전을 보며 단 Comment (사용자가 겪은 경우)
+        await page.click('.ver-chip[data-v="1"]');
+        check('예전 버전을 보고 있으면 알린다', ((await page.textContent('.ver-old').catch(() => '')) ?? '').includes('최신 v2'));
+        await splashDone(await screenFrame(page));
+        await add('예전 v1 을 보며 단 것', 700, 600);
+        check('다른 버전의 Comment 를 알린다 (지금 v1 · v2 에 1개)', ((await page.textContent('.other-versions').catch(() => '')) ?? '').includes('v2 1'));
+        await page.click('.ver-old');
+        check('버전 칩에 Comment 수', ((await page.textContent('.ver-chip[data-v="1"] .ver-count').catch(() => '')) ?? '') === '1');
+        await wait(1500);
+        touch('v3');
+        await until(() => page.$('.src-stale'), 15000);
+        await page.click('.src-stale');
+        await page.waitForSelector('.file-list');
+        check('등록 창 — 이전 모든 버전의 Comment 수', ((await page.textContent('.modal label.row:has-text("새 버전으로 옮기기")')) ?? '').includes('2개'));
+        await page.click('.modal button[type=submit]');
+        await until(async () => !(await page.$('.modal')), 15000);
+        check('새 버전 — 예전 버전에 단 Comment 까지 모두 따라온다', !!(await until(() => vers().join() === '3,3', 8000)), vers().join());
+        check('새 버전에서 Comment 가 다 보인다', (await page.$$('.cards > .card')).length === 2);
+        // 옮기지 않고 올렸거나 바깥에서 버전이 늘었으면 — 알림 줄에서 한 번에 되살린다
+        await wait(1500);
+        touch('v4');
+        await until(() => page.$('.src-stale'), 15000);
+        await register(false);
+        await until(async () => ((await page.textContent('.ver-chip[aria-checked="true"]')) ?? '').startsWith('v4'), 8000);
+        check('남겨진 Comment 를 알린다', ((await page.textContent('.other-versions').catch(() => '')) ?? '').includes('v3 2'));
+        await page.click('.other-versions button:has-text("모두 옮기기")');
+        check('한 번에 지금 버전으로', !!(await until(() => vers().join() === '4,4', 8000)) && (await page.$$('.cards > .card')).length === 2 && !(await page.$('.other-versions')));
+      } finally {
+        await app.close();
+      }
+    },
+  },
 ];
 
 // 쓰지 않는 도구를 가져오지 않았다고 타입 검사가 투덜대지 않게

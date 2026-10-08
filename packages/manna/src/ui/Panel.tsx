@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { CheckSquare, Camera, ChevronDown, ChevronRight, EyeOff, Film, GripVertical, MessageSquare, Plus, X } from 'lucide-preact';
 import type { Annotation, Screen } from '@core';
 import { displayNo } from '@core';
-import { toggleDone, MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, reorder } from '../actions';
+import { toggleDone, MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, reorder, moveCommentsHere } from '../actions';
 import type { Host } from '../host';
 import {
-  setShowDone, showDone, shownAnnotations, version, annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible,
+  setShowDone, showDone, shownAnnotations, version, annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible, selectScreen, user,
 } from '../store';
 import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
 import { ago, markState } from './labels';
@@ -226,6 +226,7 @@ function Comments({ scr }: { scr: Screen }) {
           <Plus {...ICON} />
         </button>
       </div>
+      <OtherVersions scr={scr} />
       {commentsOpen.value && (
       <div class="cards-scroll">
       <ol class="cards" ref={listRef}>
@@ -245,6 +246,34 @@ function Comments({ scr }: { scr: Screen }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** 지금 보는 버전이 아닌 곳에 달린 Comment — 버전을 올리거나 예전 버전을 보며 달면 여기서는 안 보인다. 알리고 한 번에 옮긴다 */
+function OtherVersions({ scr }: { scr: Screen }) {
+  rev.value;
+  const v = version.value;
+  if (!v) return null;
+  const by = new Map<number, number>();
+  for (const a of scr.annotations) if (a.version !== v.v) by.set(a.version, (by.get(a.version) ?? 0) + 1);
+  if (!by.size) return null;
+  const n = [...by.values()].reduce((x, y) => x + y, 0);
+  const latestV = scr.versions[scr.versions.length - 1]!.v;
+  const onLatest = v.v === latestV;
+  return (
+    <div class="other-versions" role="status">
+      <span>
+        다른 버전에 Comment <b>{n}</b>개 —{' '}
+        {[...by].sort((x, y) => y[0] - x[0]).map(([ver, k]) => (
+          <button key={ver} type="button" class="ov-ver" title={`v${ver} 로 가서 보기`} onClick={() => selectScreen(scr.id, ver)}>v{ver} {k}</button>
+        ))}
+      </span>
+      {onLatest && user.value && (
+        <button type="button" class="btn btn-sm btn-primary" title={`다른 버전의 Comment ${n}개를 지금 버전(v${v.v})으로 옮긴다. Ctrl+Z 로 되돌린다`} onClick={() => moveCommentsHere()}>
+          v{v.v} 로 모두 옮기기
+        </button>
+      )}
+    </div>
   );
 }
 

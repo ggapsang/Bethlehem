@@ -828,3 +828,14 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .switch.is-on::after { transform: translateX(12px); }
 .link-menu-btn.links-off { opacity: .55; }
 .link-menu-btn.links-off::after { content: ''; position: absolute; left: 7px; right: 7px; top: 50%; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
+/* 다른 버전의 Comment · 버전 칩 개수 · 예전 버전 보는 중 */
+.other-versions {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--unit-2); flex-wrap: wrap;
+  margin: 0 var(--unit-3) var(--unit-2); padding: var(--unit-2) var(--unit-3); border-radius: var(--unit-2);
+  background: var(--warning-50); color: var(--warning-700); border: 1px solid var(--warning-100); font-size: var(--text-sm);
+}
+.ov-ver { border: 0; background: transparent; color: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; padding: 0 2px; }
+.ver-chip { position: relative; }
+.ver-count { margin-left: 4px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--neutral-500); color: #fff; font-size: 10px; line-height: 16px; display: inline-block; text-align: center; }
+.ver-chip[aria-checked="true"] .ver-count { background: var(--white); color: var(--primary-700, #c2410c); }
+.ver-old { color: var(--warning-700); border-color: var(--warning-500); background: var(--warning-50); white-space: nowrap; }
