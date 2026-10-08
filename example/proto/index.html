@@ -1976,7 +1976,7 @@ button.chip:hover{border-color:var(--border);color:var(--text-1)}
         <span class="st-word" id="stWord">정상</span>
         <span class="st-badge" id="stBadge">기준 이내</span>
         <dl class="st-facts"><dt>원인</dt><dd id="fCause">—</dd>
-          <dt>위치</dt><dd id="fWhere">—</dd><dt>조치</dt><dd id="fAct">—</dd></dl>
+          <dt>위치</dt><dd id="fWhere">—</dd></dl>
       </div>
       <div class="bcol c-cross">
         <span class="tail" id="crossTail">추후 랩(다임랩스) 정의 지표로 대체</span>
@@ -2231,7 +2231,7 @@ const store = {
   /* 화면 전체가 보는 시계 하나 — 좌측 실시간 뷰 · 우측 히트맵 · 하단 리플레이가 모두 이것을 읽는다 */
   simLive: 0,
   alarms: [],             // ① 경고 감지 목록 — 종류별로 묶어 보여 준다 (CLEAR 로 비운다)
-  status: { level:'ok', axis:null, cause:'—', where:'—', act:'—' },
+  status: { level:'ok', axis:null, cause:'—', where:'—' },
   reduced: window.matchMedia('(prefers-reduced-motion: reduce)').matches
 };
 const D = {};             // 다운샘플된 채널 데이터가 들어갈 곳
@@ -2631,8 +2631,7 @@ const AXIS = {
                 경고 0.90 = p90 위. 결함 통과 시 따라 오르는 0.96~0.98 이 경고,
                 와셔 충격(1.12~1.80)만 이상으로 넘어간다.
                 전 구간에서 경고선을 넘는 건 14/536 버킷뿐이다. */
-             what:'차량 탑재 진동 피크 초과', noun:'차량 진동',
-             act:'OHT-01 주행휠 마모량 측정 · 베어링 유격 점검' },
+             what:'차량 탑재 진동 피크 초과', noun:'차량 진동', },
   track:   { label:'레일', el:'#cxTrack',   ev:'#evTrack',   icon:'#i-route',
              src:'AD7 10kHz · 변위 진폭(원시)', unit:'V', warn:0.30, err:0.80,
              /* 버킷 원값 분포: p50 0.014 / p90 0.021 / p99 0.057 / max 4.62
@@ -2641,16 +2640,14 @@ const AXIS = {
                   경고 0.30 = 정상 최대의 약 5배
                   이상 0.80 = 실측 레일 단차 레벨차(5.41→4.34 = 1.07)의 75%
                 → 경고선을 넘는 버킷이 정확히 4개(벌어짐 ×2 · 단차 ×2)뿐이다. */
-             what:'레일 변위 급변', noun:'레일 변위',
-             act:'해당 지점 레일 조인트 간격·단차 실측 후 브래킷 재조정' },
+             what:'레일 변위 급변', noun:'레일 변위', },
   shock:   { label:'이/적재',   el:'#cxShock',   ev:'#evShock',   icon:'#i-zap',
              src:'VIB 1kHz · 합성가속도 순간 편차', unit:'g', warn:0.20, err:0.40,
              /* 버킷 원값 분포: p50 0.012 / p90 0.040 / p99 0.244 / max 1.53
                 경고 0.20 = 최고속 주행 진동(p90 0.04)과 확실히 벌어진 자리,
                 이상 0.40 = 와셔 임펄스(0.51~1.53)만 걸리는 지점.
                 Z축이 아니라 3축 합성인 이유: 와셔 임펄스는 주행방향 X 에 실린다(AccX 최대 2.97). */
-             what:'순간 충격 가속도 초과', noun:'순간 충격',
-             act:'해당 구간 이물질 제거 후 저속 재주행으로 재현 확인' }
+             what:'순간 충격 가속도 초과', noun:'순간 충격', }
 };
 const AXIS_KEYS = ['vehicle','track','shock'];
 let POINTS = [];     // 레일 위 물리 결함 3개소 (실측 VIB 피크 지점)
@@ -2723,9 +2720,9 @@ function detectPoints(){
      제품은 여기에 호이스트 과부하(hoist_overload)와 분류 실패(unknown)를 더 갖는데,
      이번 실측 로그에는 이·적재 계통 결함이 담기지 않아 세 종류만 재현한다. */
   const SPEC = [
-    { axis:'track', label:'레일 벌어짐', icon:'\u2194' },
-    { axis:'track', label:'레일 단차',   icon:'\u2195' },
-    { axis:'shock', label:'진동 이상(레일)', icon:'\u25c6' }
+    { axis:'track', label:'레일 벌어짐', icon:'\u2194', cause:'레일 벌어짐' },
+    { axis:'track', label:'레일 단차',   icon:'\u2195', cause:'레일 단차' },
+    { axis:'shock', label:'진동 이상(레일)', icon:'\u25c6', cause:'레일 상 이물질 접촉' }
   ];
   const GAP = 0.15;
   const picked = [];
@@ -2737,14 +2734,14 @@ function detectPoints(){
       if(picked.some(q => Math.abs(D.ops.railT[q.idx] - rt) < GAP)) continue;
       if(m[i] > bv){ bv = m[i]; best = i; }
     }
-    if(best >= 0) picked.push({ idx:best, axis:sp.axis, label:sp.label, icon:sp.icon, val:bv });
+    if(best >= 0) picked.push({ idx:best, axis:sp.axis, label:sp.label, icon:sp.icon, cause:sp.cause, val:bv });
   });
   POINTS = picked
     .sort((a,b)=> D.ops.railT[a.idx] - D.ops.railT[b.idx])
     .map(p => ({
       railT: D.ops.railT[p.idx], idx:p.idx, t:p.idx*DUR/N,
       rms: D.vib.rms.max[p.idx], val:p.val,
-      tag: D.ops.tag[p.idx], label:p.label, icon:p.icon, axis:p.axis
+      tag: D.ops.tag[p.idx], label:p.label, icon:p.icon, axis:p.axis, cause:p.cause
     }));
   /* 레일 위 어디인가 — 실측 railT(누적 이동거리 0~1)를 이 구역 링(상부 → 하부)에
      그대로 얹는다. 순서와 간격은 실측 그대로이고, 양 끝 6% 만 비운다 —
@@ -4759,7 +4756,7 @@ function sideHead(S){
       + g('정상 범위', '≤' + axVal(p.axis, A.warn))
       + g('기준 대비', (p.val / A.warn).toFixed(1) + '배')
       + '</div><div class="seg-note">' + A.src + ' 실측에서 <b>' + p.label
-      + '</b> 이 가장 크게 잡힌 지점입니다.</div>';
+      + '</b> 이 가장 크게 잡힌 지점입니다. 원인은 <b>' + p.cause + '</b>입니다.</div>';
   }
   return '';
 }
@@ -4791,8 +4788,8 @@ function paintSide(k){
   const box = $('#sideCh'); if(!box) return;
   if(box._kind !== S.kind) buildSide();                 // 다른 종류를 골랐으면 틀부터 다시
   const fr = liveFrame(), vals = $('#sideVals'); if(!vals) return;
-  /* 판정 요약 — 이상 지점을 골랐을 때만. 잰 값과 기준 대비만 적는다.
-     원인 추론(예: '이물질 접촉으로 판단') 과 주의/경고 등급 글자는 넣지 않는다 —
+  /* 판정 요약 — 이상 지점을 골랐을 때만. **원인 · 값** 만 단정형으로 적는다.
+     '~로 판단합니다 / 추정' 같은 완곡 표현, 주의/경고 등급 글자, 조치 문구는 넣지 않는다 —
      기준선을 넘었으면 등급과 상관없이 모두 '이상' 이다. */
   const mj = $('#miniJudge');
   if(mj){
@@ -4801,10 +4798,10 @@ function paintSide(k){
       const p = S.p, A = AXIS[p.axis], lv = axisLevel(p.axis, p.val);
       mj.innerHTML = '<div class="mj-h"><i style="background:var(' + LVL_COLOR[lv] + ')"></i>'
         + '<b>판정 요약</b><span class="mj-t">순찰 통과 시</span></div>'
-        + '<p class="mj-txt">' + A.noun + ' 지표가 ' + axVal(p.axis, p.val) + ' 까지 올라 '
+        + '<p class="mj-txt">원인은 <b>' + p.cause + '</b>입니다. '
+        + A.noun + ' 지표가 ' + axVal(p.axis, p.val) + ' 로 '
         + '정상 범위(≤' + axVal(p.axis, A.warn) + ') 대비 '
-        + (p.val/A.warn).toFixed(1) + '배입니다.</p>'
-        + '<div class="mj-act">조치 · ' + A.act + '</div>';
+        + (p.val/A.warn).toFixed(1) + '배입니다.</p>';
     }
   }
   const row = (a, v, u) => '<div class="vs-line"><span>' + a + '</span><b>' + v
@@ -4855,8 +4852,8 @@ function paintSide(k){
       + row('기준 대비', (p.val / A.warn).toFixed(1), ' 배')
       + row('레일 위치', railNo)
       + row('OPS Tag', String(p.tag))
-      + row('발견', found ? '순찰 통과 시 확인' : '미확인')
-      + row('조치', A.act);
+      + row('원인', p.cause)
+      + row('발견', found ? '순찰 통과 시 확인' : '미확인');
   } else {
     const PN = PATH_NM[S.path];
     const here = fr.v.filter(v => v.p === S.path).length;
@@ -5453,7 +5450,7 @@ function updateBottom(k){
   dot.style.background = cssVar(LVL_COLOR[worst]);
   dot.style.boxShadow = `0 0 0 4px ${hexA(cssVar(LVL_COLOR[worst]), .16)}`;
   bg.textContent = worst==='ok' ? '기준 이내'
-                 : worst==='warn' ? `주의 · ${AXIS[worstAxis].label}` : `조치 필요 · ${AXIS[worstAxis].label}`;
+                 : `이상 · ${AXIS[worstAxis].label}`;
   bg.style.color = cssVar(LVL_COLOR[worst]);
   bg.style.borderColor = hexA(cssVar(LVL_COLOR[worst]), .38);
   bg.style.background = hexA(cssVar(LVL_COLOR[worst]), .10);
@@ -5466,20 +5463,16 @@ function updateBottom(k){
   if(worst === 'ok'){
     store.status = { level:'ok', axis:worstAxis,
       cause:`3축 모두 기준 이내 · 최고치 ${A.label} ${val} (경고 ${axNum(worstAxis, A.warn)}${u})`,
-      where:`Rail A · Tag ${D.ops.tag[i]} · 누적 ${posM}m`,
-      act:'추가 조치 없음 · 정상 주행 유지' };
+      where:`Rail A · Tag ${D.ops.tag[i]} · 누적 ${posM}m` };
   }else{
     store.status = { level:worst, axis:worstAxis,
       cause:`${A.what} ${val} (임계 ${axNum(worstAxis, A.err)}${u})`,
-      where:`Rail A · ${near.label} 구간 부근 · Tag ${D.ops.tag[i]} · 누적 ${posM}m`,
-      act:A.act };
+      where:`Rail A · ${near.label} 구간 부근 · Tag ${D.ops.tag[i]} · 누적 ${posM}m` };
   }
   $('#fCause').textContent = store.status.cause;
   $('#fWhere').textContent = store.status.where;
-  $('#fAct').textContent   = store.status.act;
   $('#fCause').title = store.status.cause;
   $('#fWhere').title = store.status.where;
-  $('#fAct').title   = store.status.act;
 
 }
 
@@ -5941,8 +5934,7 @@ function agentReportText(S){
   const where = p ? p.label + ' 지점' : A.label;
   return head + `<b>${where}</b>${jo(where, '을', '를')} 지나며 ${A.noun}${jo(A.noun, '이', '가')} `
     + `<span class="q">${axVal(S.axis, S.val)}</span> 까지 올랐습니다. `
-    + `정상 주행에서는 ${axVal(S.axis, A.warn)} 를 넘지 않는 값입니다. ${again}`
-    + `조치 — ${A.act}.`;
+    + `정상 주행에서는 ${axVal(S.axis, A.warn)} 를 넘지 않는 값입니다. ${again}`;
 }
 
 /* ── 감시 주기 — 관찰 → 데이터 수집 → 전처리 → 데이터 분석 → 교차 판정 → 감시 보고 ──
@@ -6316,8 +6308,7 @@ function updateMiniMeta(){
     if(J){
       mj.innerHTML = `<div class="mj-h"><i style="background:var(${LVL_COLOR[J.level]})"></i>`
         + `<b>판정 요약</b><span class="mj-t">t ${J.t.toFixed(1)}s 감지</span></div>`
-        + `<p class="mj-txt">${J.text}</p>`
-        + `<div class="mj-act">조치 · ${J.act}</div>`;
+        + `<p class="mj-txt">${J.text}</p>`;
     }
   }
   const mm = $('#miniMeta'); if(!mm) return;            // 미니 3D 삭제됨 — 메타는 표시하지 않는다
