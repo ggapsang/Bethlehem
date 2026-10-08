@@ -4755,8 +4755,7 @@ function sideHead(S){
       + g('관측값', axVal(p.axis, p.val), LVL_COLOR[lv])
       + g('정상 범위', '≤' + axVal(p.axis, A.warn))
       + g('기준 대비', (p.val / A.warn).toFixed(1) + '배')
-      + '</div><div class="seg-note">' + A.src + ' 실측에서 <b>' + p.label
-      + '</b> 이 가장 크게 잡힌 지점입니다.</div>';
+      + '</div>';
   }
   return '';
 }
