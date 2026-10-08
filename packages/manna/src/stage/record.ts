@@ -29,6 +29,26 @@ function pickMime(): string {
   return ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) ?? 'video/webm';
 }
 
+/** 스트림에서 첫 프레임이 나올 때까지 (길어야 2초) */
+async function firstFrame(stream: MediaStream): Promise<void> {
+  const v = document.createElement('video');
+  v.muted = true;
+  v.srcObject = stream;
+  try {
+    await Promise.race([
+      new Promise<void>((r) => {
+        if (v.readyState >= 2 && v.videoWidth) return r();
+        v.addEventListener('loadeddata', () => r(), { once: true });
+        v.play().catch(() => {});
+      }),
+      new Promise<void>((r) => setTimeout(r, 2000)),
+    ]);
+  } finally {
+    v.pause();
+    v.srcObject = null;
+  }
+}
+
 export async function startRecording(target: HTMLElement): Promise<Recorder> {
   if (!navigator.mediaDevices?.getDisplayMedia) throw new Error('이 브라우저는 화면 녹화를 지원하지 않습니다. Chrome 이나 Edge 에서 열어 주세요.');
   const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -89,6 +109,9 @@ export async function startRecording(target: HTMLElement): Promise<Recorder> {
       video.srcObject = null;
     };
   }
+
+  // 첫 프레임이 들어온 뒤에 녹화를 시작한다 — 바쁠 때 공유가 늦게 돌면 짧은 녹화가 비어 버린다
+  await firstFrame(recStream);
 
   const type = pickMime();
   const rec = new MediaRecorder(recStream, { mimeType: type, videoBitsPerSecond: BITRATE });

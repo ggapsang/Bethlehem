@@ -1,13 +1,13 @@
 /* 연결 — 화면 위 연결 영역, 영역 그리기, 잇는 중 안내 막대, 화면의 연결 목록, 돌아가기 (links.ts) */
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
-import { ArrowLeft, Link2, ListTree, Monitor, Search, SquareDashed, X } from 'lucide-preact';
+import { ArrowLeft, Eye, EyeOff, Link2, ListTree, Monitor, Search, SquareDashed, X } from 'lucide-preact';
 import type { Connection, LinkEnd } from '@core';
 import { displayNo } from '@core';
 import {
   areaKey, areaTool, cancelLinking, endExists, endLabel, finishLinking, flashArea, goBack, goTo, jumpBack, labelText, linking, linksOf, removeConnection, startLinking,
 } from '../links';
-import { doc, rev, screen, selected, user, version } from '../store';
+import { doc, rev, screen, selected, setShowLinks, showLinks, user, version } from '../store';
 
 const ICON = { size: 15, strokeWidth: 1.75 };
 const samePage = (a: string | undefined, b: string) => !a || a.split('#')[0] === b.split('#')[0];
@@ -43,16 +43,19 @@ export function LinkAreaLayer({ scale, page }: { scale: number; page: string }) 
       })
       .map((side) => ({ c, side })),
   );
-  if (!items.length) return null;
+  const showAll = showLinks.value || !!linking.value;
+  const fresh = (c: Connection, side: 'a' | 'b') => !!fl && fl.key === areaKey(c, side) && Date.now() - fl.at < 2000;
+  const shown = showAll ? items : items.filter(({ c, side }) => fresh(c, side));
+  if (!shown.length) return null;
   const me = user.value;
   return (
     <div class="link-layer">
-      {items.map(({ c, side }) => {
+      {shown.map(({ c, side }) => {
         const e = c[side] as Extract<LinkEnd, { kind: 'area' }>;
         const other = c[side === 'a' ? 'b' : 'a'];
         const l = endLabel(d, other);
         const [x, y, w, h] = e.box;
-        const flash = fl && fl.key === areaKey(c, side) && Date.now() - fl.at < 2000;
+        const flash = fresh(c, side);
         return (
           <div key={areaKey(c, side)} class={`link-area ${flash ? 'is-flash' : ''}`} data-key={areaKey(c, side)} style={{ left: `${x * scale}px`, top: `${y * scale}px`, width: `${w * scale}px`, height: `${h * scale}px` }}>
             <span class="link-tag">
@@ -267,10 +270,10 @@ export function ScreenLinksMenu() {
     <div class="popover-wrap" ref={ref}>
       <button
         type="button"
-        class={`btn-icon link-menu-btn ${mine.length ? 'has-links' : ''}`}
+        class={`btn-icon link-menu-btn ${mine.length ? 'has-links' : ''} ${showLinks.value ? '' : 'links-off'}`}
         aria-label="연결"
         aria-expanded={open}
-        title={mine.length ? `이 화면의 연결 ${mine.length}개` : '연결 — 다른 화면 · Comment 와 잇기'}
+        title={`${mine.length ? `이 화면의 연결 ${mine.length}개` : '연결 — 다른 화면 · Comment 와 잇기'}${showLinks.value ? '' : ' · 화면의 연결 영역 숨김'}`}
         onClick={() => setOpen(!open)}
       >
         <Link2 size={18} strokeWidth={1.5} />
@@ -278,6 +281,19 @@ export function ScreenLinksMenu() {
       </button>
       {open && (
         <div class="popover link-menu" role="menu" aria-label="연결">
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={showLinks.value}
+            class="popover-item"
+            title="화면 위의 연결 영역(파란 점선 박스와 이름표)을 보이거나 숨긴다. 숨겨도 연결은 그대로이고, 이 목록 · Comment 의 이름표로 오갈 수 있다"
+            onClick={() => setShowLinks(!showLinks.value)}
+          >
+            {showLinks.value ? <Eye {...ICON} size={14} /> : <EyeOff {...ICON} size={14} />} 화면에 연결 영역 보이기
+            <span class="grow" />
+            <span class={`switch ${showLinks.value ? 'is-on' : ''}`} aria-hidden="true" />
+          </button>
+          <div class="popover-sep" />
           <span class="popover-label">이 화면의 연결</span>
           {mine.length === 0 && <span class="popover-item muted small">아직 없습니다</span>}
           {mine.map(({ c, here, other }) => (

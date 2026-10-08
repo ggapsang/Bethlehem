@@ -289,7 +289,9 @@ export const appSpecs: Spec[] = [
       try {
         const menu = await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.map((m) => m.label) ?? []);
         check('창 메뉴', ['파일', '편집', '화면', '보기', '도움말'].every((l) => menu.some((m) => m.startsWith(l))), menu.join(' '));
-        const title = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle());
+        const getTitle = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getTitle());
+        await until(async () => (await getTitle()).startsWith('terr-ws-'), 5000);
+        const title = await getTitle();
         check('창 제목 — 열린 곳 이름 — Terrarium', / — Terrarium$/.test(title) && title.startsWith('terr-ws-'), title);
         await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.find((m) => m.label.startsWith('도움말'))?.submenu?.items.find((i) => i.label === '사용자 가이드')?.click());
         check('가이드 창 — 마크다운을 그린다', !!(await until(() => page.$('.guide-win .md-render table'), 5000)));
@@ -609,6 +611,19 @@ export const appSpecs: Spec[] = [
         await tag!.click();
         check('영역 이름표를 누르면 그 탭으로 가서 그 영역이 반짝인다', !!(await until(async () => !!(await page.$('.tab[data-id="SCR-002"].is-on')) && !!(await page.$('.link-area.is-flash')), 5000)));
         check('화면 막대의 연결 수', ((await page.textContent('.link-count')) ?? '') === '2');
+        // 화면의 연결 영역 — 숨기기 / 보이기 (숨겨도 연결은 그대로, 따라온 영역은 잠깐 보인다)
+        await wait(2500);
+        await page.click('button[aria-label="연결"]');
+        await page.click('.link-menu [role=menuitemcheckbox]');
+        check('끄면 화면의 연결 영역이 숨는다', !!(await until(async () => (await page.$$('.link-area')).length === 0, 3000)));
+        await page.click('.link-menu .link-row:has-text("SCR-001 영역")');
+        check('숨겨도 연결을 따라온 영역은 반짝이는 동안 보인다', !!(await until(async () => !!(await page.$('.tab[data-id="SCR-001"].is-on')) && !!(await page.$('.link-area.is-flash')), 5000)));
+        check('반짝임이 끝나면 다시 숨는다', !!(await until(async () => (await page.$$('.link-area')).length === 0, 5000)));
+        await page.click('button[aria-label="연결"]');
+        await page.click('.link-menu [role=menuitemcheckbox]');
+        await page.keyboard.press('Escape');
+        check('켜면 다시 보인다', !!(await until(() => page.$('.link-area'), 3000)));
+        await page.click('.tab[data-id="SCR-002"] .tab-main');
         // 받는 사람 — 보낸 파일에서도 따라간다
         await page.keyboard.press('Control+s');
         await wait(2500);

@@ -29,7 +29,7 @@ export interface Miss {
 
 /* notes 는 키를 바꿨다 — 개요는 이제 기본으로 접혀 있다 (전에 펼쳐 둔 기록을 따르지 않는다) */
 const LS = {
-  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels', fullPin: 'terr.fullPanelPin', showDone: 'terr.showDone', boxes: 'terr.showBoxes',
+  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels', fullPin: 'terr.fullPanelPin', showDone: 'terr.showDone', boxes: 'terr.showBoxes', links: 'terr.showLinks',
   tabs: (docId: string) => `terr.tabs.${docId}`,
 };
 
@@ -173,6 +173,13 @@ export const showBoxes = signal(lsGet(LS.boxes) === '1');
 export function setShowBoxes(on: boolean): void {
   showBoxes.value = on;
   lsSet(LS.boxes, on ? '1' : '0');
+}
+
+/** 화면 위 연결 영역(파란 점선 박스 · 이름표) 보이기 — 기본은 보인다 */
+export const showLinks = signal(lsGet(LS.links) !== '0');
+export function setShowLinks(on: boolean): void {
+  showLinks.value = on;
+  lsSet(LS.links, on ? '1' : '0');
 }
 
 /** URL 화면을 캡처 모음으로 보고 있는 화면들 — 탭마다 따로 (없으면 실시간) */

@@ -822,3 +822,9 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 /* 탭마다 띄워 둔 화면 틀 — 지금 탭이 아니면 숨겨 둔다 (내리지 않는다) */
 .stage-iframe.is-hidden, .stage-webview.is-hidden { visibility: hidden; pointer-events: none; }
 .stage.is-behind { position: absolute; left: 0; right: 0; bottom: 0; height: 0; visibility: hidden; pointer-events: none; }
+.switch { position: relative; width: 28px; height: 16px; border-radius: 8px; background: var(--neutral-400); flex: none; transition: background .15s; }
+.switch::after { content: ''; position: absolute; left: 2px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--white); transition: transform .15s; }
+.switch.is-on { background: var(--success-600); }
+.switch.is-on::after { transform: translateX(12px); }
+.link-menu-btn.links-off { opacity: .55; }
+.link-menu-btn.links-off::after { content: ''; position: absolute; left: 7px; right: 7px; top: 50%; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
