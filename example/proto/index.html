@@ -2632,7 +2632,6 @@ const AXIS = {
                 와셔 충격(1.12~1.80)만 이상으로 넘어간다.
                 전 구간에서 경고선을 넘는 건 14/536 버킷뿐이다. */
              what:'차량 탑재 진동 피크 초과', noun:'차량 진동',
-             reason:'주행휠 편마모·베어링 유격',
              act:'OHT-01 주행휠 마모량 측정 · 베어링 유격 점검' },
   track:   { label:'레일', el:'#cxTrack',   ev:'#evTrack',   icon:'#i-route',
              src:'AD7 10kHz · 변위 진폭(원시)', unit:'V', warn:0.30, err:0.80,
@@ -2643,7 +2642,6 @@ const AXIS = {
                   이상 0.80 = 실측 레일 단차 레벨차(5.41→4.34 = 1.07)의 75%
                 → 경고선을 넘는 버킷이 정확히 4개(벌어짐 ×2 · 단차 ×2)뿐이다. */
              what:'레일 변위 급변', noun:'레일 변위',
-             reason:'궤도 벌어짐 또는 단차',
              act:'해당 지점 레일 조인트 간격·단차 실측 후 브래킷 재조정' },
   shock:   { label:'이/적재',   el:'#cxShock',   ev:'#evShock',   icon:'#i-zap',
              src:'VIB 1kHz · 합성가속도 순간 편차', unit:'g', warn:0.20, err:0.40,
@@ -2652,7 +2650,6 @@ const AXIS = {
                 이상 0.40 = 와셔 임펄스(0.51~1.53)만 걸리는 지점.
                 Z축이 아니라 3축 합성인 이유: 와셔 임펄스는 주행방향 X 에 실린다(AccX 최대 2.97). */
              what:'순간 충격 가속도 초과', noun:'순간 충격',
-             reason:'레일 상 이물질 접촉',
              act:'해당 구간 이물질 제거 후 저속 재주행으로 재현 확인' }
 };
 const AXIS_KEYS = ['vehicle','track','shock'];
@@ -3014,8 +3011,8 @@ const SCN = [
     desc:'OCS(xMS) 반영 — 운행은 그대로 · 해당 지점 정비 계획 수립' },
   { id:'N4', key:'degrade', at:84,  lv:'err',  label:'OHT-03 진동 이상(차량)',
     desc:'차체 진동 이상선 초과 — 주행 속도는 정상 범위' },
-  { id:'N5', key:'jam',     at:98,  lv:'err',  label:'OHT-03 2차 손상 우려',
-    desc:'적재 FOUP 손상·주행 레일 마모 우려 · 신규 배차 중단' },
+  { id:'N5', key:'jam',     at:98,  lv:'err',  label:'OHT-03 신규 배차 중단',
+    desc:'차체 진동 이상선 초과 유지 · 신규 배차 중단' },
   { id:'N6', key:'act',     at:114, lv:'warn', label:'OHT-03 본선 격리',
     desc:'반송 인계 후 본선 이탈 · 정비 구역으로 이송' },
   /* N7 의 at 은 자리표시다 — § SIM 직후 fixCalmNode() 가 실제 격리 완료 시각으로 채운다 */
@@ -4625,7 +4622,7 @@ function agentSay(T){
     + '<b>손상 리스크가 상승</b>한 상태입니다.',
     '운행은 그대로 둡니다 — 우회로는 최단경로 대비 <span class="q">+'
     + (DETOUR*100).toFixed(0) + '%</span> 라 전체 반송 시간이 더 늘고, 점 결함 하나 때문에 '
-    + '구간 전체를 서행시키면 거기가 통째로 병목이 됩니다. <b>레일 정비</b>로 처리할 것을 권고합니다.'] };
+    + '구간 전체를 서행시키면 거기가 통째로 병목이 됩니다. <b>레일 정비</b>로 처리합니다.'] };
   if(T < T_S2) return { lv:'warn', h:'레일 정비 대상 등록', ps:[
     'OCS(xMS)에 반영했습니다. <b>' + WH + '</b> 지점은 <b>정비 대상</b>으로 등록되었고, '
     + '통과 차량의 속도·경로는 바꾸지 않았습니다 — 운행 영향 없이 진동 추이만 계속 봅니다.',
@@ -4637,10 +4634,10 @@ function agentSay(T){
     + '<span class="q">' + (V_RUN*K_SLOW).toFixed(1) + ' m/s</span> 로 정상 범위입니다 — '
     + '느려진 것이 아니라 <b>심하게 떨면서</b> 달리고 있습니다.',
     '그 진동이 적재 FOUP 에 그대로 전달됩니다. 우선 <b>단거리 반송만 배정</b>해 노출을 줄입니다.'] };
-  if(T < T_ACT) return { lv:'err', h:V + ' 2차 손상 우려', ps:[
+  if(T < T_ACT) return { lv:'err', h:V + ' 신규 배차 중단', ps:[
     '진동이 이상선 위에서 유지되고 있습니다. 이 상태로 계속 달리면 <b>적재 FOUP 손상</b>과 '
     + '<b>주행 레일 마모</b>가 함께 진행됩니다.',
-    '배차 조정만으로는 멈추지 않습니다. 신규 배차를 끊고 <b>본선 격리</b>를 권고합니다.'] };
+    '배차 조정만으로는 멈추지 않습니다. 신규 배차를 끊고 <b>본선 격리</b>합니다.'] };
   if(T < T_CALM) return { lv:'warn', h:V + ' 본선 격리 진행 중', ps:[
     '적재 중이던 반송은 인근 포트에서 인계해 다른 차량이 이어받았습니다. '
     + '<b>' + V + '</b> 는 타 차량 동선을 막지 않는 경로로 <b>정비 구역</b>까지 이송 중입니다.',
@@ -5473,7 +5470,7 @@ function updateBottom(k){
       act:'추가 조치 없음 · 정상 주행 유지' };
   }else{
     store.status = { level:worst, axis:worstAxis,
-      cause:`${A.what} ${val} (임계 ${axNum(worstAxis, A.err)}${u}) · ${A.reason} 추정`,
+      cause:`${A.what} ${val} (임계 ${axNum(worstAxis, A.err)}${u})`,
       where:`Rail A · ${near.label} 구간 부근 · Tag ${D.ops.tag[i]} · 누적 ${posM}m`,
       act:A.act };
   }
@@ -5589,7 +5586,7 @@ function renderLog(){
   $('#logLv').textContent = LVL_WORD[e.level];
   $('#logAxis').textContent = A.label;
   $('#logT').textContent = 't ' + e.t.toFixed(1) + 's';
-  $('#logMsg').textContent = `${A.what} ${axVal(e.axis, e.value)} (임계 ${axNum(e.axis, A.err)}${A.unit}) · ${A.reason} 추정`;
+  $('#logMsg').textContent = `${A.what} ${axVal(e.axis, e.value)} (임계 ${axNum(e.axis, A.err)}${A.unit})`;
   $('#logPos').textContent = e.where;
 }
 /* 상단 시계 — 재생 커서 t 는 왕복(정방향→역방향)이라 되감기며 줄어들어 시각으로 쓸 수 없다.
@@ -5939,14 +5936,13 @@ function agentReportText(S){
   /* 재현 횟수는 감지 포인트가 실제로 몇 번 걸렸는지 센 값이다(§ updateEvents).
      '이상일 확률 N%' 같은 표현은 쓰지 않는다 — 그 확률을 낼 근거가 이 데이터엔 없다. */
   const n = p ? (p._n || 0) : 0;
-  const again = n > 1 ? `이 지점을 지난 <b>${n}번 모두</b> 같은 신호가 나오고 있어 우연으로 보기 어렵습니다. `
+  const again = n > 1 ? `이 지점을 지난 <b>${n}번 모두</b> 같은 신호가 나왔습니다. `
                       : `방금 처음 잡힌 신호입니다. `;
   const where = p ? p.label + ' 지점' : A.label;
   return head + `<b>${where}</b>${jo(where, '을', '를')} 지나며 ${A.noun}${jo(A.noun, '이', '가')} `
     + `<span class="q">${axVal(S.axis, S.val)}</span> 까지 올랐습니다. `
     + `정상 주행에서는 ${axVal(S.axis, A.warn)} 를 넘지 않는 값입니다. ${again}`
-    + `<b>${A.reason}</b>${jo(A.reason, '으로', '로')} 보이며, `
-    + `${A.act}${jo(A.act, '을', '를')} 권장드립니다.`;
+    + `조치 — ${A.act}.`;
 }
 
 /* ── 감시 주기 — 관찰 → 데이터 수집 → 전처리 → 데이터 분석 → 교차 판정 → 감시 보고 ──
