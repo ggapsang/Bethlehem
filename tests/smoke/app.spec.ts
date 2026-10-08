@@ -1,5 +1,5 @@
 /* 작성 프로그램(Electron) 스모크 — 기능마다 새 작업 폴더 · 새 설정으로 */
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
@@ -20,6 +20,14 @@ export const appSpecs: Spec[] = [
       try {
         await ctrlPick(page, await stagePoint(page, 300, 300), await stagePoint(page, 700, 600));
         check('영역 → 캡처 · 녹화 · 붙이기, 캡처가 기본', (await page.getAttribute('.snip-btn:has-text("캡처")', 'aria-pressed')) === 'true');
+        // 켜자마자 멈추기 — 녹화기가 준비되는 중에 눌러도 다시 켜지 않고 바로 멈춘다
+        await page.click('.snip-btn:has-text("녹화")');
+        await page.click('.snip-btn.is-rec');
+        const quick = Date.now();
+        // 바쁠 때는 화면 공유를 받는 것부터 늦다 — 30초 자동 멈춤이 아니라 곧 붙으면 된다
+        check('켜자마자 멈춰도 곧바로 클립이 붙는다', !!(await until(() => page.$('.popover-card .composer .clip video'), 15000)), `${Date.now() - quick}ms`);
+        await page.click('.popover-card .composer .clip button').catch(() => {});
+        await until(async () => !(await page.$('.popover-card .composer .clip')), 3000);
         await page.click('.snip-btn:has-text("녹화")');
         check('녹화 중 — 멈춤 그림이 걷히고 그 영역에 테두리', !!(await until(() => page.$('.snip-target.is-rec'), 5000)) && !(await page.$('.stage-still')));
         await wait(1300);
@@ -137,9 +145,7 @@ export const appSpecs: Spec[] = [
     kind: 'app',
     files: [/^packages\/manna\/src\/stage\/ScreenTabs\.tsx$/, new RegExp(`^${B}main/(index|workspace|image)\\.ts$`), new RegExp(`^${B}renderer/src/(session|Welcome|Tools|ImportDialog|UrlDialog)\\.tsx?$`), new RegExp(`^${B}(shared|preload)/`), /^packages\/core\/node\//],
     async run() {
-      const ctx = await appWithScreen();
-      let { app, page } = ctx;
-      const { ws, ud, src } = ctx;
+      const { app, page, ws, src } = await appWithScreen();
       try {
         check('작업 폴더에 화면이 저장된다', !!(await until(() => existsSync(join(ws, 'screens', 'SCR-001', 'screen.json')), 8000)));
         await page.dblclick('.tab[data-id="SCR-001"] .tab-main');
@@ -163,24 +169,50 @@ export const appSpecs: Spec[] = [
         await page.click('.tab[data-id="SCR-001"] .tab-main').catch(() => {});
         // 바깥에서 고치면 다시 불러온다
         await ctrlPick(page, await stagePoint(page, 960, 120));
-        await page.click('.snip-btn:has-text("화면에 붙이기")').catch(() => {});
         await typeIn(page, '.popover-card .composer .cm-content', '바깥 테스트');
         await page.keyboard.press('Control+Enter');
         const cj = join(ws, 'screens', 'SCR-001', 'comments.json');
         await until(() => comments(ws, 'SCR-001').length === 1, 8000);
         await page.keyboard.press('Escape');
         await page.keyboard.press('Escape');
-        await wait(4500); // dist 굽기까지 지나가게 — 그 쓰기를 바깥 변경으로 잘못 알면 안 된다
+        // 보낼 파일 굽기까지 지나가게 — 그 쓰기를 바깥 변경으로 잘못 알면 안 된다
+        await until(() => existsSync(join(ws, 'dist')) && readdirSync(join(ws, 'dist')).some((n) => n.endsWith('.terr.html')), 8000);
+        await wait(800);
         const list = JSON.parse(readFileSync(cj, 'utf8'));
         list[0].title = '바깥에서 단 제목';
         writeFileSync(cj, JSON.stringify(list, null, 2));
         check('바깥에서 comments.json 을 고치면 바로 다시 불러온다', !!(await until(async () => ((await page.textContent('.cards > .card:first-child .card-name')) ?? '') === '바깥에서 단 제목', 10000)));
-        // ＋ → 파일 (다른 테라리움 문서 + 그림)
-        const dist = join(ws, 'dist', readdirSync(join(ws, 'dist')).find((n) => n.endsWith('.terr.html'))!);
-        const img = join(OUT, 'smoke-icon.png');
-        mkdirSync(OUT, { recursive: true });
+        // 현재 탭만 저장
+        const oneOut = join(tempDir('one'), 'one-tab');
+        await app.evaluate(({ dialog }, d) => {
+          dialog.showSaveDialog = (async () => ({ canceled: false, filePath: d })) as typeof dialog.showSaveDialog;
+        }, oneOut);
+        const cur = await page.getAttribute('.tab.is-on', 'data-id');
+        await page.click('button[aria-label="저장 방식"]');
+        await page.click('.save-menu button[aria-label="현재 탭만 저장"]');
+        const oneFile = await until(() => (existsSync(oneOut + '.terr.html') ? oneOut + '.terr.html' : null), 8000);
+        const oneIds = oneFile ? parseManna(readFileSync(oneFile, 'utf8')).doc.screens.map((x) => x.id) : [];
+        check('현재 탭만 저장 — 그 화면 하나만 새 파일로', oneIds.length === 1 && oneIds[0] === cur, `${cur} → ${oneIds.join(',')}`);
+      } finally {
+        await app.close();
+      }
+    },
+  },
+  {
+    name: 'app-tab-layout',
+    kind: 'app',
+    files: [/^packages\/manna\/src\/stage\/ScreenTabs\.tsx$/, new RegExp(`^${B}main/(index|workspace|image)\\.ts$`), new RegExp(`^${B}renderer/src/(session|Welcome|Tools|ImportDialog|UrlDialog)\\.tsx?$`), new RegExp(`^${B}(shared|preload)/`), /^packages\/core\/node\//],
+    async run() {
+      const { app, page, ws } = await appWithScreen();
+      try {
+        // ＋ → 파일 (다른 테라리움 문서 + 그림) — 화면이 들어간 보낼 파일이 구워질 때까지
+        const dist = await until(() => {
+          const n = existsSync(join(ws, 'dist')) ? readdirSync(join(ws, 'dist')).find((x) => x.endsWith('.terr.html')) : undefined;
+          return n && parseManna(readFileSync(join(ws, 'dist', n), 'utf8')).doc.screens.length ? join(ws, 'dist', n) : null;
+        }, 15000);
+        const img = join(tempDir('img'), 'smoke-icon.png');
         cpSync(resolve('docs/icon.png'), img);
-        await nextOpen(app, [dist, img]);
+        await nextOpen(app, [dist!, img]);
         await page.click('button[aria-label="화면 추가"]');
         await page.click('.popover-item:has-text("파일")');
         check('＋ → 파일 — 문서의 화면과 그림이 들어온다', !!(await until(() => readdirSync(join(ws, 'screens')).length === 3, 10000)), readdirSync(join(ws, 'screens')).join(','));
@@ -208,14 +240,15 @@ export const appSpecs: Spec[] = [
         await page.mouse.up();
         const layout = await tabIds();
         check('탭을 끌어 순서를 바꾼다', layout[0] === t3, layout.join(','));
+        const distFile = dist!;
+        const stamp = statSync(distFile).mtimeMs;
         await page.keyboard.press('Control+s');
-        await wait(2000);
-        const distNow = join(ws, 'dist', readdirSync(join(ws, 'dist')).find((n) => n.endsWith('.terr.html'))!);
-        const meta = parseManna(readFileSync(distNow, 'utf8')).doc.meta.tabs;
+        await until(() => statSync(distFile).mtimeMs > stamp, 8000);
+        const meta = parseManna(readFileSync(distFile, 'utf8')).doc.meta.tabs;
         check('문서에 탭 배치가 들어 있다 (순서 · 숨김)', meta?.open.join(',') === layout.join(',') && meta?.hidden.join(',') === hideId, JSON.stringify(meta));
         const br = await chromium.launch({ executablePath: CHROME });
         const rp = await (await br.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
-        await rp.goto(pathToFileURL(distNow).href);
+        await rp.goto(pathToFileURL(distFile).href);
         await rp.fill('.modal input', '받는이').catch(() => {});
         await rp.click('.modal button[type=submit]').catch(() => {});
         const got = await until(async () => {
@@ -224,20 +257,24 @@ export const appSpecs: Spec[] = [
         }, 8000);
         check('받는 사람이 처음 열면 작성자의 탭 순서 · 숨김 그대로', got?.join(',') === layout.join(','), `${got?.join(',')} / ${layout.join(',')}`);
         await br.close();
-        await page.click('button[aria-label="화면 목록"]');
-        await page.click(`button[aria-label="${hideId} 탭 보이기"]`);
-        await page.click('button[aria-label="화면 목록"]');
-        // 현재 탭만 저장
-        const oneOut = join(OUT, 'smoke-app-one-tab');
-        await app.evaluate(({ dialog }, d) => {
-          dialog.showSaveDialog = (async () => ({ canceled: false, filePath: d })) as typeof dialog.showSaveDialog;
-        }, oneOut);
-        const cur = await page.getAttribute('.tab.is-on', 'data-id');
-        await page.click('button[aria-label="저장 방식"]');
-        await page.click('.save-menu button[aria-label="현재 탭만 저장"]');
-        const oneFile = await until(() => (existsSync(oneOut + '.terr.html') ? oneOut + '.terr.html' : null), 8000);
-        const oneIds = oneFile ? parseManna(readFileSync(oneFile, 'utf8')).doc.screens.map((s) => s.id) : [];
-        check('현재 탭만 저장 — 그 화면 하나만 새 파일로', oneIds.length === 1 && oneIds[0] === cur, `${cur} → ${oneIds.join(',')}`);
+      } finally {
+        await app.close();
+      }
+    },
+  },
+  {
+    name: 'app-reopen',
+    kind: 'app',
+    files: [/^packages\/manna\/src\/stage\/ScreenTabs\.tsx$/, new RegExp(`^${B}main/(index|workspace|image)\\.ts$`), new RegExp(`^${B}renderer/src/(session|Welcome|Tools|ImportDialog|UrlDialog)\\.tsx?$`), new RegExp(`^${B}(shared|preload)/`), /^packages\/core\/node\//],
+    async run() {
+      const ctx = await appWithScreen();
+      let { app, page } = ctx;
+      const { ws, ud, src } = ctx;
+      try {
+        const dist = await until(() => {
+          const n = existsSync(join(ws, 'dist')) ? readdirSync(join(ws, 'dist')).find((x) => x.endsWith('.terr.html')) : undefined;
+          return n ? join(ws, 'dist', n) : null;
+        }, 10000);
         // 다시 켜면 최근 목록
         await app.close();
         ({ app, page } = await launchApp(ud, [ws, src]));
@@ -247,7 +284,7 @@ export const appSpecs: Spec[] = [
         check('최근 목록에서 고르면 열린다', !!(await until(async () => ((await page.textContent('.tb-place').catch(() => '')) ?? '').includes(name), 10000)));
         // 테라리움 문서가 든 폴더 → 풀어서
         const unpack = tempDir('unpack');
-        cpSync(dist, join(unpack, 'got.terr.html'));
+        cpSync(dist!, join(unpack, 'got.terr.html'));
         await app.close();
         ({ app, page } = await launchApp(ud, [ws, src, unpack]));
         await nextOpen(app, unpack);

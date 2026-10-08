@@ -161,6 +161,7 @@ export const docSpecs: Spec[] = [
   {
     name: 'doc-fullscreen',
     kind: 'doc',
+    serial: true,
     files: [new RegExp(`^${M}App\\.tsx$`), new RegExp(`^${M}stage/StageHeader\\.tsx$`), new RegExp(`^${M}ui/Toolbar\\.tsx$`), /^packages\/manna\/src\/styles\.css$/],
     async run() {
       const { page } = await openDoc();
@@ -198,8 +199,8 @@ export const docSpecs: Spec[] = [
       await page.waitForTimeout(500);
       check('다른 탭이면 마커가 숨고 마커 줄에 "다른 상태"', !(await visibleMarkers(page)).length && !!(await page.$('.mk-list .mk-other')));
       await page.click('.cards > .card:first-child .card-title');
-      const inB = await until(() => f.evaluate(() => !document.querySelector('#viewB')?.hasAttribute('hidden')), 15000);
-      check('누르면 그 탭으로 간다', !!inB && (await visibleMarkers(page)).length === 1);
+      const inB = await until(async () => (await f.evaluate(() => !document.querySelector('#viewB')?.hasAttribute('hidden'))) && (await visibleMarkers(page)).length === 1, 15000);
+      check('누르면 그 탭으로 간다', !!inB);
       f = await screenFrame(page);
     },
   },

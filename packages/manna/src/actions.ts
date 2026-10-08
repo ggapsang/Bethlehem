@@ -77,9 +77,19 @@ let snip: Recorder | null = null;
 let snipLimit: ReturnType<typeof setTimeout> | undefined;
 const SNIP_MAX_MS = 30_000;
 
+/* 녹화를 켜는 중(화면 공유 받기 · 첫 프레임 기다리기)에 멈추기를 누르면 — 다시 켜지 말고, 켜지자마자 멈춘다 */
+let snipStarting = false;
+let snipStopWanted = false;
+
 export async function toggleSnipRecording(target: HTMLElement | null): Promise<void> {
   if (snip) return stopSnipRecording();
-  if (!target || !draft.peek() || rec) return;
+  if (snipStarting) {
+    snipStopWanted = true;
+    return;
+  }
+  if (!target || !draft.peek() || rec || recStarting) return;
+  snipStarting = true;
+  snipStopWanted = false;
   try {
     snipRec.value = { startedAt: Date.now() };
     // 멈춤 그림이 걷히고 화면이 다시 도는 것을 한 박자 기다린다
@@ -91,6 +101,12 @@ export async function toggleSnipRecording(target: HTMLElement | null): Promise<v
     snip = null;
     snipRec.value = null;
     if ((e as Error).name !== 'NotAllowedError') notify(`녹화를 시작하지 못했습니다: ${(e as Error).message}`, 'error');
+  } finally {
+    snipStarting = false;
+  }
+  if (snipStopWanted && snip) {
+    snipStopWanted = false;
+    await stopSnipRecording();
   }
 }
 
@@ -366,9 +382,18 @@ async function shaOf(bytes: Uint8Array): Promise<string> {
   }
 }
 
+let recStarting = false;
+let recStopWanted = false;
+
 export async function toggleRecording(): Promise<void> {
   if (rec) return stopRecording();
-  if (!screen.peek() || !stageRef.frame || needName() || snip) return;
+  if (recStarting) {
+    recStopWanted = true;
+    return;
+  }
+  if (!screen.peek() || !stageRef.frame || needName() || snip || snipStarting) return;
+  recStarting = true;
+  recStopWanted = false;
   try {
     rec = await startRecording(stageRef.frame);
     rec.onEnded(() => stopRecording());
@@ -377,6 +402,12 @@ export async function toggleRecording(): Promise<void> {
   } catch (e) {
     rec = null;
     if ((e as Error).name !== 'NotAllowedError') notify(`녹화를 시작하지 못했습니다: ${(e as Error).message}`, 'error');
+  } finally {
+    recStarting = false;
+  }
+  if (recStopWanted && rec) {
+    recStopWanted = false;
+    await stopRecording();
   }
 }
 

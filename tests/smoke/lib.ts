@@ -1,4 +1,5 @@
 /* 스모크 테스트 공용 — 문서(브라우저)와 작성 프로그램(Electron)을 띄우고 화면을 다루는 도구 */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -19,13 +20,23 @@ export const CHROME = [
 
 /* ── 결과 ─────────────────────────────────────────────────────────── */
 export const results: { spec: string; name: string; ok: boolean; detail: string }[] = [];
-let current = '';
-export function setSpec(name: string): void {
-  current = name;
+/* 여러 기능이 함께 돈다 — 어느 기능의 확인인지는 그 기능이 시작한 흐름이 기억한다. 줄은 모아 두었다가 끝나면 한꺼번에 */
+const running = new AsyncLocalStorage<{ spec: string; log: string[]; cleanup: (() => Promise<unknown>)[] }>();
+/** 기능 하나를 돌린다 — 끝나면 그 기능이 연 브라우저 맥락을 닫는다 (뒤에 남아 돌며 다른 기능을 느리게 하지 않게) */
+export async function inSpec<T>(spec: string, log: string[], fn: () => Promise<T>): Promise<T> {
+  const cleanup: (() => Promise<unknown>)[] = [];
+  try {
+    return await running.run({ spec, log, cleanup }, fn);
+  } finally {
+    await Promise.all(cleanup.map((c) => c().catch(() => {})));
+  }
 }
 export function check(name: string, ok: boolean, detail = ''): void {
-  results.push({ spec: current, name, ok, detail });
-  console.log(`${ok ? '  ✓' : '  ✗'} ${name}${detail ? ` — ${detail}` : ''}`);
+  const c = running.getStore();
+  results.push({ spec: c?.spec ?? '', name, ok, detail });
+  const line = `${ok ? '  ✓' : '  ✗'} ${name}${detail ? ` — ${detail}` : ''}`;
+  if (c) c.log.push(line);
+  else console.log(line);
 }
 
 export const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -124,11 +135,13 @@ export const onTop = (page: Page, sel: string) =>
   }, sel);
 
 /* ── 문서(브라우저) ───────────────────────────────────────────────── */
-let browser: Browser | null = null;
+let browser: Promise<Browser> | null = null;
 /** 새 브라우저 맥락(저장소 비움)으로 문서를 연다 */
 export async function openDoc(file = DOC, name = '검증봇'): Promise<{ page: Page; f: Frame; errors: string[] }> {
-  browser ??= await chromium.launch({ executablePath: CHROME });
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 960 }, acceptDownloads: true });
+  browser ??= chromium.launch({ executablePath: CHROME });
+  const ctx = await (await browser).newContext({ viewport: { width: 1600, height: 960 }, acceptDownloads: true });
+  running.getStore()?.cleanup.push(() => ctx.close());
+  ctx.setDefaultTimeout(8000);
   await ctx.addInitScript(() => {
     Object.defineProperty(window, 'showSaveFilePicker', { value: undefined });
     if (window.top !== window) return;
@@ -159,8 +172,9 @@ export async function openDoc(file = DOC, name = '검증봇'): Promise<{ page: P
   return { page, f, errors };
 }
 export async function closeBrowser(): Promise<void> {
-  await browser?.close();
+  const b = browser;
   browser = null;
+  await (await b)?.close();
 }
 
 /* ── 작성 프로그램(Electron) ─────────────────────────────────────── */
@@ -177,7 +191,10 @@ export function tempDir(prefix: string): string {
 }
 export async function launchApp(ud: string, grant: string[]): Promise<{ app: ElectronApplication; page: Page }> {
   const app = await electron.launch({ args: [ROOT], cwd: ROOT, env: { ...process.env, BETHLEHEM_E2E_GRANT: [...grant, OUT].join(';'), BETHLEHEM_USER_DATA: ud } });
+  // 없는 것을 30초씩 기다리지 않게 — 기본 대기를 짧게 (새 창도)
+  app.on('window', (w) => w.setDefaultTimeout(8000));
   const page = await app.firstWindow();
+  page.setDefaultTimeout(8000);
   await page.waitForLoadState('domcontentloaded');
   return { app, page };
 }
@@ -232,5 +249,7 @@ export interface Spec {
   files: RegExp[];
   /** 네트워크(테스트 사이트)가 필요한가 */
   net?: boolean;
+  /** 혼자 돌아야 하는가 — 창을 앞으로 가져와야 하는 것(전체화면), 부하에 민감한 것(화면 공유 녹화). 함께 도는 묶음이 끝난 뒤에 */
+  serial?: boolean;
   run(): Promise<void>;
 }

@@ -21,6 +21,8 @@ export interface Recorder {
 
 const MAX_W = 1600;
 const BITRATE = 2_000_000;
+/** 가장 짧은 녹화 — 이보다 빨리 멈추면 이만큼은 담는다 */
+const MIN_MS = 600;
 
 type CropTargetCtor = { fromElement(el: Element): Promise<unknown> };
 type CroppableTrack = MediaStreamTrack & { cropTo?: (t: unknown) => Promise<void> };
@@ -29,7 +31,7 @@ function pickMime(): string {
   return ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) ?? 'video/webm';
 }
 
-/** 스트림에서 첫 프레임이 나올 때까지 (길어야 2초) */
+/** 스트림에서 첫 프레임이 나올 때까지 (길어야 0.8초 — 화면 공유는 바뀐 것이 없으면 프레임을 보내지 않는다) */
 async function firstFrame(stream: MediaStream): Promise<void> {
   const v = document.createElement('video');
   v.muted = true;
@@ -41,7 +43,7 @@ async function firstFrame(stream: MediaStream): Promise<void> {
         v.addEventListener('loadeddata', () => r(), { once: true });
         v.play().catch(() => {});
       }),
-      new Promise<void>((r) => setTimeout(r, 2000)),
+      new Promise<void>((r) => setTimeout(r, 800)),
     ]);
   } finally {
     v.pause();
@@ -126,7 +128,10 @@ export async function startRecording(target: HTMLElement): Promise<Recorder> {
     onEnded(cb) {
       ended = cb;
     },
-    stop() {
+    async stop() {
+      // 켜자마자 멈추면 담긴 프레임이 없다 — 조금은 담고 멈춘다
+      const short = MIN_MS - (performance.now() - started);
+      if (short > 0) await new Promise((r) => setTimeout(r, short));
       return new Promise<ClipResult>((done, fail) => {
         rec.onstop = async () => {
           cleanup();
