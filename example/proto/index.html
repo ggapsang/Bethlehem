@@ -4749,7 +4749,15 @@ function sideHead(S){
       + (deg ? ' 이 차량은 <b>저하 차량 파생 — 실측 ×' + DEG_GAIN.vib.toFixed(1) + '</b> 입니다.' : '')
       + '</div>';
   }
-  /* 이상 지점은 요약 칸을 두지 않는다 — 값은 판정 요약 한 문장이 이미 말한다 */
+  if(S.kind === 'point'){
+    const p = S.p, A = AXIS[p.axis], lv = axisLevel(p.axis, p.val);
+    return '<div class="seg-stat">'
+      + g('관측값', axVal(p.axis, p.val), LVL_COLOR[lv])
+      + g('정상 범위', '≤' + axVal(p.axis, A.warn))
+      + g('기준 대비', (p.val / A.warn).toFixed(1) + '배')
+      + '</div><div class="seg-note">' + A.src + ' 실측에서 <b>' + p.label
+      + '</b> 이 가장 크게 잡힌 지점입니다.</div>';
+  }
   return '';
 }
 /** 선택 대상별 노출 채널 틀 */
@@ -4780,7 +4788,7 @@ function paintSide(k){
   const box = $('#sideCh'); if(!box) return;
   if(box._kind !== S.kind) buildSide();                 // 다른 종류를 골랐으면 틀부터 다시
   const fr = liveFrame(), vals = $('#sideVals'); if(!vals) return;
-  /* 판정 요약 — 이상 지점을 골랐을 때만. 잰 값 한 문장('… 지표가 X 로 정상 범위 대비 N배다').
+  /* 판정 요약 — 이상 지점을 골랐을 때만. 잰 값 한 문장('… 지표가 X 로 정상 범위 대비 N배입니다').
      원인 · 추정 · 조치 문구와 주의/경고 등급 글자는 넣지 않는다 —
      기준선을 넘었으면 등급과 상관없이 모두 '이상' 이다. */
   const mj = $('#miniJudge');
@@ -4792,7 +4800,7 @@ function paintSide(k){
         + '<b>판정 요약</b><span class="mj-t">순찰 통과 시</span></div>'
         + '<p class="mj-txt">' + A.noun + ' 지표가 ' + axVal(p.axis, p.val) + ' 로 '
         + '정상 범위(≤' + axVal(p.axis, A.warn) + ') 대비 '
-        + (p.val/A.warn).toFixed(1) + '배다.</p>';
+        + (p.val/A.warn).toFixed(1) + '배입니다.</p>';
     }
   }
   const row = (a, v, u) => '<div class="vs-line"><span>' + a + '</span><b>' + v
@@ -4839,9 +4847,9 @@ function paintSide(k){
     $('#sideSum').textContent = p.label + ' · ' + railNo;
     vals.innerHTML =
         row('이상 종류', p.label)
+      + row('기준 대비', (p.val / A.warn).toFixed(1), ' 배')
       + row('레일 위치', railNo)
-      + row('OPS Tag', String(p.tag))
-      + row('측정 채널', A.src);
+      + row('OPS Tag', String(p.tag));
   } else {
     const PN = PATH_NM[S.path];
     const here = fr.v.filter(v => v.p === S.path).length;
