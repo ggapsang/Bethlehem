@@ -408,9 +408,12 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
         const no = ++freezeNo.current;
         (async () => {
           setCapturing(true);
+          // 찍는 동안 화면 위에 뜬 것(작성 창 · 점선 박스 · 안내 막대)은 숨긴다 — 영역을 빨리 그리면 찍기 전에 작성 창이 먼저 뜬다
+          document.body.classList.add('is-capturing');
           await nextPaint();
           const r = frameBox.current!.getBoundingClientRect();
           const shot = await host.capture!({ x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) }).catch(() => null);
+          document.body.classList.remove('is-capturing');
           setCapturing(false);
           if (no === freezeNo.current && (picking.peek() || draft.peek())) bridge.current?.send({ type: 'pause' });
           if (!shot || no !== freezeNo.current || !(picking.peek() || draft.peek())) return;

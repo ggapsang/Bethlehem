@@ -132,6 +132,11 @@ export async function startRecording(target: HTMLElement): Promise<Recorder> {
       // 켜자마자 멈추면 담긴 프레임이 없다 — 조금은 담고 멈춘다
       const short = MIN_MS - (performance.now() - started);
       if (short > 0) await new Promise((r) => setTimeout(r, short));
+      // 바쁠 때는 그동안에도 담긴 것이 없을 수 있다 — 한 조각이라도 담길 때까지 (길어야 3초)
+      for (const until = performance.now() + 3000; !chunks.length && rec.state === 'recording' && performance.now() < until; ) {
+        rec.requestData();
+        await new Promise((r) => setTimeout(r, 150));
+      }
       return new Promise<ClipResult>((done, fail) => {
         rec.onstop = async () => {
           cleanup();

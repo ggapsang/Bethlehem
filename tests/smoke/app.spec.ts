@@ -1,11 +1,11 @@
 /* 작성 프로그램(Electron) 스모크 — 기능마다 새 작업 폴더 · 새 설정으로 */
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
 import { parseManna } from '../../packages/core/src';
 import {
-  CHROME, OUT, SITE, appWithScreen, splashDone, visibleMarkers, check, comments, ctrlPick, launchApp, nextOpen, openScreen, screenFrame, stagePoint, tempDir, typeIn, until, wait, type Spec,
+  CHROME, SITE, appWithScreen, splashDone, visibleMarkers, check, comments, ctrlPick, launchApp, nextOpen, openScreen, screenFrame, stagePoint, tempDir, typeIn, until, wait, type Spec,
 } from './lib';
 
 const B = 'apps/bethlehem/';
@@ -846,6 +846,68 @@ c.addEventListener('pointerdown', () => {
         check('남겨진 Comment 를 알린다', ((await page.textContent('.other-versions').catch(() => '')) ?? '').includes('v3 2'));
         await page.click('.other-versions button:has-text("모두 옮기기")');
         check('한 번에 지금 버전으로', !!(await until(() => vers().join() === '4,4', 8000)) && (await page.$$('.cards > .card')).length === 2 && !(await page.$('.other-versions')));
+      } finally {
+        await app.close();
+      }
+    },
+  },
+  {
+    name: 'app-export',
+    kind: 'app',
+    files: [/^packages\/manna\/src\/(export-comments\.ts|ui\/ExportComments\.tsx)$/, /^packages\/manna\/src\/ui\/(Popover|Panel)\.tsx$/],
+    async run() {
+      const { app, page } = await appWithScreen();
+      const out = tempDir('export');
+      // 내려받기는 정한 곳으로 (대화상자 없이)
+      // 메인 프로세스는 ES 모듈이라 require 가 없다 — 경로는 글자로 잇는다
+      await app.evaluate(({ session }, dir) => session.defaultSession.on('will-download', (_e, item) => item.setSavePath(`${dir}\\${item.getFilename()}`)), out);
+      const saved = () => readdirSync(out).filter((n) => n.endsWith('.html'));
+      try {
+        // 영역 캡처 Comment (그림 + 박스) · 요소 Comment (마크다운 본문)
+        await ctrlPick(page, await stagePoint(page, 300, 300), await stagePoint(page, 700, 600));
+        await page.fill('.popover-card .composer .title-input', '캡처 쪽');
+        await typeIn(page, '.popover-card .composer .cm-content', '영역 캡처 본문');
+        await page.keyboard.press('Control+Enter');
+        await until(async () => ((await page.textContent('.cards')) ?? '').includes('캡처 쪽'), 8000);
+        await page.keyboard.press('Escape');
+        await ctrlPick(page, await stagePoint(page, 960, 300));
+        await page.fill('.popover-card .composer .title-input', '요소 쪽');
+        await typeIn(page, '.popover-card .composer .cm-content', '**굵게** 설명');
+        await page.keyboard.press('Enter');
+        await page.keyboard.type('- [ ] 할 일 <script>x</script>');
+        await page.keyboard.press('Control+Enter');
+        await until(async () => ((await page.textContent('.cards')) ?? '').includes('요소 쪽'), 8000);
+        // 팝업의 단추 — 그 Comment 하나만
+        await page.click('.cards > .card:has-text("캡처 쪽")');
+        await page.click('.popover-card button[aria-label="이 Comment 내보내기"]');
+        const one = await until(() => saved()[0], 10000);
+        const html = one ? readFileSync(join(out, one), 'utf8') : '';
+        const data = JSON.parse(/<script type="application\/json" id="terr-comments">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '{}');
+        check('Comment 하나 — HTML 한 장', !!one && /\.html$/.test(one) && !one.endsWith('.terr.html') && data.comments?.length === 1 && data.comments[0].title === '캡처 쪽', one ?? '');
+        check('달 때 찍은 화면이 들어가고 대상 박스가 그려진다', /<img src="data:image\/jpeg;base64,/.test(html) && /class="box" style="left:/.test(html));
+        check('작성 프로그램 없이 쓰는 스크립트가 없다 (데이터 JSON 만)', !/<script(?![^>]*application\/json)/.test(html));
+        // 목록 머리의 내보내기 — 골라서 여러 개
+        await page.keyboard.press('Escape');
+        await page.click('button[aria-label="Comment 내보내기"]');
+        await page.waitForSelector('.export-modal');
+        await page.click('.export-modal .export-all input');
+        if (!(await page.isChecked('.export-modal .export-all input'))) await page.click('.export-modal .export-all input');
+        await page.click('.export-modal .btn-primary');
+        const two = await until(() => saved().find((n) => n !== one), 10000);
+        const html2 = two ? readFileSync(join(out, two), 'utf8') : '';
+        const d2 = JSON.parse(/<script type="application\/json" id="terr-comments">([\s\S]*?)<\/script>/.exec(html2)?.[1] ?? '{}');
+        check('골라서 여러 개', d2.comments?.length === 2 && !(await page.$('.export-modal')), two ?? '');
+        check('본문 마크다운 — 굵게 · 할 일, HTML 은 글자로', html2.includes('<b>굵게</b>') && /class="task/.test(html2) && html2.includes('&lt;script&gt;x&lt;/script&gt;'));
+        // 브라우저로 그대로 열린다 (오프라인)
+        const br = await chromium.launch({ executablePath: CHROME });
+        const pg = await (await br.newContext({ viewport: { width: 1000, height: 900 }, offline: true })).newPage();
+        const failed: string[] = [];
+        pg.on('requestfailed', (r) => failed.push(r.url()));
+        await pg.goto(pathToFileURL(join(out, two!)).href);
+        const shown = await pg.$$eval('article.c', (els) => els.length);
+        const imgOk = await pg.$eval('article.c .frame img', (i) => (i as HTMLImageElement).naturalWidth > 0).catch(() => false);
+        check('브라우저로 그대로 열린다 — 카드 · 그림', shown === 2 && imgOk && failed.length === 0);
+        await br.close();
       } finally {
         await app.close();
       }

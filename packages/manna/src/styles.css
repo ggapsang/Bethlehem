@@ -839,3 +839,15 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .ver-count { margin-left: 4px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--neutral-500); color: #fff; font-size: 10px; line-height: 16px; display: inline-block; text-align: center; }
 .ver-chip[aria-checked="true"] .ver-count { background: var(--white); color: var(--primary-700, #c2410c); }
 .ver-old { color: var(--warning-700); border-color: var(--warning-500); background: var(--warning-50); white-space: nowrap; }
+/* Comment 내보내기 */
+.export-modal { width: min(560px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: var(--unit-3); }
+.export-modal h2 { display: flex; align-items: center; gap: var(--unit-2); }
+.export-all { justify-content: space-between; }
+.export-list { list-style: none; margin: 0; padding: 4px; max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--unit-2); }
+.export-list label { gap: var(--unit-2); padding: 4px 6px; border-radius: var(--unit-1); cursor: pointer; min-width: 0; }
+.export-list label:hover { background: var(--bg-hover); }
+.export-list label.is-done { color: var(--text-secondary); }
+.export-list .ellipsis { flex: 1; min-width: 0; }
+/* 멈춤 그림을 찍는 동안 — 화면 위에 뜬 것은 그림에 들어가지 않게 */
+body.is-capturing .popover-card, body.is-capturing .snip-target, body.is-capturing .hl-box,
+body.is-capturing .link-bar, body.is-capturing .rec-bar, body.is-capturing .toast { visibility: hidden !important; }

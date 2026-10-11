@@ -83,7 +83,7 @@ export async function downloadSource(): Promise<boolean> {
       if (b) files.push({ path: p, bytes: await decodeBlob(b) });
     }
     const name = `${safe(s.title)}_${s.id}_v${v.v}_원본.zip`;
-    download(makeZip(files) as BlobPart, name, 'application/zip');
+    downloadFile(makeZip(files) as BlobPart, name, 'application/zip');
     notify(`원본 파일 ${files.length}개를 내려받았습니다 — ${name}`);
     return true;
   } catch (e) {
@@ -101,7 +101,7 @@ async function downloadSiteCopy(id: string, vno: number): Promise<boolean> {
     if (!s || !v) return false;
     const html = await siteCopyHtml(v, blobs, s.title);
     const name = `${safe(s.title)}_${s.id}_v${v.v}_DOM.html`;
-    download(html, name);
+    downloadFile(html, name);
     notify(`DOM 사본을 내려받았습니다 — ${name} (스크립트 없이 그 순간의 모습, 파일 하나로 열린다)`);
     return true;
   } catch (e) {
@@ -128,11 +128,11 @@ export async function saveScreenOnly(host: Host): Promise<boolean> {
           where = h.name;
         } catch (e) {
           if ((e as Error).name === 'AbortError') return false;
-          download(html, name);
+          downloadFile(html, name);
           where = name;
         }
       } else {
-        download(html, name);
+        downloadFile(html, name);
         where = name;
       }
     }
@@ -201,7 +201,7 @@ type Picker = (o: object) => Promise<FileHandle>;
 let handle: FileHandle | null = null;
 let baseShas = new Set<string>();
 
-function download(data: BlobPart, name: string, type = 'text/html'): void {
+export function downloadFile(data: BlobPart, name: string, type = 'text/html'): void {
   const url = URL.createObjectURL(new Blob([data], { type }));
   const a = document.createElement('a');
   a.href = url;
@@ -332,7 +332,7 @@ export const browserHost: Host = {
         handle = null; // 권한이 막혔으면 다운로드로 넘어간다
       }
     }
-    download(html, name);
+    downloadFile(html, name);
     fileName.value = name;
     dirty.value = false;
     saveState.value = { kind: 'local', where: name, at: Date.now() };

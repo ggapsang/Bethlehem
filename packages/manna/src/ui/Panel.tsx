@@ -1,7 +1,8 @@
 /* 오른쪽 패널 — 위에 화면 개요(마크다운), 아래에 Comment 목록. 한 스크롤로 이어진다 */
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { CheckSquare, Camera, ChevronDown, ChevronRight, EyeOff, Film, GripVertical, MessageSquare, Plus, X } from 'lucide-preact';
+import { CheckSquare, Camera, ChevronDown, ChevronRight, EyeOff, FileOutput, Film, GripVertical, MessageSquare, Plus, X } from 'lucide-preact';
+import { ExportCommentsDialog, exportAsk } from './ExportComments';
 import type { Annotation, Screen } from '@core';
 import { displayNo } from '@core';
 import { toggleDone, MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, reorder, moveCommentsHere } from '../actions';
@@ -222,11 +223,17 @@ function Comments({ scr }: { scr: Screen }) {
             <CheckSquare {...ICON} size={14} /> 완료 {doneN} {showDone.value ? '숨기기' : '보기'}
           </button>
         )}
+        {annotations.value.length > 0 && (
+          <button type="button" class="btn-icon btn-xs" title="Comment 내보내기 — 골라서 HTML 한 장으로" aria-label="Comment 내보내기" onClick={() => (exportAsk.value = true)}>
+            <FileOutput {...ICON} size={15} />
+          </button>
+        )}
         <button type="button" class="btn-icon btn-xs" title="화면 전체에 Comment 달기" aria-label="화면 전체에 Comment 달기" onClick={() => addScreenComment()}>
           <Plus {...ICON} />
         </button>
       </div>
       <OtherVersions scr={scr} />
+      <ExportCommentsDialog />
       {commentsOpen.value && (
       <div class="cards-scroll">
       <ol class="cards" ref={listRef}>

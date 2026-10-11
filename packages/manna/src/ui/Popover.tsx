@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { RefObject } from 'preact';
 import { createPortal } from 'preact/compat';
-import { Camera, Circle, Film, MonitorPlay, Pin, Square, Trash2, X } from 'lucide-preact';
+import { Camera, Circle, FileOutput, Film, MonitorPlay, Pin, Square, Trash2, X } from 'lucide-preact';
 import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
 import { REC_MAX_MS, editAssignee, toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleRecording, toggleSnipRecording } from '../actions';
@@ -10,6 +10,7 @@ import type { Host } from '../host';
 import { annotations, draft, draftClip, popHidden, recording, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
 import { CommentLinks } from '../stage/Links';
+import { exportComments } from '../export-comments';
 import { MarkdownEditor } from './editor/MarkdownEditor';
 import { PeopleList, Who } from './Who';
 import { ago } from './labels';
@@ -328,6 +329,7 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
         <label class={`done-label ${a.done ? 'is-on' : ''}`} title={a.done ? `${a.done.by} · ${ago(a.done.at)}` : '완료 — 지우지 않고 숨긴다'}>
           <input type="checkbox" checked={!!a.done} onChange={() => toggleDone(a)} /> 완료
         </label>
+        <button type="button" class="btn-icon btn-xs" aria-label="이 Comment 내보내기" title="이 Comment 만 HTML 한 장으로 내보내기 — 캡처 · 영상 · 본문 · 답글" onClick={() => exportComments(scr, [a])}><FileOutput {...ICON} size={15} /></button>
         <button type="button" class="btn-icon btn-xs" aria-label="닫기" title="팝업 닫기 (선택은 그대로)" onClick={() => (popHidden.value = true)}><X {...ICON} /></button>
       </div>
       {mine ? (

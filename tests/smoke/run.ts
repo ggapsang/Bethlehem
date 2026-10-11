@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { join } from 'node:path';
 import { appSpecs } from './app.spec';
 import { docSpecs } from './doc.spec';
-import { OUT, closeBrowser, inSpec, results, type Spec } from './lib';
+import { OUT, SITE, closeBrowser, inSpec, results, type Spec } from './lib';
 
 const all: Spec[] = [...docSpecs, ...appSpecs];
 const args = process.argv.slice(2);
@@ -63,7 +63,9 @@ async function main() {
     for (const s of all) console.log(`${s.name.padEnd(16)} ${s.kind}${s.net ? ' · 네트워크' : ''}${s.serial ? ' · 혼자' : ''}`);
     return;
   }
-  const { specs, why } = pick();
+  const picked = pick();
+  let specs = picked.specs;
+  const why = picked.why;
   if (!specs.length) {
     console.log('바뀐 코드에 걸린 스모크가 없습니다.');
     return;
@@ -87,6 +89,18 @@ async function main() {
   }
   console.log(`준비 ${((Date.now() - tb) / 1000).toFixed(1)}초`);
 
+  // 테스트 사이트가 필요한 것 — 사이트가 응답하지 않으면 기다리다 실패하지 말고 이유를 밝히고 건너뛴다
+  const skipped: { spec: string; why: string }[] = [];
+  if (specs.some((s) => s.net)) {
+    const down = await fetch(SITE, { signal: AbortSignal.timeout(10000) })
+      .then((r) => (r.ok ? null : `HTTP ${r.status}`))
+      .catch((e: Error) => e.name === 'TimeoutError' ? '10초 안에 응답 없음' : e.message);
+    if (down) {
+      for (const s of specs.filter((x) => x.net)) skipped.push({ spec: s.name, why: `테스트 사이트 ${SITE} — ${down}` });
+      specs = specs.filter((x) => !x.net);
+    }
+  }
+
   // 함께 돌린다 — 지난번에 오래 걸린 것부터 (끝이 한 기능에 몰리지 않게)
   const at = args.indexOf('--jobs');
   const jobs = at >= 0 ? Math.max(1, Number(args[at + 1]) || 1) : JOBS;
@@ -100,8 +114,12 @@ async function main() {
       try {
         await s.run();
       } catch (e) {
-        results.push({ spec: s.name, name: '실행 중 오류', ok: false, detail: (e as Error).message.split('\n')[0] });
-        log.push(`  ✗ 실행 중 오류 — ${(e as Error).message.split('\n')[0]}`);
+        // 무엇을 기다리다 멈췄는지까지 (Playwright 의 "waiting for …" 줄)
+        const msg = (e as Error).message;
+        const at = /waiting for (.+)/.exec(msg)?.[1];
+        const detail = msg.split('\n')[0] + (at ? ` — ${at.slice(0, 160)}` : '');
+        results.push({ spec: s.name, name: '실행 중 오류', ok: false, detail });
+        log.push(`  ✗ 실행 중 오류 — ${detail}`);
       }
     });
     const sec = (Date.now() - t) / 1000;
@@ -118,6 +136,7 @@ async function main() {
   const bad = results.filter((r) => !r.ok);
   console.log(`\n${results.length - bad.length}/${results.length} 통과 · ${((Date.now() - t0) / 1000).toFixed(0)}초`);
   for (const r of bad) console.log(`  ✗ [${r.spec}] ${r.name}${r.detail ? ` — ${r.detail}` : ''}`);
+  for (const k of skipped) console.log(`  – [${k.spec}] 건너뜀 — ${k.why}`);
   process.exit(bad.length ? 1 : 0);
 }
 
