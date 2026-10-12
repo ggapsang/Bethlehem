@@ -21,6 +21,32 @@ function ownText(el: Element): string {
   return t.slice(0, TEXT_MAX);
 }
 
+const INNER_MAX = 120;
+
+/** 안쪽 글 전체의 앞부분 — 큰 컨테이너도 앞에서 끊어 읽는다 */
+function innerText(el: Element): string {
+  let t = '';
+  const w = el.ownerDocument.createTreeWalker(el, 4 /* SHOW_TEXT */);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    const p = n.parentElement?.tagName;
+    if (p === 'SCRIPT' || p === 'STYLE') continue;
+    t += n.textContent;
+    if (t.length > INNER_MAX * 2 && norm(t).length > INNER_MAX) break;
+  }
+  return norm(t).slice(0, INNER_MAX);
+}
+
+/** 내용 비교용 낱말 — 숫자 · 기호는 뺀다(값이 바뀌는 칸은 그대로 같은 요소로 본다) */
+const words = (s: string) => s.replace(/[\d\p{P}\p{S}]+/gu, ' ').split(' ').filter(Boolean);
+
+/** 적어 둔 글과 지금 글이 같은 내용인지. 견줄 낱말이 없으면 null */
+function sameWords(was: string, now: string): boolean | null {
+  const a = words(was);
+  if (!a.length) return null;
+  const b = new Set(words(now));
+  return a.filter((w) => b.has(w)).length / a.length >= 0.5;
+}
+
 /** 가장 가까운 id 조상부터 nth-of-type 경로 */
 export function selectorOf(el: Element): string {
   const parts: string[] = [];
@@ -51,18 +77,21 @@ export function fingerprint(el: Element): Fingerprint {
   const ancestry: string[] = [];
   for (let p = el.parentElement; p && ancestry.length < 6; p = p.parentElement) if (p.id) ancestry.push(p.id);
   const text = ownText(el);
+  const inner = innerText(el);
   return {
     ...(el.id ? { id: el.id } : {}),
     selector: selectorOf(el),
     tag: el.tagName.toLowerCase(),
     classes: Array.from(el.classList).slice(0, 12),
     ...(text ? { text } : {}),
+    ...(inner && inner !== text ? { inner } : {}),
     attrs,
     ancestry,
   };
 }
 
-/** 지문과 요소의 닮음 점수. 같은 요소면 대략 10 이상 */
+/** 지문과 요소의 닮음 점수. 같은 요소면 대략 10 이상.
+ * 자리 · 클래스가 같아도 글이 딴판이면 크게 깎는다 — 한 화면 안에서 메뉴마다 같은 자리에 다른 내용을 그리는 화면 */
 export function score(fp: Fingerprint, el: Element): number {
   if (el.tagName.toLowerCase() !== fp.tag) return 0;
   let s = 1;
@@ -76,6 +105,12 @@ export function score(fp: Fingerprint, el: Element): number {
     const t = ownText(el);
     if (t === fp.text) s += 3;
     else if (t && (t.startsWith(fp.text.slice(0, 20)) || fp.text.startsWith(t.slice(0, 20)))) s += 1.5;
+    else if (sameWords(fp.text, t) === false) s -= MISMATCH;
+  }
+  if (fp.inner) {
+    const same = sameWords(fp.inner, innerText(el));
+    if (same) s += 2;
+    else if (same === false) s -= MISMATCH;
   }
   const keys = Object.keys(fp.attrs);
   for (const k of keys) if (el.getAttribute(k) === fp.attrs[k]) s += 4 / keys.length;
@@ -93,12 +128,21 @@ export function score(fp: Fingerprint, el: Element): number {
   return s;
 }
 
+/** 이미 찾은 요소가 아직 그 지문의 요소인지 — 자리를 그대로 두고 내용만 바꾸는 화면 */
+export function stillMatches(fp: Fingerprint, el: Element, minScore = 6): boolean {
+  if (fp.id && el.id === fp.id) return true;
+  return score(fp, el) >= minScore;
+}
+
 export interface Match {
   el: Element;
   score: number;
   /** 0~1. 정확히 같은 경로·id 로 찾았으면 1 */
   confidence: number;
 }
+
+/** 글이 딴판일 때 깎는 점수 — 자리 · 클래스 · 조상만 맞는 요소(10)는 못 넘게 */
+const MISMATCH = 6;
 
 const FULL = 19; // id + 클래스 + 텍스트 + 속성 + 조상 + 선택자 + 기본점 의 대략 최대치
 

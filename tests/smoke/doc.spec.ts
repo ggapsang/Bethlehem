@@ -513,4 +513,48 @@ export const docSpecs: Spec[] = [
       check('일시정지하면 iframe 안 움직임도 멈추고, 재생하면 다시 돈다', t1 === t2 && t3 > t2, `${t1} → ${t2} → ${t3}`);
     },
   },
+  {
+    name: 'doc-same-slot',
+    kind: 'doc',
+    files: [new RegExp(`^${M}agent/`), /^packages\/core\/src\/(fingerprint|types)\.ts$/, /^tests\/smoke\/fixtures\/spa\//],
+    async run() {
+      // 메뉴마다 같은 자리에 다른 내용을 그리는 화면 — 마커는 고른 그 내용에만 붙는다
+      const file = join(OUT, 'same-slot.terr.html');
+      execSync(`npx tsx scripts/bake.ts tests/smoke/fixtures/spa "${file}"`, { stdio: 'ignore' });
+      const { page } = await openDoc(file);
+      const f = await screenFrame(page);
+      await f.click('#goB');
+      await f.click('#goA');
+      await ctrlPick(page, await pagePoint(page, f, '.panel', 0.98, 0.5));
+      await page.fill('.composer .title-input', '도면 상자');
+      await page.keyboard.press('Control+Enter');
+      check('Comment 가 달리고 마커가 보인다', !!(await until(async () => (await cardCount(page)) === 1 && (await visibleMarkers(page)).length === 1, 5000)));
+      const fp = await until(() => page.evaluate(() => new Promise<{ tag?: string; text?: string; inner?: string } | null>((ok) => {
+        const r = indexedDB.open('terrarium');
+        r.onerror = () => ok(null);
+        r.onsuccess = () => {
+          const q = r.result.transaction('drafts').objectStore('drafts').getAll();
+          q.onsuccess = () => {
+            const a = (q.result as { doc: { screens: { annotations: { anchor?: { fp: { tag?: string; inner?: string } } }[] }[] } }[])
+              .flatMap((d) => d.doc.screens.flatMap((x) => x.annotations)).find((x) => x.anchor);
+            ok(a?.anchor?.fp ?? null);
+            r.result.close();
+          };
+          q.onerror = () => ok(null);
+        };
+      })), 6000);
+      check('글 없는 상자를 고르면 안쪽 글이 함께 적힌다', fp?.tag === 'div' && !fp.text && !!fp.inner?.startsWith('도면 파일'), JSON.stringify(fp && { tag: fp.tag, inner: fp.inner }));
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(800);
+      check('상자 안 숫자만 바뀌면 그대로 붙어 있다', (await visibleMarkers(page)).length === 1);
+      await f.click('#goB');
+      check('다른 메뉴(같은 자리 · 같은 클래스, 다른 내용)면 마커가 숨는다', !!(await until(async () => (await visibleMarkers(page)).length === 0 || null, 3000)));
+      await f.click('#goC');
+      await page.waitForTimeout(1200);
+      check('상자는 그대로 두고 안쪽만 바꾼 메뉴에서도 숨는다', (await visibleMarkers(page)).length === 0);
+      await page.click('.cards > .card:first-child .card-title');
+      const back = await until(async () => ((await f.evaluate(() => document.querySelector('#goA')!.getAttribute('aria-current'))) === 'page' && (await visibleMarkers(page)).length === 1) || null, 15000);
+      check('카드를 누르면 그 메뉴로 돌아가 마커가 다시 붙는다', !!back);
+    },
+  },
 ];

@@ -96,6 +96,8 @@ export interface Fingerprint {
   tag: string;
   classes: string[];
   text?: string;
+  /** 안쪽 글 전체의 앞부분(text 와 다를 때만) — 같은 자리에 다른 내용이 그려졌는지 가른다 */
+  inner?: string;
   attrs: Record<string, string>;
   ancestry: string[];
   /** 화면 안 iframe(같은 출처) 속 요소 — 엔트리 문서부터 그 요소를 품은 문서까지 거치는 iframe 들의 지문 */

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>메뉴 화면</title>
+<style>
+  body { margin: 0; font: 14px sans-serif; background: #fff; display: flex; }
+  #side { width: 160px; padding: 8px; }
+  #side a { display: block; padding: 6px; cursor: pointer; }
+  #main { flex: 1; padding: 8px; }
+  .panel { border: 1px solid #999; margin: 8px; padding: 12px; width: 360px; }
+</style>
+</head>
+<body>
+<div id="splash" class="done"></div>
+<div id="side">
+  <a id="goA" data-go="A">도면</a>
+  <a id="goB" data-go="B">제원</a>
+  <a id="goC" data-go="C">센서</a>
+</div>
+<div id="main"></div>
+<script>
+  // 메뉴마다 #main 을 새로 그린다 — 자리 · 클래스가 같은 상자에 다른 내용
+  var PAGES = {
+    A: '<div class="panel"><h3>도면 파일</h3><p>끌어다 놓거나 눌러서 선택</p><small>DXF · DWG · PDF</small><span id="live">0</span></div>',
+    B: '<div class="panel"><h3>차량 제원</h3><p>축간 거리와 바퀴 지름</p><small>mm 단위</small><span>휠베이스</span></div>',
+    C: '<div class="panel"><h3>센서 목록</h3><p>가속도 · 진동</p><small>설치 위치</small><span>채널</span></div>',
+  };
+  var cur = '';
+  window.go = function (id) {
+    var main = document.getElementById('main');
+    // C 는 B 에서 오면 상자를 그대로 두고 안쪽만 바꾼다(가상 DOM 화면처럼)
+    if (id === 'C' && cur === 'B') {
+      var p = main.querySelector('.panel');
+      p.innerHTML = PAGES.C.replace(/^<div class="panel">|<\/div>$/g, '');
+    } else main.innerHTML = PAGES[id];
+    cur = id;
+    for (var a of document.querySelectorAll('#side a')) a.setAttribute('aria-current', a.dataset.go === id ? 'page' : 'false');
+  };
+  document.getElementById('side').addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-go]');
+    if (a) go(a.dataset.go);
+  });
+  go('A');
+  // 상자 안 숫자는 계속 바뀐다 — 값만 바뀌면 같은 요소다
+  var n = 0;
+  setInterval(function () { var l = document.getElementById('live'); if (l) l.textContent = String(++n); }, 150);
+</script>
+</body>
+</html>

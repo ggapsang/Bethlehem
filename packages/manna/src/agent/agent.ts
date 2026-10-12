@@ -7,7 +7,7 @@
  * 하위 문서의 shim 이 뜨자마자 hookChild 로 알려 오면 그 창에도 시계 · 마우스 잠금 · 클릭 기록 · 단축키 · 조작 표시를 건다.
  */
 import type { Fingerprint, Region } from '@core';
-import { fingerprint, resolve, styleProps, trailOf } from '@core';
+import { fingerprint, resolve, stillMatches, styleProps, trailOf } from '@core';
 import { pathLog, quickReveal, recordClick, replay, resetPath } from './path';
 import type { AgentMsg, AnchorIn, HostMsg, Picked, RectTuple } from './protocol';
 
@@ -340,6 +340,11 @@ type Win = Window & typeof globalThis;
     const rects: Record<string, RectTuple> = {};
     for (const a of anchors) {
       let c = cache.get(a.id);
+      // 찾아 둔 요소도 때때로 다시 본다 — 자리는 그대로 두고 내용만 다른 메뉴로 바꾸는 화면
+      if (c?.el && c.el.isConnected && t - c.tried > 600) {
+        if (stillMatches(a.fp, c.el)) c.tried = t;
+        else c = undefined;
+      }
       if (!c || (c.el && !c.el.isConnected) || (!c.el && t - c.tried > 600)) {
         c = { el: find(a.fp), tried: t };
         cache.set(a.id, c);
