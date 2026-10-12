@@ -37,7 +37,6 @@ const URL_ATTRS: [string, string][] = [
   ['audio[src]', 'src'],
   ['track[src]', 'src'],
   ['embed[src]', 'src'],
-  ['iframe[src]', 'src'],
   ['object[data]', 'data'],
   ['input[type=image][src]', 'src'],
   ['image[href]', 'href'],
@@ -78,47 +77,78 @@ export async function prepareScreen(version: ScreenVersion, blobs: BlobStore, pa
   // 시작 페이지도 Blob URL 을 만든다 — 다른 페이지에서 돌아오는 링크를 shim 이 알아보게
   for (const url of bytes.keys()) urlFor(url);
 
-  const entry = bytes.get(entryUrl);
-  if (!entry) throw new Error(`시작 파일 '${page ?? version.entry}' 이 문서에 없습니다.`);
-  const dom = new DOMParser().parseFromString(utf8.decode(entry), 'text/html');
+  if (!bytes.has(entryUrl)) throw new Error(`시작 파일 '${page ?? version.entry}' 이 문서에 없습니다.`);
   const warnings: string[] = [];
-  // <base href> 가 있으면 문서 안 상대 경로의 기준이 바뀐다. 해석에 반영하고, 태그는 지운다(srcdoc 에서는 엉뚱한 곳을 가리킨다)
-  const baseEl = dom.querySelector('base[href]');
-  const docBase = (baseEl && absolutize(baseEl.getAttribute('href')!, entryUrl)) || entryUrl;
-  baseEl?.remove();
+  const isPage = (u: string) => /\.html?$/i.test(u) && bytes.has(u);
 
-  for (const [sel, attr] of URL_ATTRS) {
-    for (const el of Array.from(dom.querySelectorAll(sel))) {
-      const ref = el.getAttribute(attr)!;
-      const abs = absolutize(ref, docBase);
-      const to = abs && lookup(urls, abs);
-      if (to) el.setAttribute(attr, to);
+  /** 패키지 안 HTML 하나를 그 페이지 주소 기준으로 — 정적 URL · srcset · <style> · style="url()" 를 Blob URL 로.
+   *  패키지 안 페이지를 가리키는 <iframe src> 는 shim 이 그 페이지를 srcdoc 으로 넣도록 data-manna-src 로 옮긴다 */
+  const processHtml = (url: string) => {
+    const dom = new DOMParser().parseFromString(utf8.decode(bytes.get(url)!), 'text/html');
+    // <base href> 가 있으면 문서 안 상대 경로의 기준이 바뀐다. 해석에 반영하고, 태그는 지운다(srcdoc 에서는 엉뚱한 곳을 가리킨다)
+    const baseEl = dom.querySelector('base[href]');
+    const docBase = (baseEl && absolutize(baseEl.getAttribute('href')!, url)) || url;
+    baseEl?.remove();
+    for (const [sel, attr] of URL_ATTRS) {
+      for (const el of Array.from(dom.querySelectorAll(sel))) {
+        const abs = absolutize(el.getAttribute(attr)!, docBase);
+        const to = abs && lookup(urls, abs);
+        if (to) el.setAttribute(attr, to);
+      }
     }
+    for (const el of Array.from(dom.querySelectorAll('iframe[src]'))) {
+      const abs = absolutize(el.getAttribute('src')!, docBase);
+      if (!abs) continue;
+      if (isPage(abs.split('#')[0].split('?')[0])) {
+        el.setAttribute('data-manna-src', abs);
+        el.removeAttribute('src');
+      } else {
+        const to = lookup(urls, abs);
+        if (to) el.setAttribute('src', to);
+      }
+    }
+    for (const el of Array.from(dom.querySelectorAll('img[srcset],source[srcset]'))) {
+      el.setAttribute('srcset', rewriteSrcset(el.getAttribute('srcset')!, docBase, (x) => lookup(urls, x)));
+    }
+    for (const el of Array.from(dom.querySelectorAll('style'))) {
+      el.textContent = rewriteCss(el.textContent ?? '', docBase, (x) => lookup(urls, x));
+    }
+    for (const el of Array.from(dom.querySelectorAll('[style*="url("]'))) {
+      el.setAttribute('style', rewriteCss(el.getAttribute('style')!, docBase, (x) => lookup(urls, x)));
+    }
+    return { dom, docBase };
+  };
+  const serialize = (dom: Document) => (dom.doctype ? `<!DOCTYPE ${dom.doctype.name}>` : '') + dom.documentElement.outerHTML;
+
+  // 하위 페이지 — iframe 에 넣을 때 shim 이 자리(data-manna-shim)에 자기 자신을 그 페이지 기준으로 넣는다
+  const pages: Record<string, string> = {};
+  for (const url of bytes.keys()) {
+    if (!isPage(url)) continue;
+    const { dom } = processHtml(url);
+    const slot = dom.createElement('script');
+    slot.setAttribute('data-manna-shim', '');
+    dom.head.prepend(slot);
+    pages[url] = serialize(dom);
   }
-  for (const el of Array.from(dom.querySelectorAll('img[srcset],source[srcset]'))) {
-    el.setAttribute('srcset', rewriteSrcset(el.getAttribute('srcset')!, docBase, (a) => lookup(urls, a)));
-  }
-  for (const el of Array.from(dom.querySelectorAll('style'))) {
-    el.textContent = rewriteCss(el.textContent ?? '', docBase, (a) => lookup(urls, a));
-  }
-  for (const el of Array.from(dom.querySelectorAll('[style*="url("]'))) {
-    el.setAttribute('style', rewriteCss(el.getAttribute('style')!, docBase, (a) => lookup(urls, a)));
-  }
+
+  const { dom, docBase } = processHtml(entryUrl);
   if (dom.querySelector('script[type=module]')) {
     warnings.push('모듈 스크립트(type="module")가 있습니다. 파일로 연 문서에서는 브라우저가 막으므로 번들된 결과물을 넣어야 합니다.');
   }
 
   const map: Record<string, string> = {};
   for (const [k, v] of urls) map[k] = v;
+  // srcdoc 의 <script> 안에 들어간다 — 문자열 속 </script> 가 스크립트를 끝내지 않게 < 를 이스케이프
+  const arg = (x: unknown) => JSON.stringify(x).replace(/</g, '\\u003c');
+  const shimFn = shimSource.trim().replace(/;?\s*$/, '');
   const shim = dom.createElement('script');
-  shim.textContent = `(${shimSource.trim().replace(/;?\s*$/, '')})(${JSON.stringify(map)}, ${JSON.stringify(docBase)});`;
+  shim.textContent = `(${shimFn})(${arg(map)}, ${arg(docBase)}, ${arg(pages)}, ${arg(shimFn)});`;
   const agent = dom.createElement('script');
   agent.textContent = agentSource;
   dom.head.prepend(shim, agent);
 
-  const doctype = dom.doctype ? `<!DOCTYPE ${dom.doctype.name}>` : '';
   return {
-    srcdoc: doctype + dom.documentElement.outerHTML,
+    srcdoc: serialize(dom),
     warnings,
     dispose: () => made.forEach((u) => URL.revokeObjectURL(u)),
   };

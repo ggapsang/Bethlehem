@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="design.css">
+<script src="./db.js"></script>
+</head>
+<body>
+<h2>설비 대장</h2>
+<img id="logo" src="../assets/logo.jpg" alt="">
+<script>
+  // 동적 로드도 이 페이지 기준으로 풀린다
+  var s = document.createElement('script');
+  s.src = './sync.js';
+  document.head.appendChild(s);
+  fetch('./data.json').then(function (r) { return r.json(); }).then(function (d) { window.DATA = d; }, function (e) { window.DATA = String(e); });
+  try { localStorage.setItem('eam', '1'); window.LS_OK = localStorage.getItem('eam') === '1'; } catch (e) { window.LS_OK = String(e); }
+  parent.postMessage({ tag: 'eam-ready' }, '*');
+</script>
+</body>
+</html>

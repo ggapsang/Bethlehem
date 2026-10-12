@@ -393,4 +393,45 @@ export const docSpecs: Spec[] = [
       check('녹화한 클립이 붙고 재생된다', w > 0, `폭 ${w}px`);
     },
   },
+  {
+    name: 'doc-nested-frame',
+    kind: 'doc',
+    files: [/^packages\/manna\/src\/stage\/(shim\.js|loader\.ts)$/, /^packages\/core\/src\/(pack|urls?)\.ts$/, /^tests\/smoke\/fixtures\/nested\//],
+    async run() {
+      // 패키지 안 다른 HTML 을 iframe 으로 띄우는 화면 — 정적 src · JS 로 넣는 한글 경로 src
+      const file = join(OUT, 'nested.terr.html');
+      execSync(`npx tsx scripts/bake.ts tests/smoke/fixtures/nested "${file}"`, { stdio: 'ignore' });
+      const { page, f } = await openDoc(file);
+      const inner = async (sel: string) => (await (await f.$(sel))?.contentFrame()) ?? null;
+      const val = (fr: Awaited<ReturnType<typeof inner>>, expr: string) => (fr ? fr.evaluate(expr).catch(() => undefined) : undefined);
+      const a = await until(async () => ((await val(await inner('#static'), 'window.A_OK')) ? true : null), 8000);
+      check('정적 <iframe src="sub/a.html"> — 하위 페이지와 그 스크립트가 뜬다', !!a);
+      await f.evaluate('openEam()');
+      const eam = await until(async () => {
+        const fr = await inner('#eam');
+        const v = await val(fr, '({ db: window.EAM_DB && EAM_DB.rows, sync: window.EAM_SYNC, data: window.DATA && DATA.rows, ls: window.LS_OK, bg: getComputedStyle(document.body).backgroundColor, img: document.getElementById("logo") && document.getElementById("logo").naturalWidth })');
+        const o = v as { db?: number; sync?: boolean; data?: number; ls?: unknown; bg?: string; img?: number } | undefined;
+        return o && o.db === 3 && o.sync && o.data === 3 && o.img ? o : null;
+      }, 10000);
+      check('JS 로 넣은 iframe.src (한글 경로) — 하위 문서의 스크립트 · 동적 스크립트 · fetch 가 풀린다', !!eam, JSON.stringify(eam));
+      check('하위 문서의 CSS · 상위 폴더 이미지(../assets)도 풀린다', eam?.bg === 'rgb(1, 2, 3)' && (eam?.img ?? 0) > 0, `${eam?.bg} · ${eam?.img}px`);
+      check('하위 문서도 엔트리와 같은 origin — localStorage 가 된다', eam?.ls === true, String(eam?.ls));
+      check('하위 → 엔트리 postMessage 가 닿는다', !!(await until(async () => ((await f.evaluate('window.got')) as string[]).includes('eam-ready') || null, 5000)));
+      const src = await f.evaluate('document.getElementById("eam").src');
+      check('iframe.src 를 읽으면 넣은 주소 그대로 (패키지 주소)', String(src).endsWith('/%EA%B8%B0%EC%A4%80%EC%A0%95%EB%B3%B4%EA%B4%80%EB%A6%AC/index.html'), String(src));
+      // 하위 페이지 안의 링크 — 그 iframe 안에서 다음 페이지로
+      await (await inner('#static'))!.click('#to-b');
+      check('하위 페이지 안 링크는 그 iframe 안에서 넘어간다', !!(await until(async () => ((await val(await inner('#static'), 'window.B_OK')) ? true : null), 8000)));
+      await f.evaluate('openMiss()');
+      const miss = await until(async () => {
+        const m = (await f.evaluate('window.__manna.misses.map(function (x) { return x.url; })')) as string[];
+        return m.includes('없는/페이지.html') ? m : null;
+      }, 5000);
+      check('패키지에 없는 주소를 iframe 에 넣으면 misses 에 남는다', !!miss, (miss ?? []).join(', '));
+      check('srcdoc 안 replaceState(주소 포함) 가 예외 없이 지나간다', (await f.evaluate('window.replaceOk')) === true, String(await f.evaluate('window.replaceOk')));
+      const diag = await until(() => page.$('.stage-diag .diag-head'), 5000);
+      if (diag) await diag.click();
+      check('없는 파일 알림이 테라리움에도 뜬다 (자세히 → 파일 이름)', !!diag && ((await page.textContent('.stage-diag').catch(() => '')) ?? '').includes('없는/페이지.html'));
+    },
+  },
 ];
