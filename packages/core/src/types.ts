@@ -98,6 +98,8 @@ export interface Fingerprint {
   text?: string;
   attrs: Record<string, string>;
   ancestry: string[];
+  /** 화면 안 iframe(같은 출처) 속 요소 — 엔트리 문서부터 그 요소를 품은 문서까지 거치는 iframe 들의 지문 */
+  frames?: Fingerprint[];
 }
 
 export interface Region {

@@ -1,8 +1,10 @@
 /* 화면 상태 경로 — 화면을 연 뒤의 클릭을 적어 두었다가, 다른 상태에 있는 Comment 로 갈 때 다시 누른다.
  * 캔버스 위 클릭(FAB 조망 → BAY-4)도 요소 안의 상대 위치로 다시 낼 수 있다.
  */
-import type { Step } from '@core';
-import { fingerprint, resolve } from '@core';
+import type { Fingerprint, Step } from '@core';
+
+/** 지문으로 요소 찾기 — 화면 안 iframe 속 요소까지 (agent.ts 의 find) */
+export type Find = (fp: Fingerprint) => Element | null;
 
 const MAX = 24;
 
@@ -14,13 +16,13 @@ export function resetPath(steps: Step[] = []): void {
   pathLog.push(...steps);
 }
 
-export function recordClick(e: MouseEvent): void {
+export function recordClick(e: MouseEvent, fpOf: (el: Element) => Fingerprint): void {
   if (!e.isTrusted || e.button !== 0) return;
   const el = e.target as Element | null;
   if (!el || el.nodeType !== 1 || el === el.ownerDocument.documentElement) return;
   const r = el.getBoundingClientRect();
   if (!r.width || !r.height) return;
-  pathLog.push({ fp: fingerprint(el), x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height });
+  pathLog.push({ fp: fpOf(el), x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height });
   if (pathLog.length > MAX) pathLog.shift();
 }
 
@@ -46,11 +48,11 @@ function onTop(el: Element, x: number, y: number): boolean {
 }
 
 /** 대상 요소가 나타나고, 그 자리를 다른 것이 덮고 있지 않을 때까지 기다린다 */
-async function waitFor(doc: Document, step: Step, timeout: number): Promise<Element | null> {
+async function waitFor(find: Find, step: Step, timeout: number): Promise<Element | null> {
   const end = Date.now() + timeout;
   let seenAt = 0;
   while (Date.now() < end) {
-    const el = resolve(doc, step.fp)?.el;
+    const el = find(step.fp);
     if (el && shown(el) && onTop(el, step.x, step.y)) {
       // 막 나타난 화면은 그리기가 한 박자 늦다 — 잠깐 더 본다
       if (!seenAt) seenAt = Date.now();
@@ -84,9 +86,9 @@ export function clickAt(el: Element, x: number, y: number): void {
 const TABLIKE = '[role="tab"], [aria-selected], [aria-pressed], [aria-expanded]';
 
 /** 다시 불러오지 않고 해 보는 빠른 길 — 경로 중 탭·토글만, 지금 선택 안 된 것만 누른다 */
-export async function quickReveal(doc: Document, steps: Step[]): Promise<void> {
+export async function quickReveal(find: Find, steps: Step[]): Promise<void> {
   for (const s of steps) {
-    const el = resolve(doc, s.fp)?.el;
+    const el = find(s.fp);
     if (!el || !shown(el)) continue;
     const tab = el.closest(TABLIKE);
     if (!tab) continue;
@@ -97,10 +99,10 @@ export async function quickReveal(doc: Document, steps: Step[]): Promise<void> {
 }
 
 /** 처음부터 다시 — 막 불러온 화면에서 경로 전체를 순서대로 누른다 */
-export async function replay(doc: Document, steps: Step[], alive: () => boolean): Promise<boolean> {
+export async function replay(find: Find, steps: Step[], alive: () => boolean): Promise<boolean> {
   for (const s of steps) {
     if (!alive()) return false;
-    const el = await waitFor(doc, s, 15000);
+    const el = await waitFor(find, s, 15000);
     if (!el) return false;
     clickAt(el, s.x, s.y);
     await sleep(450);

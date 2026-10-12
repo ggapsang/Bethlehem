@@ -186,4 +186,12 @@
 
   // 일시정지(시계)는 에이전트(agent.ts)가 맡는다
   window.__manna = { resolve: resolve, misses: misses, report: report, map: map, pages: pages, src: src, base: base };
+
+  /* 하위 페이지 — 화면 스크립트보다 먼저 엔트리의 에이전트에 이 창을 알린다(시계 · 클릭 기록 · 단축키 · 피커가 이 안까지) */
+  if (nested) {
+    try {
+      var hook = window.parent.__manna && window.parent.__manna.hookChild;
+      if (hook) hook(window);
+    } catch (e) { /* 무시 */ }
+  }
 })

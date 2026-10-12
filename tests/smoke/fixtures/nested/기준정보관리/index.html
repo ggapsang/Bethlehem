@@ -7,7 +7,15 @@
 </head>
 <body>
 <h2>설비 대장</h2>
-<img id="logo" src="../assets/logo.jpg" alt="">
+<img id="logo" src="../assets/logo.jpg" alt="" width="120">
+<div role="tablist">
+  <button id="subList" role="tab" aria-selected="true">목록</button>
+  <button id="subDetail" role="tab" aria-selected="false">상세</button>
+</div>
+<div id="detail" hidden>
+  <button id="deep" style="margin: 12px; padding: 8px 16px">TAG-01</button>
+  <input id="tagInput" value="OHT-01">
+</div>
 <script>
   // 동적 로드도 이 페이지 기준으로 풀린다
   var s = document.createElement('script');
@@ -16,6 +24,14 @@
   fetch('./data.json').then(function (r) { return r.json(); }).then(function (d) { window.DATA = d; }, function (e) { window.DATA = String(e); });
   try { localStorage.setItem('eam', '1'); window.LS_OK = localStorage.getItem('eam') === '1'; } catch (e) { window.LS_OK = String(e); }
   parent.postMessage({ tag: 'eam-ready' }, '*');
+  document.getElementById('subDetail').addEventListener('click', function () {
+    document.getElementById('detail').hidden = false;
+    this.setAttribute('aria-selected', 'true');
+    document.getElementById('subList').setAttribute('aria-selected', 'false');
+  });
+  // 움직이는 화면 — 일시정지가 이 안까지 멈추는지 본다
+  window.ticks = 0;
+  (function loop() { window.ticks++; requestAnimationFrame(loop); })();
 </script>
 </body>
 </html>

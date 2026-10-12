@@ -434,4 +434,83 @@ export const docSpecs: Spec[] = [
       check('없는 파일 알림이 테라리움에도 뜬다 (자세히 → 파일 이름)', !!diag && ((await page.textContent('.stage-diag').catch(() => '')) ?? '').includes('없는/페이지.html'));
     },
   },
+  {
+    name: 'doc-nested-pick',
+    kind: 'doc',
+    files: [new RegExp(`^${M}agent/`), /^packages\/manna\/src\/stage\/shim\.js$/, /^packages\/core\/src\/(fingerprint|types)\.ts$/, /^tests\/smoke\/fixtures\/nested\//],
+    async run() {
+      // 하위 페이지(iframe) 안의 요소도 엔트리 요소처럼 — 고르기 · 마커 · 되돌아가기 · Ctrl · 일시정지
+      const file = join(OUT, 'nested-pick.terr.html');
+      execSync(`npx tsx scripts/bake.ts tests/smoke/fixtures/nested "${file}"`, { stdio: 'ignore' });
+      const { page } = await openDoc(file);
+      const f = await screenFrame(page);
+      const eam = async () => (await (await (await screenFrame(page)).$('#eam'))?.contentFrame()) ?? null;
+      /** iframe 안 요소 가운데의 창 좌표 */
+      const nestedPoint = async (sel: string) => {
+        const top = await screenFrame(page);
+        const r = await (await eam())!.$eval(sel, (el) => {
+          const b = el.getBoundingClientRect();
+          return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+        });
+        const box = await top.$eval('#eam', (el) => {
+          const b = el.getBoundingClientRect();
+          return { w: b.width, h: b.height, cl: el.clientLeft, ct: el.clientTop };
+        });
+        return pagePoint(page, top, '#eam', (r.x + box.cl) / box.w, (r.y + box.ct) / box.h);
+      };
+      // 사람처럼 — 엔트리의 탭, 하위 문서의 하위 탭
+      await f.click('#tabEam');
+      await until(async () => ((await (await eam())?.evaluate('!!window.EAM_DB').catch(() => false)) ? true : null), 8000);
+      await (await eam())!.click('#subDetail');
+      await ctrlPick(page, await nestedPoint('#deep'));
+      await page.fill('.composer .title-input', '하위 문서 버튼');
+      await page.keyboard.press('Control+Enter');
+      check('Comment 가 달리고 마커가 그 요소에 붙는다', !!(await until(async () => (await cardCount(page)) === 1 && (await visibleMarkers(page)).length === 1, 5000)));
+      // 저장된 대상 — 자동 저장(브라우저 저장소)에서 읽는다
+      const fp = await until(() => page.evaluate(() => new Promise<{ id?: string; frames?: { id?: string }[] } | null>((ok) => {
+        const r = indexedDB.open('terrarium');
+        r.onerror = () => ok(null);
+        r.onsuccess = () => {
+          const q = r.result.transaction('drafts').objectStore('drafts').getAll();
+          q.onsuccess = () => {
+            const a = (q.result as { doc: { screens: { annotations: { anchor?: { fp: { id?: string; frames?: { id?: string }[] } } }[] }[] } }[])
+              .flatMap((d) => d.doc.screens.flatMap((x) => x.annotations)).find((x) => x.anchor);
+            ok(a?.anchor?.fp ?? null);
+            r.result.close();
+          };
+          q.onerror = () => ok(null);
+        };
+      })), 6000);
+      check('iframe 안 요소를 고른다 — 대상은 그 요소, 거쳐 간 iframe 이 함께 적힌다', fp?.id === 'deep' && fp?.frames?.length === 1 && fp.frames[0].id === 'eam', JSON.stringify({ id: fp?.id, frames: fp?.frames?.map((x) => x.id) }));
+      const mk = await page.$eval('.marker', (m) => {
+        const b = m.getBoundingClientRect();
+        return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+      });
+      const at = await nestedPoint('#deep');
+      check('마커 자리 — iframe 위치만큼 옮겨진 그 요소 곁', Math.abs(mk.x - at.x) < 120 && Math.abs(mk.y - at.y) < 60, `마커 ${Math.round(mk.x)},${Math.round(mk.y)} · 요소 ${Math.round(at.x)},${Math.round(at.y)}`);
+      await page.keyboard.press('Escape');
+      // 다른 탭으로 — 마커가 숨고, 카드를 누르면 탭 · 하위 탭을 다시 눌러 돌아온다
+      await (await screenFrame(page)).click('#tabMon');
+      check('다른 탭이면 마커가 숨는다', !!(await until(async () => (await visibleMarkers(page)).length === 0 || null, 3000)));
+      await page.click('.cards > .card:first-child .card-title');
+      check('카드를 누르면 기준정보 탭 → 상세 하위 탭까지 눌러 그 요소로 돌아간다', !!(await until(async () => (await visibleMarkers(page)).length === 1 || null, 20000)));
+      await page.keyboard.press('Escape');
+      // iframe 안에 포커스가 있어도 Ctrl 로 피커
+      await (await eam())!.click('#tagInput');
+      await page.keyboard.down('Control');
+      const on = await until(() => page.$('.pick-layer'), 3000);
+      await page.keyboard.up('Control');
+      check('iframe 안 입력 칸에 포커스가 있어도 Ctrl 로 피커가 켜진다', !!on);
+      // 일시정지 — iframe 안의 움직임도 멈춘다
+      await page.click('button[aria-label="화면 일시정지"]');
+      const fr = (await eam())!;
+      const t1 = (await fr.evaluate('window.ticks')) as number;
+      await page.waitForTimeout(400);
+      const t2 = (await fr.evaluate('window.ticks')) as number;
+      await page.click('button[aria-label="화면 재생"]');
+      await page.waitForTimeout(300);
+      const t3 = (await fr.evaluate('window.ticks')) as number;
+      check('일시정지하면 iframe 안 움직임도 멈추고, 재생하면 다시 돈다', t1 === t2 && t3 > t2, `${t1} → ${t2} → ${t3}`);
+    },
+  },
 ];

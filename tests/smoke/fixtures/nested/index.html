@@ -6,20 +6,40 @@
 <style>
   body { margin: 0; font: 14px sans-serif; background: #fff; }
   iframe { display: block; width: 640px; height: 180px; border: 1px solid #999; margin: 8px; }
+  #eam { height: 320px; }
+  [role=tab] { padding: 6px 12px; }
 </style>
 </head>
 <body>
 <div id="splash" class="done"></div>
 <h1>엔트리</h1>
+<div role="tablist">
+  <button id="tabMon" role="tab" aria-selected="true">모니터링</button>
+  <button id="tabEam" role="tab" aria-selected="false">기준정보 관리</button>
+</div>
 <!-- 처음부터 있는 iframe (정적 src) -->
 <iframe id="static" src="sub/a.html"></iframe>
 <!-- 탭을 열 때 JS 로 넣는 iframe (동적 src, 한글 경로) -->
-<iframe id="eam" data-src="./기준정보관리/index.html"></iframe>
+<div id="eamWrap" hidden><iframe id="eam" data-src="./기준정보관리/index.html"></iframe></div>
 <iframe id="miss"></iframe>
 <script>
   window.got = [];
   addEventListener('message', function (e) { if (e.data && e.data.tag) window.got.push(e.data.tag); });
-  window.openEam = function () { var f = document.getElementById('eam'); f.src = f.dataset.src; };
+  var tabMon = document.getElementById('tabMon');
+  var tabEam = document.getElementById('tabEam');
+  window.openEam = function () {
+    var f = document.getElementById('eam');
+    if (!f.getAttribute('data-opened')) { f.setAttribute('data-opened', '1'); f.src = f.dataset.src; }
+    document.getElementById('eamWrap').hidden = false;
+    tabEam.setAttribute('aria-selected', 'true');
+    tabMon.setAttribute('aria-selected', 'false');
+  };
+  tabEam.addEventListener('click', window.openEam);
+  tabMon.addEventListener('click', function () {
+    document.getElementById('eamWrap').hidden = true;
+    tabMon.setAttribute('aria-selected', 'true');
+    tabEam.setAttribute('aria-selected', 'false');
+  });
   window.openMiss = function () { document.getElementById('miss').src = './없는/페이지.html'; };
   // 화면 상태를 주소에 남기는 코드 — srcdoc 안에서는 location.pathname 이 srcdoc 이다
   try { history.replaceState(null, '', location.pathname + '?tab=1'); window.replaceOk = true; } catch (e) { window.replaceOk = String(e); }

@@ -60,6 +60,7 @@
 | D-52 | 연결 | 기획안 ↔ 실제 제품을 오가려고 Comment · 영역(Comment 없는 화면 좌표 박스) · 화면 전체를 탭과 상관없이 잇는다. 문서 수준 `connections[]{a, b}` — 양방향 간선 하나라 어느 끝에서든 반대쪽으로 간다. Comment 끝은 id 로 잇고 탭-번호(`SCR-002 #3`)로 보인다(번호가 바뀌어도 끊기지 않는다). 영역 끝은 핀과 같은 화면 좌표. 다른 탭의 Comment 로 갈 때는 화면이 다 뜬 뒤 자리 찾기를 다시 한다. 지운 Comment · 화면을 가리키는 연결은 같은 mutate 에서 걷는다. 회신 병합은 합집합(두 끝이 원본에 있을 때) |
 | D-53 | 탭 화면 유지 | 탭(화면 · 버전)마다 틀(iframe · webview)과 다리를 따로 두고, 지금 탭이 아니면 숨기고(visibility) 에이전트로 멈춘다. 돌아오면 지금 상태(Comment 자리 · 피커 · 멈춤)를 다시 알릴 뿐 다시 불러오지 않는다. 틀은 처음 띄운 순서로 그린다 — iframe · webview 는 DOM 에서 자리를 옮기면 다시 불러오기 때문(최근 순서는 내릴 때만, 8개). 페이지 · 새로 고침 횟수도 틀마다. 캡처 모음을 보는 동안에도 틀은 뒤에 남는다 |
 | D-54 | 마우스 잠금 막기 | 에이전트가 Element.requestPointerLock 을 바꿔 아무것도 하지 않고 성공으로 돌려준다 — 품은 화면이 커서를 잠그면 테라리움 UI 를 쓸 수 없고, 다시 잠그려다 거절된 오류를 화면(Unity 등)이 창으로 띄운다 |
+| D-58 | 화면 안 iframe 속 요소 | 같은 출처 iframe 속 요소도 고르고 Comment 를 단다 — 에이전트를 하위 문서마다 두지 않고 엔트리 에이전트가 iframe 안 문서로 내려간다(같은 출처라 직접 닿는다). 지문에 거쳐 간 iframe 지문(`fp.frames`), 좌표는 엔트리 기준, 시계 · 클릭 경로 · 단축키는 창마다 건다(§6.0) |
 | D-57 | 하위 페이지 iframe | 폴더 화면이 패키지 안 다른 HTML 을 iframe 에 띄우면(정적 · 동적 src) — 로더가 미리 처리한 그 페이지에 shim 을 그 페이지 기준으로 넣어 srcdoc 으로(§5.2). 원본 바이트 Blob 으로는 상대 경로가 풀리지 않고 shim 도 없다. 패키지에 없는 iframe 주소는 진단에, srcdoc 안 history 주소 거부는 주소 없이 |
 | D-56 | 긴 녹화 + 편집기 | 화면 녹화는 길이에 매이지 않는다(메모리를 지키려 2시간에서 멈춤). MediaRecorder 대신 WebCodecs(VP8, 1.5Mbps)로 프레임을 직접 인코딩하며 1초마다 키프레임을 넣고, 멈추면 편집기에서 구간(최대 1분)을 골라 다시 인코딩 없이 앞 키프레임부터 옮겨 자른다(작은 WebM 쓰기 `stage/webm.ts`, Cues 를 Cluster 앞에 둬 긴 영상도 시간 이동). 구간마다 새 Comment(첫 장면 = shot) · 쓰는 Comment · 기존 Comment. 원본은 IndexedDB `terrarium-rec` 에 2초마다 적어 두었다가(꺼져도 같은 문서를 열면 편집기로) 넣거나 버리면 지운다. 문서에는 들어가지 않는다 |
 | D-55 | Comment 내보내기 | 고른 Comment 만 HTML 한 장(테라리움 문서 아님 — 런타임 · 원본 없이 가볍게, 어디서나 미리보기). 달 때 찍은 그림에 대상 박스를 CSS 로 겹치고, 영상은 data URL, 본문은 작은 마크다운 변환(먼저 이스케이프). 스크립트 없이 데이터 JSON(script#terr-comments)만 넣어 AI 가 읽는다 |
@@ -230,7 +231,7 @@ Manna와 Bethlehem은 같은 틀을 쓴다. 왼쪽 패널은 없다. Bethlehem �
 
 품은 화면의 스크립트보다 먼저 실행되어 `script.src`·`img.src`·`link.href`·`iframe.src`·`embed.src`·`object.data` 세터, `setAttribute`, `fetch`, `XMLHttpRequest.open`, `Worker`, `history.pushState/replaceState` 를 패치한다. 받은 경로를 문서 기준으로 풀어 담겨 있으면 Blob URL로 바꾸고, 없으면 그대로 통과시킨다. 풀리지 않은 요청은 스테이지 아래 진단에 원인·위치·조치와 함께 쌓인다.
 
-- **하위 페이지(iframe)** (D-57): 로더는 패키지 안 HTML 페이지를 모두 그 페이지 주소 기준으로 5.1 의 2 를 해 두고(`pages`), 패키지 안 페이지를 가리키는 정적 `<iframe src>` 는 `data-manna-src` 로 옮겨 둔다. iframe 주소가 그런 페이지면(정적 · `iframe.src =` · `setAttribute`) shim 이 그 HTML 에 자기 자신을 그 페이지 기준으로 넣어 `srcdoc` 으로 띄운다 — 엔트리와 같은 출처라 localStorage · postMessage 가 엔트리와 같고, 하위 문서의 동적 로드도 풀린다. 하위 문서 안 링크는 그 iframe 안에서 넘어간다. 하위 문서의 못 찾은 파일은 엔트리를 거쳐 진단에 쌓인다. 에이전트는 하위 문서에 넣지 않는다 — 하위 문서 안 요소에는 Comment 를 달 수 없고(iframe 통째로는 된다), 일시정지도 엔트리만 멈춘다.
+- **하위 페이지(iframe)** (D-57): 로더는 패키지 안 HTML 페이지를 모두 그 페이지 주소 기준으로 5.1 의 2 를 해 두고(`pages`), 패키지 안 페이지를 가리키는 정적 `<iframe src>` 는 `data-manna-src` 로 옮겨 둔다. iframe 주소가 그런 페이지면(정적 · `iframe.src =` · `setAttribute`) shim 이 그 HTML 에 자기 자신을 그 페이지 기준으로 넣어 `srcdoc` 으로 띄운다 — 엔트리와 같은 출처라 localStorage · postMessage 가 엔트리와 같고, 하위 문서의 동적 로드도 풀린다. 하위 문서 안 링크는 그 iframe 안에서 넘어간다. 하위 문서의 못 찾은 파일은 엔트리를 거쳐 진단에 쌓인다. 하위 문서의 shim 은 맨 끝에 엔트리 에이전트의 `hookChild` 를 불러 자기 창을 알린다 — 화면 스크립트보다 먼저라 시계 · 마우스 잠금이 처음부터 걸린다(§6.0).
 - **history**: srcdoc 의 주소는 `about:srcdoc` 이라 `pushState/replaceState` 에 준 주소가 거부된다(SecurityError). 그때는 주소 없이 상태만 바꾼다.
 
 ### 5.3 외부 리소스
@@ -270,6 +271,12 @@ Bethlehem(메인 프로세스, CORS 제약 없음)이 등록 시점에 외부 UR
 | `anchors` (Comment 지문 목록), `picking`, `pause`/`resume` | `ready` (문서가 뜰 때마다 — 스테이지가 상태를 다시 알린다) |
 | `hover`/`pick`/`pickRect`/`pickUp`/`pickDown` (요청·응답) | `frame` — 앵커 위치·보임·배경 밝기 (바뀐 프레임에만) |
 | `reveal` (빠른 길 / 경로 재생), `setPath` | `key` — Ctrl·Esc·Ctrl+S/Z/Y (화면에 포커스가 있어도 단축키가 듣는다) |
+
+**화면 안 iframe** (D-58): 같은 출처 iframe(하위 페이지 등) 속 요소도 엔트리 요소처럼 다룬다. 에이전트는 하나(엔트리)뿐이고 iframe 안 문서에 직접 손을 넣는다.
+- 피커는 `elementFromPoint` 가 iframe 을 만나면 그 안 문서 좌표로 바꿔 다시 찾는다. ↑ 로 올라가다 하위 문서의 body 를 넘으면 그 iframe 으로.
+- 지문에 거쳐 간 iframe 들의 지문(`fp.frames`)을 적는다. 찾을 때는 엔트리부터 그 iframe 들을 따라 내려간다 — Comment 대상 · 클릭 경로(상태 찾아가기) · reveal 이 모두 같다.
+- 좌표는 늘 엔트리 뷰포트 기준 — iframe 내용 시작점(테두리 · 안쪽 여백 포함)을 더한다. 보임은 품은 iframe 들도 보이고 그 안쪽일 때.
+- 창마다 거는 것: 시계(일시정지), 마우스 잠금 막기, 클릭 경로 기록, 단축키(Ctrl · Esc · Ctrl+S/Z/Y) 전달, 조작 표시. 하위 문서의 shim 이 알려 오고(`hookChild`), 알려 오지 않은 같은 출처 iframe(화면이 만든 about:blank 등)은 0.5초마다 찾아 건다. 다른 출처 iframe 은 통째로만 고른다.
 
 전송: iframe 은 `postMessage`, webview 는 에이전트 → `window.postMessage` → preload → `sendToHost`, 반대로 `webview.send` → preload → `window.postMessage`. 봉투는 `{ __terrHost }` / `{ __terrAgent }`.
 
