@@ -211,11 +211,11 @@ function watchWorkspace(p: Project): void {
   p.unwatch.push(watchDir(join(dir, 'returned'), () => send(p, 'returned-changed'), { delay: 800 }));
   for (const [id, link] of Object.entries(p.current.links)) {
     if (!existsSync(link.dir)) continue;
-    p.unwatch.push(watchDir(link.dir, (file) => {
-      const first = file.split(/[\\/]/)[0];
-      if (WS_NAMES.has(first) || file.endsWith('.terr.html') || file.endsWith('.tmp')) return;
-      send(p, 'source-changed', { screenId: id, file });
-    }, { recursive: true, delay: 2000 }));
+    p.unwatch.push(watchDir(link.dir, (file) => send(p, 'source-changed', { screenId: id, file }), {
+      recursive: true,
+      delay: 2000,
+      ignore: (file) => WS_NAMES.has(file.split(/[\\/]/)[0]) || file.endsWith('.terr.html') || file.endsWith('.tmp'),
+    }));
   }
 }
 

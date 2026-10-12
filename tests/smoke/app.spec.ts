@@ -1,5 +1,5 @@
 /* 작성 프로그램(Electron) 스모크 — 기능마다 새 작업 폴더 · 새 설정으로 */
-import { cpSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
@@ -424,6 +424,25 @@ export const appSpecs: Spec[] = [
         check('뺀 창을 닫으면 본 창 탭 줄로 돌아온다', !!(await until(() => page.$('.tab[data-id="SCR-002"]'), 5000)));
         const order = JSON.parse(readFileSync(join(ws, 'terrarium.json'), 'utf8'));
         check('띄운 창이 탭 배치를 바꾸지 않는다', !JSON.stringify(order.meta?.tabs?.hidden ?? []).includes('SCR-002'));
+      } finally {
+        await app.close();
+      }
+    },
+  },
+  {
+    name: 'app-source-burst',
+    kind: 'app',
+    files: [new RegExp(`^${B}main/(index|workspace)\\.ts$`)],
+    async run() {
+      // 원본 폴더가 곧 작업 폴더면 — 원본을 고친 바로 뒤에 프로그램이 dist 를 쓴다. 그래도 원본 변경을 놓치지 않는다
+      const { app, page, src } = await appWithScreen();
+      try {
+        await wait(2500);
+        writeFileSync(join(src, 'index.html'), readFileSync(join(src, 'index.html'), 'utf8') + '\n<!-- 고침 -->\n');
+        await wait(300);
+        mkdirSync(join(src, 'dist'), { recursive: true });
+        writeFileSync(join(src, 'dist', '문서.terr.html'), '<!doctype html>');
+        check('원본 변경 바로 뒤에 무시하는 파일이 써져도 "원본 바뀜"', !!(await until(() => page.$('.src-stale'), 10000)));
       } finally {
         await app.close();
       }

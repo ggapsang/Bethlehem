@@ -237,13 +237,17 @@ export async function markMerged(dir: string, name: string): Promise<void> {
 
 /* ── 감시 — 원본 폴더 변경, 돌아온 문서 ─────────────────────────────── */
 
-export function watchDir(dir: string, onChange: (file: string) => void, opts: { recursive?: boolean; delay?: number } = {}): () => void {
+/** ignore 에 걸린 파일은 잠잠해지기를 기다리는 데도 넣지 않는다 — 원본 폴더가 곧 작업 폴더면
+ *  프로그램이 쓰는 dist · blobs 가 원본 파일 바로 뒤에 와서 그것만 남으면 원본 변경을 놓친다 */
+export function watchDir(dir: string, onChange: (file: string) => void, opts: { recursive?: boolean; delay?: number; ignore?: (file: string) => boolean } = {}): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let last = '';
   let w: FSWatcher | null = null;
   try {
     w = watch(dir, { recursive: !!opts.recursive }, (_ev, file) => {
-      last = String(file ?? '');
+      const f = String(file ?? '');
+      if (opts.ignore?.(f)) return;
+      last = f;
       clearTimeout(timer);
       timer = setTimeout(() => onChange(last), opts.delay ?? 1500);
     });
