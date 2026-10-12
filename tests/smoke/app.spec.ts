@@ -558,13 +558,122 @@ export const appSpecs: Spec[] = [
         check('녹화 중 화면 안의 키는 테라리움 단축키로 받지 않는다 (Enter 로 팝업이 바뀌지 않음)', !!(await page.$('.popover-card .composer')));
         await wait(1200);
         await page.click('.rec-bar .rec-stop');
+        // 멈추면 편집기 — 1분이 안 되면 통째로 한 구간, 쓰고 있는 Comment 로
+        check('멈추면 녹화 편집기가 열린다', !!(await until(() => page.$('.rec-edit'), 10000)));
+        const segs = await page.$$eval('.rec-seg-item .rec-target', (els) => els.map((e) => (e as HTMLSelectElement).value));
+        check('1분이 안 되면 통째로 한 구간 — 쓰고 있는 Comment 에', segs.length === 1 && segs[0] === 'draft', segs.join(','));
+        const vd = await page.$eval('.rec-video video', async (el) => {
+          const v = el as HTMLVideoElement;
+          if (v.readyState < 1) await new Promise((r) => v.addEventListener('loadedmetadata', r, { once: true }));
+          return v.duration;
+        });
+        check('편집기 영상은 길이를 안다 (시간 이동이 된다)', Number.isFinite(vd) && vd > 1, String(vd));
+        await page.click('.rec-apply');
         const v = await until(() => page.$('.popover-card:not(.is-rec-hidden) .composer .clip video'), 10000);
-        check('멈추면 팝업이 돌아오고 녹화가 붙어 있다', !!v);
+        check('넣으면 편집기가 닫히고 쓰던 Comment 에 녹화가 붙어 있다', !!v && !(await page.$('.rec-edit')));
         check('쓰던 제목은 그대로', (await page.inputValue('.popover-card .composer .title-input')) === '재현 영상');
         await page.click('.popover-card .composer button:has-text("추가")');
         const c = await until(() => comments(ws, 'SCR-001').find((x: { title?: string }) => x.title === '재현 영상'), 8000);
         check('Comment 와 함께 녹화가 저장된다', !!c && c.clips?.length === 1 && c.clips[0].ms > 1000, c ? `${c.clips?.[0]?.ms}ms ${c.clips?.[0]?.w}×${c.clips?.[0]?.h}` : '없음');
         check('표시 층은 녹화가 끝나면 사라진다', !(await page.$('.trace-layer')) && !(await page.$('.rec-bar')));
+      } finally {
+        await app.close();
+      }
+    },
+  },
+  {
+    name: 'app-rec-edit',
+    kind: 'app',
+    files: [/^packages\/manna\/src\/stage\/(longrec|webm|record)\.ts$/, /^packages\/manna\/src\/ui\/RecEditor\.tsx$/, /^packages\/manna\/src\/actions\.ts$/],
+    async run() {
+      const ctx = await appWithScreen();
+      let { app, page } = ctx;
+      const { ws, ud, src } = ctx;
+      const duration = (sel: string) =>
+        page.$eval(sel, async (el) => {
+          const v = el as HTMLVideoElement;
+          if (v.readyState < 1) await new Promise((r) => v.addEventListener('loadedmetadata', r, { once: true }));
+          return v.duration;
+        });
+      const key = async (k: string, n = 1) => {
+        for (let i = 0; i < n; i++) await page.keyboard.press(k);
+      };
+      try {
+        // 붙일 곳 — 이미 있는 Comment
+        await ctrlPick(page, await stagePoint(page, 960, 300));
+        await page.fill('.popover-card .composer .title-input', '기존 쪽');
+        await typeIn(page, '.popover-card .composer .cm-content', '붙일 곳');
+        await page.keyboard.press('Control+Enter');
+        await until(async () => ((await page.textContent('.cards')) ?? '').includes('기존 쪽'), 8000);
+        await page.keyboard.press('Escape');
+        // 툴바에서 녹화 — 화면을 움직이며 몇 초
+        await page.click('button[aria-label="화면 녹화"]');
+        await until(() => page.$('.rec-bar'), 8000);
+        for (let i = 0; i < 12; i++) {
+          const q = await stagePoint(page, 300 + i * 60, 400 + (i % 3) * 80);
+          await page.mouse.move(q.x, q.y, { steps: 4 });
+          await wait(450);
+        }
+        const bar = (await page.textContent('.rec-bar')) ?? '';
+        check('녹화 막대 — 지난 시간과 담긴 크기, 끝 시각 없음', /\d+:\d\d/.test(bar) && /MB/.test(bar) && !/\d+:\d\d \/ \d+:\d\d/.test(bar), bar);
+        check('고른 Comment 의 캡처 그림이 녹화 중에는 걷힌다 (지금 화면이 찍힌다)', !(await page.$('.shot-view')));
+        await page.click('.rec-bar .rec-stop');
+        check('멈추면 편집기', !!(await until(() => page.$('.rec-edit'), 10000)));
+        // 편집을 끝내기 전에 꺼져도 — 다시 열면 편집기가 돌아온다
+        await app.close();
+        ({ app, page } = await launchApp(ud, [ws, src]));
+        const name = ws.split(/[\\/]/).pop()!;
+        await page.click(`.recent-places .recent-item:has-text("${name}")`);
+        check('끝내기 전에 꺼져도 다시 열면 편집기가 돌아온다', !!(await until(() => page.$('.rec-edit'), 15000)));
+        const dur = await duration('.rec-video video');
+        check('되살린 녹화도 길이를 안다', dur > 4 && Number.isFinite(dur), String(dur));
+        // 구간 둘 — 1번은 1~3초(새 Comment), 2번은 4~5초(기존 Comment 에 붙이기)
+        await page.click('.rec-seg-item');
+        await page.click('.rec-edit-head h2');
+        await key('ArrowRight');
+        await key('i');
+        await key('ArrowRight', 2);
+        await key('o');
+        await key('ArrowRight');
+        await page.click('.rec-ctl button:has-text("새 구간")');
+        await page.click('.rec-edit-head h2');
+        await key('ArrowRight');
+        await key('o');
+        const times = await page.$$eval('.rec-seg-item .link-btn', (els) => els.map((e) => e.textContent));
+        check('I · O · 새 구간으로 구간 둘', times.length === 2 && times[0] === '0:01.0 – 0:03.0' && times[1] === '0:04.0 – 0:05.0', times.join(' | '));
+        await page.selectOption('.rec-seg-item:nth-child(1) .rec-target', 'new');
+        await page.fill('.rec-seg-item:nth-child(1) .rec-title', '앞 구간');
+        const existing = await page.$eval('.rec-seg-item:nth-child(2) .rec-target', (el) => [...(el as HTMLSelectElement).options].find((o) => o.text.includes('기존 쪽'))?.value ?? '');
+        await page.selectOption('.rec-seg-item:nth-child(2) .rec-target', existing);
+        check('구간마다 넣을 곳 — 이미 있는 Comment 를 고르면 제목 · 설명 칸이 없다', !!existing && !(await page.$('.rec-seg-item:nth-child(2) .rec-title')));
+        await page.click('.rec-apply');
+        check('넣으면 편집기가 닫힌다', !!(await until(async () => !(await page.$('.rec-edit')), 10000)));
+        const list = await until(() => {
+          const cs = comments(ws, 'SCR-001') as { title?: string; clips?: { ms: number }[]; shot?: unknown }[];
+          const a = cs.find((x) => x.title === '앞 구간');
+          const b = cs.find((x) => x.title === '기존 쪽');
+          return a && b?.clips?.length ? { a, b } : null;
+        }, 8000);
+        const am = list?.a.clips?.[0]?.ms ?? 0;
+        const bm = list?.b.clips?.[0]?.ms ?? 0;
+        check('새 Comment — 구간 영상 + 첫 장면 캡처 (시작은 앞 키프레임까지)', !!list && am >= 2000 && am <= 3100 && !!list.a.shot, `${am}ms`);
+        check('기존 Comment 에 구간 영상이 붙는다', bm >= 1000 && bm <= 2100, `${bm}ms`);
+        // 넣은 Comment 가 골라져 팝업이 뜬다 (안 떴으면 카드를 눌러서)
+        if (!(await until(() => page.$('.popover-card .clip video'), 2000))) await page.click('.cards > .card:has-text("앞 구간")');
+        const cd = await until(() => duration('.popover-card .clip video').catch(() => null), 8000);
+        check('잘라 낸 영상이 재생된다 (길이가 구간만큼)', !!cd && Math.abs(cd - am / 1000) < 0.3, String(cd));
+        const left = await page.evaluate(() => new Promise<number>((ok) => {
+          const r = indexedDB.open('terrarium-rec', 1);
+          r.onsuccess = () => {
+            const q = r.result.transaction('takes').objectStore('takes').count();
+            q.onsuccess = () => {
+              ok(q.result);
+              r.result.close();
+            };
+          };
+          r.onerror = () => ok(-1);
+        }));
+        check('넣고 나면 보관해 둔 원본은 지운다', left === 0, String(left));
       } finally {
         await app.close();
       }

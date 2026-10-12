@@ -5,7 +5,7 @@ import { createPortal } from 'preact/compat';
 import { Camera, Circle, FileOutput, Film, MonitorPlay, Pin, Square, Trash2, X } from 'lucide-preact';
 import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
-import { REC_MAX_MS, editAssignee, toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleRecording, toggleSnipRecording } from '../actions';
+import { CLIP_MAX_MS, recStats, editAssignee, toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleRecording, toggleSnipRecording } from '../actions';
 import type { Host } from '../host';
 import { annotations, draft, draftClip, popHidden, recording, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
@@ -272,7 +272,7 @@ function RecordButton({ label = '화면 녹화 — 조작 포함' }: { label?: s
     <button
       type="button"
       class="btn btn-secondary btn-sm rec-full"
-      title={`팝업이 접히고 화면을 그대로 만질 수 있습니다. 커서 · 클릭 · 키 입력이 함께 찍힙니다 (최대 ${mmss(REC_MAX_MS)}). 다시 누르거나 위 막대의 멈추기로 끝냅니다`}
+      title={`팝업이 접히고 화면을 그대로 만질 수 있습니다. 커서 · 클릭 · 키 입력이 함께 찍힙니다. 길이에 매이지 않고 계속 녹화하고, 멈추면 편집기에서 구간(최대 ${mmss(CLIP_MAX_MS)})을 잘라 Comment 에 넣습니다`}
       onClick={() => toggleRecording()}
     >
       <MonitorPlay {...ICON} size={15} /> {label}
@@ -290,13 +290,15 @@ export function RecordingBar() {
     return () => clearInterval(t);
   }, [r]);
   if (!r) return null;
-  const ms = Date.now() - r.startedAt;
+  const st = recStats();
+  const ms = st?.ms ?? Date.now() - r.startedAt;
   return createPortal(
     <div class="rec-bar" role="status" aria-label="화면 녹화 중">
       <span class="rec-dot" />
       <strong>녹화 중</strong>
-      <span class="mono">{mmss(ms)} / {mmss(REC_MAX_MS)}</span>
-      <span class="muted small">화면을 조작하세요 — 커서 · 클릭 · 키 입력이 함께 찍힙니다</span>
+      <span class="mono">{mmss(ms)}</span>
+      {st && <span class="mono muted small">{(st.bytes / 1048576).toFixed(1)}MB</span>}
+      <span class="muted small">화면을 조작하세요 — 멈추면 구간을 잘라 Comment 에 넣습니다</span>
       <button type="button" class="btn btn-sm rec-stop" onClick={() => toggleRecording()}>
         <Square {...ICON} size={12} fill="currentColor" /> 멈추기
       </button>

@@ -51,7 +51,19 @@ async function firstFrame(stream: MediaStream): Promise<void> {
   }
 }
 
-export async function startRecording(target: HTMLElement): Promise<Recorder> {
+/** 스테이지 영역만 잘라 온 영상 — 짧은 클립(MediaRecorder)과 긴 녹화(longrec.ts)가 같이 쓴다 */
+export interface StageStream {
+  /** 녹화할 영상 (잘라 온 것) */
+  stream: MediaStream;
+  /** 공유 받은 원래 트랙 — 밖에서 공유를 끊으면 ended */
+  track: MediaStreamTrack;
+  w: number;
+  h: number;
+  /** 공유 · 캔버스를 모두 멈춘다 */
+  close(): void;
+}
+
+export async function openStageStream(target: HTMLElement): Promise<StageStream> {
   if (!navigator.mediaDevices?.getDisplayMedia) throw new Error('이 브라우저는 화면 녹화를 지원하지 않습니다. Chrome 이나 Edge 에서 열어 주세요.');
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: { frameRate: 30 },
@@ -112,6 +124,22 @@ export async function startRecording(target: HTMLElement): Promise<Recorder> {
     };
   }
 
+  return {
+    stream: recStream,
+    track,
+    w,
+    h,
+    close() {
+      cleanup();
+      stream.getTracks().forEach((t) => t.stop());
+      recStream.getTracks().forEach((t) => t.stop());
+    },
+  };
+}
+
+export async function startRecording(target: HTMLElement): Promise<Recorder> {
+  const st = await openStageStream(target);
+  const { stream: recStream, track, w, h } = st;
   // 첫 프레임이 들어온 뒤에 녹화를 시작한다 — 바쁠 때 공유가 늦게 돌면 짧은 녹화가 비어 버린다
   await firstFrame(recStream);
 
@@ -139,9 +167,7 @@ export async function startRecording(target: HTMLElement): Promise<Recorder> {
       }
       return new Promise<ClipResult>((done, fail) => {
         rec.onstop = async () => {
-          cleanup();
-          stream.getTracks().forEach((t) => t.stop());
-          recStream.getTracks().forEach((t) => t.stop());
+          st.close();
           const blob = new Blob(chunks, { type: type.split(';')[0] });
           if (!blob.size) return fail(new Error('녹화된 내용이 없습니다.'));
           done({ bytes: new Uint8Array(await blob.arrayBuffer()), type: 'video/webm', ms: Math.round(performance.now() - started), w, h });

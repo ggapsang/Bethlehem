@@ -17,6 +17,7 @@ import type { ComponentChildren } from 'preact';
 import { ago } from '../ui/labels';
 import { addPin, applySiteSnapshot, stopSnipRecording } from '../actions';
 import { RecordingBar, StagePopover } from '../ui/Popover';
+import { RecEditor } from '../ui/RecEditor';
 import { iframeBridge, webviewBridge, type Bridge, type WebviewLike } from './bridge';
 import { prepareScreen } from './loader';
 import { StageHeader } from './StageHeader';
@@ -176,7 +177,8 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   // 캡처 모음 ↔ 사본을 오가면 화면을 새로 띄운다 (모음일 때는 iframe 이 없다)
   const frameKey = `${vkey}#${page ?? ''}#${rec?.reload ?? 0}${gallery ? '#gallery' : ''}`;
   const sel = list.find((a) => a.id === selected.value) ?? null;
-  const showShot = !!sel?.shot && shotView.value && !draft.value;
+  // 녹화 중에는 달 때 찍은 그림을 걷는다 — 덮여 있으면 지금 화면 대신 그 그림이 찍힌다
+  const showShot = !!sel?.shot && shotView.value && !draft.value && !recOn;
   const shotSrc = useBlobUrl(sel?.shot?.sha, 'image/jpeg');
   const shotViewRef = useRef(showShot);
   shotViewRef.current = showShot;
@@ -696,6 +698,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
       </div>
     )}
     <RecordingBar />
+    <RecEditor />
     <LinkingBar />
     {/* 캡처 모음을 보는 동안에도 띄워 둔 틀은 내리지 않는다 — 뒤에 숨겨 둔다 */}
     <div class={`stage ${scrolls ? 'stage-scroll' : ''} ${gallery ? 'is-behind' : ''}`} ref={area} onWheel={onStageWheel} aria-hidden={gallery || undefined}>

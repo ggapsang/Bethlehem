@@ -3,9 +3,10 @@ import type { Annotation, Clip, MarkerColor, Shot } from '@core';
 import { moveAnnotation, now, setField, sha256, toBase64, touchParticipant, uid } from '@core';
 import type { SiteSnap } from './host';
 import { startRecording, type Recorder } from './stage/record';
+import { dropTake, startLongRecording, type LongRecorder, type Take } from './stage/longrec';
 import { pruneConnections } from './links';
 import {
-  pinSel, annotations, shownAnnotations, showDone, undo, dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
+  pinSel, annotations, shownAnnotations, showDone, undo, dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recTake, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
   stageViewport, still, user, version,
 } from './store';
 
@@ -365,10 +366,11 @@ export function removeNoteTab(id: string): boolean {
 
 /* ── 녹화 ─────────────────────────────────────────────────────────────── */
 
-let rec: Recorder | null = null;
-/** 화면 녹화 — 버그 재현처럼 조작을 처음부터 끝까지 담을 수 있게 */
-export const REC_MAX_MS = 120_000;
-const MAX_MS = REC_MAX_MS;
+let rec: LongRecorder | null = null;
+/** 화면 녹화 — 길이에 매이지 않고 계속 담는다(메모리를 지키려 2시간에서는 멈춘다). 1분 제한은 편집기에서 잘라 낸 구간에만 */
+export const REC_HARD_MAX_MS = 2 * 60 * 60_000;
+/** 편집기에서 잘라 Comment 에 넣는 구간 하나의 최대 길이 */
+export const CLIP_MAX_MS = 60_000;
 let limit: ReturnType<typeof setTimeout> | undefined;
 
 async function shaOf(bytes: Uint8Array): Promise<string> {
@@ -385,20 +387,24 @@ async function shaOf(bytes: Uint8Array): Promise<string> {
 let recStarting = false;
 let recStopWanted = false;
 
+/** 녹화 중 — 지난 시간 · 담긴 크기 */
+export const recStats = () => rec?.stats() ?? null;
+
 export async function toggleRecording(): Promise<void> {
   if (rec) return stopRecording();
   if (recStarting) {
     recStopWanted = true;
     return;
   }
-  if (!screen.peek() || !stageRef.frame || needName() || snip || snipStarting) return;
+  const s = screen.peek();
+  if (!s || !stageRef.frame || needName() || snip || snipStarting || recTake.peek()) return;
   recStarting = true;
   recStopWanted = false;
   try {
-    rec = await startRecording(stageRef.frame);
+    rec = await startLongRecording(stageRef.frame, { doc: doc.peek().id, screen: s.id, id: uid() });
     rec.onEnded(() => stopRecording());
     recording.value = { startedAt: Date.now() };
-    limit = setTimeout(() => stopRecording(), MAX_MS);
+    limit = setTimeout(() => stopRecording(), REC_HARD_MAX_MS);
   } catch (e) {
     rec = null;
     if ((e as Error).name !== 'NotAllowedError') notify(`녹화를 시작하지 못했습니다: ${(e as Error).message}`, 'error');
@@ -411,6 +417,7 @@ export async function toggleRecording(): Promise<void> {
   }
 }
 
+/** 멈추면 편집기가 열린다 — 구간을 잘라 Comment 로 (ui/RecEditor.tsx) */
 export async function stopRecording(): Promise<void> {
   const r = rec;
   if (!r) return;
@@ -418,30 +425,74 @@ export async function stopRecording(): Promise<void> {
   clearTimeout(limit);
   recording.value = null;
   try {
-    const clip = await r.stop();
-    const sha = await shaOf(clip.bytes);
-    blobs.set(sha, { enc: 'b64', data: toBase64(clip.bytes) }); // webm 은 이미 압축되어 있어 gzip 하지 않는다
-    const c: Clip = { id: uid(), sha, type: clip.type, ms: clip.ms, w: clip.w, h: clip.h, author: user.value!, at: now() };
-    // 쓰고 있는 새 Comment 가 있으면 그 Comment 와 함께 붙는다 (추가를 누를 때)
-    if (draft.peek()) {
-      draftClip.value = c;
-      notify(`녹화(${(clip.ms / 1000).toFixed(1)}초)를 이 Comment 에 붙였습니다. 설명을 적고 추가를 누르세요.`);
-      return;
-    }
-    const s = screen.peek()!;
-    const target = s.annotations.find((a) => a.id === selected.peek() && a.version === version.peek()?.v);
-    if (target) {
-      mutate(() => (target.clips = [...(target.clips ?? []), c]), { label: '클립 첨부' });
-      notify(`클립(${(clip.ms / 1000).toFixed(1)}초)을 ${s.annotations.filter((x) => x.version === target.version).indexOf(target) + 1}번 Comment 에 붙였습니다.`);
-    } else {
-      const id = addScreenComment('');
-      const a = s.annotations.find((x) => x.id === id);
-      if (a) mutate(() => (a.clips = [c]), { label: '클립 첨부', merge: `clip:${a.id}` });
-      notify(`클립(${(clip.ms / 1000).toFixed(1)}초)으로 새 Comment 를 만들었습니다. 설명을 적어 주세요.`);
-    }
+    recTake.value = await r.stop();
   } catch (e) {
     notify(`녹화를 저장하지 못했습니다: ${(e as Error).message}`, 'error');
   }
+}
+
+/** 편집기에서 잘라 낸 구간 하나 — 새 Comment · 쓰고 있는 Comment · 이미 있는 Comment(id) 중 어디에 넣을지 */
+export interface TakeCut {
+  bytes: Uint8Array;
+  ms: number;
+  target: 'new' | 'draft' | string;
+  title: string;
+  body: string;
+  /** 새 Comment 의 캡처 — 구간 첫 장면 */
+  shot?: { bytes: Uint8Array; w: number; h: number };
+}
+
+/** 잘라 낸 구간들을 Comment 에 넣는다 — 한 번에 되돌릴 수 있게 한 번의 고침으로. 넣은 Comment 수 */
+export async function applyTakeCuts(take: Take, cuts: TakeCut[]): Promise<number> {
+  const d = doc.peek();
+  const s = d.screens.find((x) => x.id === take.screen) ?? screen.peek();
+  if (!s || needName()) return 0;
+  const v = s.id === screen.peek()?.id ? version.peek()!.v : s.versions[s.versions.length - 1].v;
+  const ready: { cut: TakeCut; clip: Clip; shot?: Shot }[] = [];
+  for (const cut of cuts) {
+    const sha = await shaOf(cut.bytes);
+    blobs.set(sha, { enc: 'b64', data: toBase64(cut.bytes) }); // webm 은 이미 압축되어 있어 gzip 하지 않는다
+    const clip: Clip = { id: uid(), sha, type: 'video/webm', ms: cut.ms, w: take.w, h: take.h, author: user.value!, at: now() };
+    let shot: Shot | undefined;
+    if (cut.shot) {
+      const ssha = await shaOf(cut.shot.bytes);
+      blobs.set(ssha, { enc: 'b64', data: toBase64(cut.shot.bytes) });
+      shot = { sha: ssha, w: cut.shot.w, h: cut.shot.h };
+    }
+    ready.push({ cut, clip, shot });
+  }
+  const made: string[] = [];
+  mutate((x) => {
+    for (const { cut, clip, shot } of ready) {
+      if (cut.target === 'draft') {
+        draftClip.value = clip;
+        continue;
+      }
+      const old = cut.target !== 'new' ? s.annotations.find((a) => a.id === cut.target) : undefined;
+      if (old) {
+        old.clips = [...(old.clips ?? []), clip];
+        continue;
+      }
+      const t = now();
+      const a: Annotation = {
+        id: uid(), version: v, body: cut.body, author: user.value!, createdAt: t, updatedAt: t, replies: [], history: [],
+        ...(cut.title.trim() ? { title: cut.title.trim() } : {}),
+        ...(shot ? { shot } : {}),
+        clips: [clip],
+      };
+      s.annotations.push(a);
+      made.push(a.id);
+    }
+    touchParticipant(x, user.value!);
+  }, { label: '녹화 구간 넣기' });
+  if (made.length) selected.value = made[made.length - 1];
+  return ready.length;
+}
+
+/** 편집을 끝냈거나 버렸다 — 보관해 둔 원본을 지운다 */
+export async function closeTake(take: Take): Promise<void> {
+  if (recTake.peek()?.id === take.id) recTake.value = null;
+  await dropTake(take.id);
 }
 
 export function removeClip(a: Annotation, clipId: string): void {

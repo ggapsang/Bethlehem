@@ -374,13 +374,16 @@ export const docSpecs: Spec[] = [
   {
     name: 'doc-record',
     kind: 'doc',
-    files: [/^packages\/manna\/src\/stage\/record\.ts$/, /^packages\/manna\/src\/actions\.ts$/],
+    files: [/^packages\/manna\/src\/stage\/(record|longrec|webm)\.ts$/, /^packages\/manna\/src\/ui\/RecEditor\.tsx$/, /^packages\/manna\/src\/actions\.ts$/],
     async run() {
       const { page } = await openDoc();
       await page.click('button[aria-label="화면 녹화"]');
       await page.waitForSelector('.btn-icon.is-rec');
       await page.waitForTimeout(1200);
       await page.click('button[aria-label="녹화 멈추기"]');
+      // 멈추면 편집기 — 1분이 안 되면 통째로 한 구간이 잡혀 있어 바로 넣는다
+      check('멈추면 녹화 편집기 (브라우저에서도)', !!(await until(() => page.$('.rec-edit'), 10000)));
+      await page.click('.rec-apply');
       const v = await until(() => page.$('.popover-card .clip video'), 10000);
       const w = v ? await v.evaluate(async (el) => {
         const x = el as HTMLVideoElement;

@@ -62,6 +62,8 @@ export const holdPick = signal(false);
 export const picking = computed(() => mode.value === 'annotate' || holdPick.value);
 export const paused = signal(false);
 export const recording = signal<{ startedAt: number } | null>(null);
+/** 멈춘 긴 녹화 — 편집기(구간 잘라 Comment 로)가 열려 있다 */
+export const recTake = signal<import('./stage/longrec').Take | null>(null);
 export const selected = signal<string | null>(null);
 export const hovered = signal<string | null>(null);
 export const draft = signal<Draft | null>(null);
