@@ -42,6 +42,17 @@
     if (a) go(a.dataset.go);
   });
   go('A');
+  // 그림을 HTML 문자열로 넣는 화면 — 속성 setter 를 거치지 않는다
+  var dyn = document.createElement('div');
+  dyn.id = 'dyn';
+  document.body.appendChild(dyn);
+  dyn.innerHTML = '<img id="dPng" src="assets/icon.png" width="16"><img id="dIco" src="./assets/app.ico" width="16">' +
+    '<img id="dSet" srcset="assets/icon.png 1x, assets/icon.png 2x" width="16">' +
+    '<span id="dBg" style="display:inline-block;width:16px;height:16px;background-image:url(\'assets/icon.png\')"></span>' +
+    '<svg width="16" height="16"><image id="dSvg" href="assets/icon.png" width="16" height="16"/></svg>';
+  dyn.insertAdjacentHTML('beforeend', '<img id="dAdj" src="assets/icon.png" width="16"><style>#dCss{display:inline-block;width:16px;height:16px;background:url(assets/app.ico)}</style><span id="dCss"></span>');
+  // 나중에 속성만 바꾸는 경우
+  setTimeout(function () { document.getElementById('dBg').style.backgroundImage = 'url(assets/app.ico)'; }, 50);
   // 상자 안 숫자는 계속 바뀐다 — 값만 바뀌면 같은 요소다
   var n = 0;
   setInterval(function () { var l = document.getElementById('live'); if (l) l.textContent = String(++n); }, 150);

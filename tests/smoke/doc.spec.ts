@@ -539,6 +539,35 @@ export const docSpecs: Spec[] = [
     },
   },
   {
+    name: 'doc-dynamic-assets',
+    kind: 'doc',
+    files: [/^packages\/manna\/src\/stage\/(shim\.js|loader\.ts)$/, /^tests\/smoke\/fixtures\/spa\//],
+    async run() {
+      // 화면 스크립트가 HTML 문자열(innerHTML · insertAdjacentHTML)로 넣은 그림도 패키지 파일로 뜬다
+      const file = join(OUT, 'dynamic-assets.terr.html');
+      execSync(`npx tsx scripts/bake.ts tests/smoke/fixtures/spa "${file}"`, { stdio: 'ignore' });
+      const { f } = await openDoc(file);
+      // 그 요소들의 상태 — 판정은 이쪽에서 (evaluate 안에 함수를 두면 번들된 이름 도우미 때문에 깨진다)
+      const read = () => f.evaluate(() => Object.fromEntries([...document.querySelectorAll('#dyn [id]')].map((e) => [e.id, {
+        w: (e as HTMLImageElement).complete ? (e as HTMLImageElement).naturalWidth : 0,
+        bg: getComputedStyle(e).backgroundImage,
+        href: e.getAttribute('href') ?? '',
+      }])));
+      type St = Awaited<ReturnType<typeof read>>;
+      const imgsOk = (r: St) => ['dPng', 'dIco', 'dSet', 'dAdj'].every((id) => r[id]?.w > 0);
+      const restOk = (r: St) => r.dBg?.bg.startsWith('url("blob:') && r.dCss?.bg.startsWith('url("blob:') && r.dSvg?.href.startsWith('blob:');
+      const r = (await until(async () => {
+        const x = await read();
+        return imgsOk(x) && restOk(x) ? x : null;
+      }, 6000)) ?? (await read());
+      const misses = await f.evaluate(() => (window as unknown as { __manna: { misses: { url: string }[] } }).__manna.misses.map((m) => m.url));
+      const brief = (ids: string[]) => ids.map((id) => `${id}:${r[id]?.w || r[id]?.bg.slice(0, 14) || r[id]?.href.slice(0, 8)}`).join(' ');
+      check('innerHTML · insertAdjacentHTML 로 넣은 PNG · ICO · srcset 그림이 뜬다', imgsOk(r), brief(['dPng', 'dIco', 'dSet', 'dAdj']));
+      check('나중에 바꾼 인라인 style · 넣은 <style> 의 url() · SVG image 도', !!restOk(r), brief(['dBg', 'dCss', 'dSvg']));
+      check('못 찾은 파일 없음', misses.length === 0, misses.join(', '));
+    },
+  },
+  {
     name: 'doc-same-slot',
     kind: 'doc',
     files: [new RegExp(`^${M}agent/`), /^packages\/core\/src\/(fingerprint|types)\.ts$/, /^tests\/smoke\/fixtures\/spa\//],

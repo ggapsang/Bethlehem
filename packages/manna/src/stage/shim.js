@@ -111,6 +111,67 @@
     return setAttr.call(el, name, value);
   };
 
+  /* HTML 문자열로 넣은 요소(innerHTML · insertAdjacentHTML · DOMParser 등)는 위의 setter 를 거치지 않는다 —
+     DOM 변화를 지켜보다가 들어온 요소 · 바뀐 속성의 주소를 바꾼다. 이미 바꾼 주소(blob:)는 그대로 둔다 */
+  function cssUrls(text) {
+    return text.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, function (all, q, u) {
+      var r = resolve(u.trim());
+      return r === u.trim() ? all : 'url(' + q + r + q + ')';
+    });
+  }
+  function srcsetOf(v) {
+    return v.split(',').map(function (part) {
+      var m = /^(\s*)(\S+)(.*)$/.exec(part);
+      return m ? m[1] + resolve(m[2]) + m[3] : part;
+    }).join(',');
+  }
+  var SVG_HREF = { IMAGE: 1, USE: 1, FEIMAGE: 1 };
+  function fixAttr(el, name) {
+    var tag = el.tagName.toUpperCase();
+    if (name === 'href' && SVG_HREF[tag] && !el.hasAttribute('href')) name = 'xlink:href';
+    var v = el.getAttribute(name);
+    if (v == null || v === '') return;
+    if (tag === 'IFRAME') {
+      // 문자열로 넣은 <iframe src="sub/page.html"> — 속성으로 준 것과 같이 처리
+      if (name === 'src' && el.__mannaSrc == null && !PASS.test(v)) setFrame(el, v, function (r2) { if (r2 !== v) setAttr.call(el, 'src', r2); });
+      return;
+    }
+    var r = v;
+    if (name === 'style') r = v.indexOf('url(') >= 0 ? cssUrls(v) : v;
+    else if (name === 'srcset') r = tag === 'IMG' || tag === 'SOURCE' ? srcsetOf(v) : v;
+    else if (name === 'href' || name === 'xlink:href') {
+      if (tag === 'LINK' || SVG_HREF[tag]) r = resolve(v);
+    } else if (URL_TAGS[tag] && (name !== 'data' || tag === 'OBJECT')) r = resolve(v);
+    if (r !== v) setAttr.call(el, name, r);
+  }
+  var WATCH = ['src', 'srcset', 'href', 'xlink:href', 'poster', 'data', 'style'];
+  var WATCH_SEL = '[src],[srcset],[href],[poster],[data],[style*="url("],style';
+  function fixTree(root) {
+    if (root.nodeType !== 1) return;
+    var list = [root].concat(Array.prototype.slice.call(root.querySelectorAll(WATCH_SEL)));
+    for (var i = 0; i < list.length; i++) {
+      var el = list[i];
+      if (el.tagName === 'STYLE') {
+        var t = el.textContent;
+        if (t.indexOf('url(') >= 0) {
+          var c = cssUrls(t);
+          if (c !== t) el.textContent = c;
+        }
+        continue;
+      }
+      for (var k = 0; k < WATCH.length; k++) if (el.hasAttribute(WATCH[k])) fixAttr(el, WATCH[k]);
+    }
+  }
+  if (window.MutationObserver) {
+    new MutationObserver(function (records) {
+      for (var i = 0; i < records.length; i++) {
+        var rec = records[i];
+        if (rec.type === 'attributes') fixAttr(rec.target, rec.attributeName);
+        else for (var j = 0; j < rec.addedNodes.length; j++) fixTree(rec.addedNodes[j]);
+      }
+    }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: WATCH });
+  }
+
   /* 문서에 처음부터 있던 <iframe src="sub/page.html"> — 로더가 data-manna-src 로 옮겨 두었다 */
   function staticFrames() {
     var list = document.querySelectorAll('iframe[data-manna-src]');
