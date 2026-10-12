@@ -551,8 +551,8 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   useEffect(paint, [fit, list.length, selected.value, hovered.value, draft.value, showBoxes.value]);
 
   /* ── 피커 ─────────────────────────────────────────────────────────── */
-  const pick = useRef<{ down: { x: number; y: number } | null; dragging: boolean; hoverBusy: boolean; hoverNext: { x: number; y: number } | null }>({
-    down: null, dragging: false, hoverBusy: false, hoverNext: null,
+  const pick = useRef<{ down: { x: number; y: number } | null; dragging: boolean; hoverBusy: boolean; hoverNext: { x: number; y: number } | null; inside: boolean }>({
+    down: null, dragging: false, hoverBusy: false, hoverNext: null, inside: false,
   });
 
   const local = (e: PointerEvent | MouseEvent) => {
@@ -570,6 +570,11 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
     st.hoverBusy = true;
     const r = await bridge.current?.ask<{ rect: [number, number, number, number] }>({ type: 'hover', x: p.x, y: p.y }, 2000);
     st.hoverBusy = false;
+    // 답이 오는 사이 피커가 꺼졌거나 화면 밖으로 나갔으면 그리지 않는다 — 꺼진 뒤에 그리면 지울 때가 없어 잔상으로 남는다
+    if (!st.inside || !picking.peek() || recording.peek()) {
+      st.hoverNext = null;
+      return;
+    }
     if (r && !draft.peek() && !st.down) place(pickBox.current, tupleBox(r.rect), fitRef.current.s);
     if (st.hoverNext) {
       const n = st.hoverNext;
@@ -587,6 +592,7 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
   const onMove = (e: PointerEvent) => {
     const p = local(e);
     const st = pick.current;
+    st.inside = true;
     if (st.down) {
       const dx = p.x - st.down.x;
       const dy = p.y - st.down.y;
@@ -640,13 +646,14 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
       e.preventDefault();
       const r = await bridge.current?.ask<Picked>({ type: e.key === 'ArrowUp' ? 'pickUp' : 'pickDown' });
       if (r && dr) setDraft(r);
-      else if (r) place(pickBox.current, tupleBox(r.rect), fitRef.current.s);
+      else if (r && picking.peek()) place(pickBox.current, tupleBox(r.rect), fitRef.current.s);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   useEffect(() => {
+    if (!isPicking) pick.current.inside = false;
     if (!isPicking && !draft.value) place(pickBox.current, null, 1);
   }, [isPicking, draft.value]);
 
@@ -742,7 +749,10 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
         )}
         {isPicking && (
           <div class="pick-layer" onPointerMove={onMove} onPointerDown={onDown} onPointerUp={onUp} onWheel={onWheel}
-            onPointerLeave={() => !pick.current.down && !draft.peek() && place(pickBox.current, null, 1)} />
+            onPointerLeave={() => {
+              pick.current.inside = false;
+              if (!pick.current.down && !draft.peek()) place(pickBox.current, null, 1);
+            }} />
         )}
         <div class={`box-layer ${showBoxes.value ? 'is-on' : ''}`} ref={boxes} aria-hidden="true">
           {list.filter((a) => a.anchor && a.kind !== 'capture' && v.source?.mode !== 'site' && (!a.done || showDone.value)).map((a) => <div key={a.id} class="hl-box hl-all" data-id={a.id} />)}

@@ -183,6 +183,31 @@ export const docSpecs: Spec[] = [
     },
   },
   {
+    name: 'doc-pick-afterimage',
+    kind: 'doc',
+    files: [new RegExp(`^${M}stage/Stage\\.tsx$`), new RegExp(`^${M}agent/`)],
+    async run() {
+      // 움직이는 도중에 Ctrl 을 떼도 — 늦게 온 hover 답이 피커 박스를 다시 그려 잔상으로 남지 않는다
+      const { page, f } = await openDoc();
+      const shown = () => page.$eval('.hl-pick', (b) => getComputedStyle(b).display !== 'none');
+      const a = await pagePoint(page, f, '#tabB');
+      const b = await pagePoint(page, f, '#tabC');
+      let left = 0;
+      for (let i = 0; i < 8; i++) {
+        await page.mouse.move(a.x, a.y + 200);
+        await page.keyboard.down('Control');
+        await page.waitForTimeout(400);
+        const moving = page.mouse.move(b.x + 200, b.y + 300, { steps: 30 });
+        await page.waitForTimeout(30);
+        await page.keyboard.up('Control');
+        await moving;
+        await page.waitForTimeout(500);
+        if (await shown()) left++;
+      }
+      check('움직이는 도중에 Ctrl 을 떼도 피커 박스가 남지 않는다', left === 0, `${left}/8 남음`);
+    },
+  },
+  {
     name: 'doc-reveal',
     kind: 'doc',
     files: [new RegExp(`^${M}agent/`), new RegExp(`^${M}stage/(Stage|MarkerStrip)\\.tsx$`), /^packages\/core\/src\/(fingerprint|anchor)/],
