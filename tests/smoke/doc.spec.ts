@@ -30,6 +30,7 @@ export const docSpecs: Spec[] = [
     files: [new RegExp(`^${M}(ui/(Popover|Panel|labels)|actions|keys)\\.tsx?$`), new RegExp(`^${M}ui/editor/`), new RegExp(`^${M}stage/Stage\\.tsx$`), ...shared],
     async run() {
       const { page, f } = await openDoc();
+      await page.click('.seg-btn:has-text("피커")');
       await ctrlPick(page, await pagePoint(page, f, '#tabB'));
       await page.fill('.composer .title-input', '탭 이름');
       await page.fill('.composer .assignee-input', '한재준');
@@ -37,6 +38,7 @@ export const docSpecs: Spec[] = [
       await page.keyboard.press('Control+Enter');
       await until(async () => (await cardCount(page)) === 1, 3000);
       check('제목 · 본문 Comment 가 생긴다', (await cardCount(page)) === 1);
+      check('피커를 고정해 두었어도 달고 나면 보기로 돌아온다', !!(await page.$('.seg-btn[aria-checked="true"]:has-text("보기")')));
       check('카드 첫 줄에 제목, 둘째 줄에 쓴 사람 → 담당', ((await page.textContent('.card .card-name')) ?? '') === '탭 이름' && ((await page.textContent('.card .card-meta')) ?? '').startsWith('검증봇→한재준'), (await page.textContent('.card .card-meta')) ?? '');
       check('마커 옆 이름표에도 담당', (await page.getAttribute('.marker', 'data-label')) === '탭 이름 · 검증봇 → 한재준');
       await page.fill('.popover-card .detail .assignee-input', '김민수');
@@ -68,6 +70,56 @@ export const docSpecs: Spec[] = [
       check('완료 보기 — 다시 보이고 완료로 표시된다', !!(await until(async () => (await cardCount(page)) === 2, 2000)) && !!(await page.$('.cards > .card:first-child.is-done .done-check:checked')));
       await page.click('.cards > .card:first-child .done-check');
       check('체크를 풀면 완료가 풀린다', !(await page.$('.card.is-done')) && !(await page.$('.done-toggle')));
+    },
+  },
+  {
+    name: 'doc-comment-link',
+    kind: 'doc',
+    files: [new RegExp(`^${M}(links|export-comments)\\.ts$`), new RegExp(`^${M}ui/(Panel|Popover)\\.tsx$`), new RegExp(`^${M}ui/editor/`), ...shared],
+    async run() {
+      // 화면 두 개 — SCR-001 에 화면 전체 Comment 하나
+      const { doc: nd, blobs } = parseManna(readFileSync(DOC, 'utf8'));
+      const t = nd.meta.updatedAt;
+      nd.screens.push({ ...JSON.parse(JSON.stringify(nd.screens[0])), id: 'SCR-002', title: '노트 쓰는 화면', annotations: [] });
+      nd.meta.tabs = { open: ['SCR-001', 'SCR-002'], hidden: [] };
+      nd.screens[0].annotations = [{ id: 'linkme', version: nd.screens[0].versions.at(-1)!.v, title: '옆 화면 Comment', body: '', author: '기획자', createdAt: t, updatedAt: t, replies: [], history: [] }];
+      const file = join(OUT, 'smoke-comment-link.terr.html');
+      writeFileSync(file, serializeManna(nd, blobs, { js: readFileSync('out/manna/manna-runtime.js', 'utf8'), css: readFileSync('out/manna/manna-runtime.css', 'utf8') }));
+      const { page } = await openDoc(file);
+      await page.evaluate(() => {
+        navigator.clipboard.writeText = async (s: string) => void ((window as unknown as { __copied: string }).__copied = s);
+      });
+      await page.click('.tab[data-id="SCR-001"] .tab-main');
+      await page.hover('.cards > .card:first-child');
+      await page.click('.cards > .card:first-child .card-copy');
+      const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied ?? '');
+      check('카드의 링크 복사 — 마크다운 링크 한 줄', /^\[SCR-001( v\d+)? #1 옆 화면 Comment\]\(terr:comment\/linkme\)$/.test(copied), copied);
+      const label = copied.slice(1, copied.indexOf(']'));
+      check('복사했다고 알린다', ((await page.textContent('.toast')) ?? '').includes('링크를 복사했습니다'));
+      // 다른 화면의 자유 노트에 붙여 넣는다
+      await page.click('.tab[data-id="SCR-002"] .tab-main');
+      await page.click('.notes .section-head');
+      await page.click('.note-tab-add');
+      await page.keyboard.press('Enter');
+      await page.click('.notes .cm-content');
+      await page.keyboard.insertText(`참고: ${copied}`);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const link = await until(() => page.$('.notes .cm-clink'), 3000);
+      check('노트에서 링크는 이름만 보인다', !!link && ((await link.textContent()) ?? '') === label && !((await page.textContent('.notes .cm-content')) ?? '').includes('terr:'), (await page.textContent('.notes .cm-content')) ?? '');
+      await page.click('.notes .cm-clink');
+      const went = await until(async () => !!(await page.$('.tab.is-on[data-id="SCR-001"]')) && !!(await page.$('.cards > .card.is-sel:has-text("옆 화면 Comment")')), 5000);
+      check('링크를 누르면 그 화면으로 가서 Comment 를 고른다', !!went);
+      // 고치는 줄에서는 원문이 보이고, 누르면 커서만 간다
+      await page.click('.tab[data-id="SCR-002"] .tab-main');
+      await page.click('.note-tab:last-of-type .note-tab-main');
+      await page.click('.notes .cm-content', { position: { x: 4, y: 8 } });
+      check('고치는 줄에서는 원문이 보인다 (누르면 편집)', !(await page.$('.notes .cm-clink')) && ((await page.textContent('.notes .cm-content')) ?? '').includes('terr:comment/linkme') && !!(await page.$('.tab.is-on[data-id="SCR-002"]')));
+      // 팝업에도 같은 단추
+      await page.click('.tab[data-id="SCR-001"] .tab-main');
+      await page.click('.cards > .card:first-child .card-title');
+      await page.evaluate(() => ((window as unknown as { __copied: string }).__copied = ''));
+      await page.click('.popover-card button[aria-label="링크 복사"]');
+      check('팝업에서도 링크를 복사한다', (await page.evaluate(() => (window as unknown as { __copied: string }).__copied)) === copied);
     },
   },
   {

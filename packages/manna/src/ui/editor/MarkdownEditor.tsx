@@ -7,6 +7,7 @@ import { EditorView, keymap, placeholder as placeholderExt } from '@codemirror/v
 import { tags } from '@lezer/highlight';
 import { checkable, livePreview } from './livePreview';
 import { continueList, markdown } from './markdownLang';
+import { followLink } from '../../links';
 
 export interface EditorProps {
   value: string;
@@ -108,7 +109,17 @@ export function MarkdownEditor(p: EditorProps) {
             clearTimeout(timer.current);
             timer.current = setTimeout(flush, 400);
           }),
-          EditorView.domEventHandlers({ blur: () => flush() }),
+          EditorView.domEventHandlers({
+            blur: () => flush(),
+            mousedown: (e) => {
+              const l = (e.target as Element).closest?.('.cm-clink');
+              if (!l || e.button !== 0) return false;
+              e.preventDefault();
+              flush();
+              followLink(l.getAttribute('data-href') ?? '');
+              return true;
+            },
+          }),
         ],
       }),
     });

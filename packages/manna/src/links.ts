@@ -168,3 +168,45 @@ export function pruneConnections(x: MannaDoc): void {
   x.connections = x.connections.filter((c) => endExists(x, c.a) && endExists(x, c.b));
   if (!x.connections.length) delete x.connections;
 }
+
+/* ── Comment 링크 — 자유 노트 · Comment 본문에 붙여 두고 눌러서 그 Comment 로 간다 ───────────
+ * 마크다운 링크 한 줄로 복사한다: [SCR-002 #3 제목](terr:comment/<id>). id 로 찾으므로 번호 · 순서가 바뀌어도 맞는 곳으로 간다 */
+export const COMMENT_HREF = 'terr:comment/';
+
+export function commentLink(d: MannaDoc, screen: string, ann: string): string {
+  const label = labelText(d, { kind: 'comment', screen, ann }).replace(/[[\]]/g, (c) => (c === '[' ? '(' : ')'));
+  return `[${label}](${COMMENT_HREF}${ann})`;
+}
+
+/** 링크를 따라간다 — 처리했으면 true (Comment 링크가 아니면 false) */
+export function followLink(href: string): boolean {
+  if (!href.startsWith(COMMENT_HREF)) return false;
+  const ann = href.slice(COMMENT_HREF.length);
+  const s = doc.peek().screens.find((x) => x.annotations.some((a) => a.id === ann));
+  if (!s) notify('링크한 Comment 가 문서에 없습니다 (지운 Comment).', 'error');
+  else goTo({ kind: 'comment', screen: s.id, ann });
+  return true;
+}
+
+export async function copyCommentLink(screen: string, ann: string): Promise<void> {
+  const text = commentLink(doc.peek(), screen, ann);
+  const ok = await copyText(text);
+  notify(ok ? '링크를 복사했습니다 — 자유 노트에 붙여 넣으면 눌러서 이 Comment 로 갑니다.' : '링크를 복사하지 못했습니다.', ok ? 'info' : 'error');
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // 파일로 연 문서 등 clipboard API 가 막힌 곳
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+}

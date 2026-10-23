@@ -4,6 +4,7 @@
 import { syntaxTree } from '@codemirror/language';
 import { Facet, type EditorState, type Range } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view';
+import { COMMENT_HREF } from '../../links';
 
 /** 읽기 전용이어도 체크박스 토글을 허용할지 */
 export const checkable = Facet.define<boolean, boolean>({ combine: (v) => v.some(Boolean) });
@@ -116,6 +117,13 @@ function build(view: EditorView): DecorationSet {
             return;
           case 'CodeInfo':
             return;
+          case 'Link': {
+            // Comment 링크 — 서식으로 보일 때(고치는 줄이 아닐 때) 누르면 그 Comment 로 간다
+            const url = node.node.getChild('URL');
+            const href = url ? state.sliceDoc(url.from, url.to) : '';
+            if (href.startsWith(COMMENT_HREF) && !isActive(node.from)) out.push(Decoration.mark({ class: 'cm-clink', attributes: { 'data-href': href } }).range(node.from, node.to));
+            return;
+          }
           case 'URL':
             if (node.node.parent?.name === 'Link' && !isActive(node.from)) hide(node.from, node.to);
             return;

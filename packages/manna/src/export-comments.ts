@@ -20,7 +20,9 @@ export function mdToHtml(src: string): string {
       .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
       .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<i>$2</i>')
       .replace(/~~([^~]+)~~/g, '<s>$1</s>')
-      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>')
+      // Comment 링크는 테라리움 안에서만 따라간다 — 내보낸 장에서는 이름만
+      .replace(/\[([^\]]+)\]\(terr:comment\/[^)\s]+\)/g, '$1');
   const out: string[] = [];
   const lines = src.replace(/\r\n?/g, '\n').split('\n');
   let list: 'ul' | 'ol' | null = null;

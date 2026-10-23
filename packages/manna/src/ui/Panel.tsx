@@ -1,7 +1,7 @@
 /* 오른쪽 패널 — 위에 화면 개요(마크다운), 아래에 Comment 목록. 한 스크롤로 이어진다 */
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { CheckSquare, Camera, ChevronDown, ChevronRight, EyeOff, FileOutput, Film, GripVertical, MessageSquare, Plus, X } from 'lucide-preact';
+import { CheckSquare, Camera, ChevronDown, ChevronRight, Copy, EyeOff, FileOutput, Film, GripVertical, MessageSquare, Plus, X } from 'lucide-preact';
 import { ExportCommentsDialog, exportAsk } from './ExportComments';
 import type { Annotation, Screen } from '@core';
 import { displayNo } from '@core';
@@ -14,6 +14,7 @@ import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
 import { ago, markState } from './labels';
 import { Who } from './Who';
 import { openComment } from '../stage/MarkerStrip';
+import { copyCommentLink } from '../links';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
@@ -333,6 +334,9 @@ function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip
           {a.shot && st !== 'capture' && <span class="badge-icon" title="달 때의 화면이 함께 저장되어 있습니다"><Camera {...ICON} size={14} /></span>}
           {(a.clips?.length ?? 0) > 0 && <span class="badge-icon"><Film {...ICON} size={14} /> {a.clips!.length}</span>}
           {a.replies.length > 0 && <span class="badge-icon"><MessageSquare {...ICON} size={14} /> {a.replies.length}</span>}
+        </button>
+        <button type="button" class="btn-icon btn-xs card-copy" aria-label={`${displayNo(scr, a)}번 링크 복사`} title="링크 복사 — 자유 노트에 붙여 넣으면 눌러서 이 Comment 로 간다" onClick={() => copyCommentLink(scr.id, a.id)}>
+          <Copy {...ICON} size={14} />
         </button>
       </div>
       {!sel && a.body && a.title && (

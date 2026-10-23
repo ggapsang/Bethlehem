@@ -686,6 +686,12 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .note-tab .note-tab-x { visibility: hidden; }
 .note-tab:hover .note-tab-x, .note-tab.is-on .note-tab-x, .note-tab-x:focus-visible { visibility: visible; }
 
+/* Comment 링크 복사 — 카드에 마우스를 올리거나 고른 카드에서 보인다 */
+.card-copy { flex: none; margin-right: var(--unit-1); visibility: hidden; }
+.card:hover .card-copy, .card.is-sel .card-copy, .card-copy:focus-visible { visibility: visible; }
+/* 편집기 안 Comment 링크 — 누르면 그 Comment 로 */
+.cm-clink { cursor: pointer; }
+
 /* 완료 — 숨기되 지우지 않는다 */
 .done-check { flex: none; width: 16px; height: 16px; margin: 0 2px 0 0; accent-color: var(--accent); cursor: pointer; }
 .card-head { align-items: center; }

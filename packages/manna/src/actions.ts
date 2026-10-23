@@ -6,7 +6,7 @@ import { startRecording, type Recorder } from './stage/record';
 import { dropTake, startLongRecording, type LongRecorder, type Take } from './stage/longrec';
 import { pruneConnections } from './links';
 import {
-  pinSel, annotations, shownAnnotations, showDone, undo, dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recTake, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
+  holdPick, mode, pinSel, annotations, shownAnnotations, showDone, undo, dropTab, doc, openTabs, screenId, selectScreen, addBlobs, askName, blobs, draft, draftClip, mutate, notify, recTake, recording, screen, selected, snipMode, snipRec, stagePage, stageRef,
   stageViewport, still, user, version,
 } from './store';
 
@@ -69,6 +69,9 @@ export async function addFromDraft(body: string, title = '', assignee = ''): Pro
   draft.value = null;
   draftClip.value = null;
   selected.value = a.id;
+  // 달았으면 바로 보기로 — 화면을 다시 만질 수 있게. 다시 보려면 마커 · 카드를 누른다
+  mode.value = 'view';
+  holdPick.value = false;
   return a.id;
 }
 
