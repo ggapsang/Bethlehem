@@ -5,7 +5,7 @@ import { CheckSquare, Camera, ChevronDown, ChevronRight, Copy, EyeOff, FileOutpu
 import { ExportCommentsDialog, exportAsk } from './ExportComments';
 import type { Annotation, Screen } from '@core';
 import { displayNo } from '@core';
-import { toggleDone, MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, reorder, moveCommentsHere } from '../actions';
+import { toggleDone, MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, moveNoteTab, reorder, moveCommentsHere } from '../actions';
 import type { Host } from '../host';
 import {
   setShowDone, showDone, shownAnnotations, version, annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible, selectScreen, user,
@@ -73,7 +73,51 @@ function Notes({ scr }: { scr: Screen }) {
   const [cur, setCur] = useState(MAIN_NOTE);
   const [renaming, setRenaming] = useState<string | null>(null);
   const tab = tabs.find((t) => t.id === cur) ?? tabs[0]!;
+  const [drag, setDrag] = useState<{ id: string; to: number } | null>(null);
+  const dragged = useRef(false);
   useEffect(() => setCur(MAIN_NOTE), [scr.id]);
+
+  /* 끌어서 탭 순서 바꾸기 — 조금 움직여야 끌기가 된다(누르기 · 두 번 누르기는 그대로) */
+  const startDrag = (e: PointerEvent, id: string) => {
+    if (e.button !== 0) return;
+    const el = e.currentTarget as HTMLElement;
+    const strip = el.closest('.note-tabs') as HTMLElement;
+    const x0 = e.clientX;
+    dragged.current = false;
+    const target = (x: number) =>
+      Array.from(strip.querySelectorAll<HTMLElement>(':scope > .note-tab')).filter((t) => t.dataset.id !== id).filter((t) => {
+        const r = t.getBoundingClientRect();
+        return r.left + r.width / 2 < x;
+      }).length;
+    const move = (ev: PointerEvent) => {
+      if (!dragged.current && Math.abs(ev.clientX - x0) < 5) return;
+      if (!dragged.current) {
+        dragged.current = true;
+        el.setPointerCapture(ev.pointerId);
+      }
+      setDrag({ id, to: target(ev.clientX) });
+    };
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      setDrag(null);
+      if (!dragged.current) return;
+      setTimeout(() => (dragged.current = false)); // 끌기 끝에 따라오는 click 은 탭 고르기가 아니다
+      if (ev.type !== 'pointerup') return;
+      const was = cur;
+      const swapped = moveNoteTab(id, target(ev.clientX));
+      // 첫 자리로 온 탭 · 첫 자리를 내준 탭은 id 가 바뀐다 — 고른 탭을 따라간다
+      if (swapped && was === swapped) setCur(MAIN_NOTE);
+      else if (swapped && was === MAIN_NOTE) setCur(swapped);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+  const others = tabs.filter((t) => t.id !== drag?.id);
+  const dropBefore = drag && drag.to < others.length ? others[drag.to]!.id : null;
+  const dropAfter = drag && drag.to >= others.length ? others[others.length - 1]?.id : null;
   const finishRename = (id: string, v: string) => {
     renameNoteTab(id, v);
     setRenaming(null);
@@ -91,7 +135,11 @@ function Notes({ scr }: { scr: Screen }) {
       {open && (
         <div class="note-tabs" role="tablist" aria-label="노트 탭">
           {tabs.map((t) => (
-            <div key={t.id} class={`note-tab ${t.id === tab.id ? 'is-on' : ''}`}>
+            <div
+              key={t.id}
+              data-id={t.id}
+              class={`note-tab ${t.id === tab.id ? 'is-on' : ''} ${drag?.id === t.id ? 'is-dragging' : ''} ${dropBefore === t.id ? 'drop-before' : ''} ${dropAfter === t.id ? 'drop-after' : ''}`}
+            >
               {renaming === t.id ? (
                 <input
                   class="note-tab-input"
@@ -113,8 +161,9 @@ function Notes({ scr }: { scr: Screen }) {
                   role="tab"
                   aria-selected={t.id === tab.id}
                   class="note-tab-main"
-                  title="두 번 눌러 이름 바꾸기"
-                  onClick={() => setCur(t.id)}
+                  title="두 번 눌러 이름 바꾸기 · 끌어서 순서 바꾸기"
+                  onPointerDown={(e) => startDrag(e, t.id)}
+                  onClick={() => !dragged.current && setCur(t.id)}
                   onDblClick={() => setRenaming(t.id)}
                 >
                   {t.title}

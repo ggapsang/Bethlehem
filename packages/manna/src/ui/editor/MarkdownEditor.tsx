@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { Compartment, EditorSelection, EditorState, type StateCommand } from '@codemirror/state';
+import { Annotation, Compartment, EditorSelection, EditorState, type StateCommand } from '@codemirror/state';
 import { EditorView, keymap, placeholder as placeholderExt } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { checkable, livePreview } from './livePreview';
@@ -23,6 +23,9 @@ export interface EditorProps {
   label?: string;
   class?: string;
 }
+
+/** 밖에서 값을 넣은 변경 — 쓴 것이 아니므로 문서에 되돌려 적지 않는다 */
+const fromOutside = Annotation.define<boolean>();
 
 const highlight = HighlightStyle.define([
   { tag: tags.strong, fontWeight: '700' },
@@ -103,7 +106,7 @@ export function MarkdownEditor(p: EditorProps) {
           p.placeholder ? placeholderExt(p.placeholder) : [],
           EditorView.contentAttributes.of({ 'aria-label': p.label ?? '마크다운 편집기' }),
           EditorView.updateListener.of((u) => {
-            if (!u.docChanged) return;
+            if (!u.docChanged || u.transactions.every((t) => t.annotation(fromOutside))) return;
             // 체크박스 토글은 바로, 타이핑은 잠깐 모아서 문서에 반영한다
             if (u.transactions.some((t) => t.isUserEvent('input.check'))) return flush();
             clearTimeout(timer.current);
@@ -140,7 +143,8 @@ export function MarkdownEditor(p: EditorProps) {
     const v = view.current;
     if (!v || timer.current) return;
     const cur = v.state.doc.toString();
-    if (cur !== p.value) v.dispatch({ changes: { from: 0, to: cur.length, insert: p.value } });
+    // 표시만 바꾼다 — 이것으로 저장 타이머가 걸리면, 곧이어 밖에서 또 바뀐 값(예: 탭 지우기)을 옛 글로 덮어쓴다
+    if (cur !== p.value) v.dispatch({ changes: { from: 0, to: cur.length, insert: p.value }, annotations: fromOutside.of(true) });
   }, [p.value]);
 
   useEffect(() => {

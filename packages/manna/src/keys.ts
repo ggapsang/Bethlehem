@@ -6,7 +6,7 @@
 import type { Host } from './host';
 import { save } from './host';
 import { removeComment, removePin } from './actions';
-import { pinSel, pinTool, annotations, draft, fullscreen, holdPick, mode, notify, popHidden, redo, selected, stageScale, undo, user, zoom, zoomStep } from './store';
+import { pinSel, pinTool, annotations, draft, fullscreen, holdPick, mode, notify, redo, selected, stageScale, toView, undo, user, zoom, zoomStep } from './store';
 
 let host: Host | null = null;
 export function setKeyHost(h: Host): void {
@@ -78,10 +78,8 @@ export function onKeyDown(e: KeyboardEvent, inScreen = false): void {
     return;
   }
   if (e.key === 'Escape' && !isTyping(e)) {
-    if (draft.peek()) draft.value = null;
-    else if (selected.peek() && !popHidden.peek()) popHidden.value = true;
-    else if (selected.peek()) selected.value = null;
-    else if (mode.peek() === 'annotate') mode.value = 'view';
+    // 한 번에 보기로 — 쓰던 것 · 연 Comment · 피커를 모두 걷고 지금 화면으로
+    if (draft.peek() || selected.peek() || mode.peek() === 'annotate') toView();
     else if (fullscreen.peek() && !inScreen) document.exitFullscreen?.().catch(() => {});
   }
 }

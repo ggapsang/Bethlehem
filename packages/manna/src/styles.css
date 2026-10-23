@@ -684,6 +684,10 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .tab-more { position: absolute; top: 2px; right: -2px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 8px; background: var(--accent); color: var(--white); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
 /* 노트 탭 × — 마우스를 올리거나 고른 탭에서 보인다 */
 .note-tab .note-tab-x { visibility: hidden; }
+/* 노트 탭 끌기 — 들어갈 자리에 세로 선 */
+.note-tab.is-dragging { opacity: .5; }
+.note-tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.note-tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
 .note-tab:hover .note-tab-x, .note-tab.is-on .note-tab-x, .note-tab-x:focus-visible { visibility: visible; }
 
 /* Comment 링크 복사 — 카드에 마우스를 올리거나 고른 카드에서 보인다 */

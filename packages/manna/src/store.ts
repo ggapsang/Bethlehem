@@ -504,6 +504,15 @@ export function toggleNotes(open = !notesOpen.value): void {
   lsSet(LS.notes, open ? '1' : '0');
 }
 
+/** 보기로 — 작성 취소 · 선택 풀기 · 피커 끄기를 한 번에. 다시 지금 화면을 만진다 (Esc) */
+export function toView(): void {
+  draft.value = null;
+  selected.value = null;
+  popHidden.value = false;
+  mode.value = 'view';
+  holdPick.value = false;
+}
+
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 export function notify(text: string, tone: 'info' | 'error' = 'info', action?: ToastAction): void {
   toast.value = { text, tone, ...(action ? { action } : {}) };

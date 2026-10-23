@@ -7,7 +7,7 @@ import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
 import { CLIP_MAX_MS, recStats, editAssignee, toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleRecording, toggleSnipRecording } from '../actions';
 import type { Host } from '../host';
-import { annotations, draft, draftClip, popHidden, recording, rev, screen, selected, snipMode, snipRec, stageRef, still, user, version } from '../store';
+import { annotations, draft, draftClip, popHidden, recording, rev, screen, selected, snipMode, snipRec, stageRef, still, toView, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
 import { CommentLinks } from '../stage/Links';
 import { copyCommentLink } from '../links';
@@ -154,6 +154,12 @@ export function StagePopover({ host, fit, target, areaRef }: PopoverProps) {
         e.stopPropagation();
         pressing.current = true;
         onDrag(e);
+      }}
+      onKeyDown={(e) => {
+        // 팝업 안 입력칸 · 편집기에서도 Esc 한 번이면 보기로 — 먼저 놓아(blur) 고치던 제목 · 본문을 남긴다
+        if (e.key !== 'Escape') return;
+        (document.activeElement as HTMLElement | null)?.blur();
+        toView();
       }}
     >
       {d ? <Composer /> : sel && <Detail key={sel.id} a={sel} host={host} />}

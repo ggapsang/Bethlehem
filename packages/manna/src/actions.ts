@@ -341,6 +341,27 @@ export function addNoteTab(): string | null {
   return id;
 }
 
+/** 노트 탭 순서 바꾸기 — to 는 옮긴 뒤의 자리. 첫 자리는 notes 에 담기므로, 다른 탭이 첫 자리로 오면 원래 첫 탭과 id 를 맞바꾼다
+ * (파일 notes-<id>.md 와 합치기의 열쇠가 그대로 남는다). 맞바꾼 id 를 돌려준다 — 고른 탭을 따라가려고 */
+export function moveNoteTab(id: string, to: number): string | null {
+  const s = screen.peek();
+  if (!s) return null;
+  const list = noteTabs(s);
+  const from = list.findIndex((t) => t.id === id);
+  if (from < 0 || from === to) return null;
+  list.splice(to, 0, list.splice(from, 1)[0]!);
+  const first = list[0]!;
+  const swapped = first.id === MAIN_NOTE ? null : first.id;
+  mutate(() => {
+    s.notes = first.body;
+    if (first.title === '개요') delete s.notesTitle;
+    else s.notesTitle = first.title;
+    s.moreNotes = list.slice(1).map((t) => ({ id: t.id === MAIN_NOTE ? swapped! : t.id, title: t.title, body: t.body }));
+    if (!s.moreNotes.length) delete s.moreNotes;
+  }, { label: '노트 탭 순서' });
+  return swapped;
+}
+
 /** 노트 탭 지우기 — 확인을 한 번 받는다. 첫 탭을 지우면 다음 탭이 첫 탭이 되고, 탭이 하나뿐이면 내용만 비운다 */
 export function removeNoteTab(id: string): boolean {
   const s = screen.peek();

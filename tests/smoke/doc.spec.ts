@@ -45,6 +45,16 @@ export const docSpecs: Spec[] = [
       await page.press('.popover-card .detail .assignee-input', 'Tab');
       check('팝업에서 담당을 바꾼다', !!(await until(async () => ((await page.textContent('.card .assignee')) ?? '') === '김민수', 2000)));
       check('담당은 고르기 목록에 남는다', !!(await page.$('#terr-people option[value="김민수"]')));
+      // 연 Comment 에서 Esc 한 번 — 팝업 · 선택 · 피커를 모두 걷고 지금 화면으로
+      await page.click('.seg-btn:has-text("피커")');
+      await page.waitForSelector('.popover-card .detail');
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.keyboard.press('Escape');
+      check('Esc 한 번이면 보기로 — 팝업 · 선택 · 피커가 모두 걷힌다', !(await page.$('.popover-card')) && !(await page.$('.card.is-sel')) && !!(await page.$('.seg-btn[aria-checked="true"]:has-text("보기")')));
+      await page.click('.cards > .card:first-child .card-title');
+      await page.fill('.popover-card .detail .title-input', '탭 이름 고침');
+      await page.keyboard.press('Escape');
+      check('팝업 입력칸에서 Esc 한 번 — 닫히고 고친 제목은 남는다', !(await page.$('.popover-card')) && ((await page.textContent('.card .card-name')) ?? '') === '탭 이름 고침');
       // 제목만
       await ctrlPick(page, await pagePoint(page, f, '#tabC'));
       await page.fill('.composer .title-input', '제목만');
@@ -171,6 +181,24 @@ export const docSpecs: Spec[] = [
       await page.click('.note-tab-main:has-text("개요")');
       await page.click('.note-tab-main:has-text("회의록")');
       check('노트 탭 — 더하고 이름 짓고 따로 쓴다', ((await page.textContent('.notes .cm-content')) ?? '').includes('회의 메모'));
+      // 끌어서 순서 바꾸기 — 회의록을 첫 자리로. 고른 탭 · 내용은 따라간다
+      await page.click('.note-tab-main:has-text("개요")');
+      const overview = (await page.textContent('.notes .cm-content')) ?? '';
+      await page.click('.note-tab-main:has-text("회의록")');
+      const tb = async (n: string) => (await (await page.$(`.note-tab-main:has-text("${n}")`))!.boundingBox())!;
+      const [ta, tm] = [await tb('개요'), await tb('회의록')];
+      await page.mouse.move(tm.x + tm.width / 2, tm.y + tm.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(ta.x + ta.width / 2, ta.y + ta.height / 2, { steps: 6 });
+      await page.mouse.move(ta.x + 3, ta.y + ta.height / 2, { steps: 3 });
+      const line = !!(await page.$('.note-tab.drop-before:has-text("개요")'));
+      await page.mouse.up();
+      const order = await page.$$eval('.note-tab-main', (els) => els.map((e) => e.textContent));
+      check('노트 탭을 끌어 순서를 바꾼다 (들어갈 자리에 선)', line && order.join(',') === '회의록,개요', order.join(','));
+      check('옮긴 뒤에도 고른 탭 · 내용 그대로', !!(await page.$('.note-tab.is-on:has-text("회의록")')) && ((await page.textContent('.notes .cm-content')) ?? '').includes('회의 메모'));
+      await page.click('.note-tab-main:has-text("개요")');
+      check('자리를 내준 탭의 내용도 그대로', ((await page.textContent('.notes .cm-content')) ?? '') === overview);
+      await page.click('.note-tab-main:has-text("회의록")');
       let asked = '';
       page.once('dialog', (dg) => {
         asked = dg.message();
@@ -181,7 +209,7 @@ export const docSpecs: Spec[] = [
       page.once('dialog', (dg) => dg.accept());
       await page.hover('.note-tab:has-text("개요")');
       await page.click('.note-tab:has-text("개요") .note-tab-x');
-      check('하나 남은 탭을 지우면 내용만 비운다', !!(await until(async () => ((await page.textContent('.notes .cm-content')) ?? '').trim() === '' || !!(await page.$('.notes .cm-placeholder')), 2000)));
+      check('하나 남은 탭을 지우면 내용만 비운다', !!(await until(async () => ((await page.textContent('.notes .cm-content')) ?? '').trim() === '' || !!(await page.$('.notes .cm-placeholder')), 2000)), JSON.stringify([await page.$$eval('.note-tab-main', (els) => els.map((e) => e.textContent)), ((await page.textContent('.notes .cm-content')) ?? '').slice(0, 80)]));
       await page.keyboard.press('Control+z');
       await page.click('.comments .section-head');
       check('Comment 도 접힌다', !(await page.$('.cards')));
