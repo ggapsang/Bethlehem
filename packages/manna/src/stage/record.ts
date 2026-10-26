@@ -19,8 +19,12 @@ export interface Recorder {
   onEnded(cb: () => void): void;
 }
 
-const MAX_W = 1600;
-const BITRATE = 2_000_000;
+/** 녹화 폭 상한 (기기 픽셀) — 고배율 화면에서도 글자가 뭉개지지 않게 화면 픽셀 그대로 담는다 */
+export const MAX_W = 2560;
+/** 크기에 맞춘 비트레이트 — 화면 글자가 번지지 않을 만큼(픽셀당 2.5bit/s, 3~8Mbps). 가변 비트레이트라 멈춘 화면은 훨씬 적게 쓴다 */
+export function bitrateFor(w: number, h: number): number {
+  return Math.round(Math.min(8_000_000, Math.max(3_000_000, w * h * 2.5)));
+}
 /** 가장 짧은 녹화 — 이보다 빨리 멈추면 이만큼은 담는다 */
 const MIN_MS = 600;
 
@@ -72,6 +76,8 @@ export async function openStageStream(target: HTMLElement): Promise<StageStream>
     selfBrowserSurface: 'include',
   } as DisplayMediaStreamOptions);
   const track = stream.getVideoTracks()[0] as CroppableTrack;
+  // 화면 글자 — 프레임 수보다 해상도를 지킨다
+  track.contentHint = 'detail';
   const surface = track.getSettings().displaySurface;
   if (surface && surface !== 'browser' && surface !== 'window') {
     stream.getTracks().forEach((t) => t.stop());
@@ -81,8 +87,11 @@ export async function openStageStream(target: HTMLElement): Promise<StageStream>
   let recStream: MediaStream = stream;
   let cleanup = () => {};
   const rect = target.getBoundingClientRect();
-  let w = Math.round(rect.width);
-  let h = Math.round(rect.height);
+  // CSS 픽셀이 아니라 기기 픽셀로 — 배율 150% · 200% 화면에서 반으로 줄여 담던 것
+  const dpr = window.devicePixelRatio || 1;
+  const scale = Math.min(1, MAX_W / (rect.width * dpr));
+  const w = Math.max(2, Math.round((rect.width * dpr * scale) / 2) * 2);
+  const h = Math.max(2, Math.round((rect.height * dpr * scale) / 2) * 2);
 
   const CropTarget = (window as unknown as { CropTarget?: CropTargetCtor }).CropTarget;
   let cropped = false;
@@ -100,13 +109,11 @@ export async function openStageStream(target: HTMLElement): Promise<StageStream>
     video.muted = true;
     video.srcObject = stream;
     await video.play();
-    const scale = Math.min(1, MAX_W / rect.width);
-    w = Math.round(rect.width * scale);
-    h = Math.round(rect.height * scale);
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingQuality = 'high';
     let raf = 0;
     const draw = () => {
       const r = target.getBoundingClientRect();
@@ -144,7 +151,7 @@ export async function startRecording(target: HTMLElement): Promise<Recorder> {
   await firstFrame(recStream);
 
   const type = pickMime();
-  const rec = new MediaRecorder(recStream, { mimeType: type, videoBitsPerSecond: BITRATE });
+  const rec = new MediaRecorder(recStream, { mimeType: type, videoBitsPerSecond: bitrateFor(w, h) });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   const started = performance.now();

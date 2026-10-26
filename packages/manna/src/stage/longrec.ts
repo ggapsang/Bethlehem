@@ -4,7 +4,7 @@
  * 다시 인코딩하지 않고 아무 자리에서나 자를 수 있다(webm.ts). 인코딩한 프레임은 2초마다 IndexedDB 에도 적어 둔다:
  * 편집을 끝내기 전에 프로그램이 꺼져도 다음에 열 때 이어서 편집할 수 있다. 편집을 끝내거나 버리면 지운다.
  */
-import { openStageStream } from './record';
+import { MAX_W, bitrateFor, openStageStream } from './record';
 import type { Frame, Track } from './webm';
 
 export interface Take extends Track {
@@ -25,8 +25,6 @@ export interface LongRecorder {
   stats(): { ms: number; bytes: number };
 }
 
-const MAX_W = 1600;
-const BITRATE = 1_500_000;
 const KEY_EVERY_US = 1_000_000;
 const SAVE_EVERY = 2000;
 
@@ -38,7 +36,7 @@ const CODECS: [string, string][] = [
 async function pickCodec(w: number, h: number): Promise<[string, string]> {
   if (typeof VideoEncoder === 'undefined') throw new Error('이 브라우저는 긴 녹화(WebCodecs)를 지원하지 않습니다. Chrome 이나 Edge 에서 열어 주세요.');
   for (const c of CODECS) {
-    const r = await VideoEncoder.isConfigSupported({ codec: c[0], width: w, height: h, bitrate: BITRATE, latencyMode: 'realtime' }).catch(() => null);
+    const r = await VideoEncoder.isConfigSupported({ codec: c[0], width: w, height: h, bitrate: bitrateFor(w, h), latencyMode: 'realtime' }).catch(() => null);
     if (r?.supported) return c;
   }
   throw new Error('이 브라우저에서 쓸 수 있는 영상 인코더가 없습니다.');
@@ -94,6 +92,7 @@ export async function startLongRecording(target: HTMLElement, o: { doc: string; 
     const [codec, codecId] = await pickCodec(w, h);
     const canvas = new OffscreenCanvas(w, h);
     const ctx = canvas.getContext('2d')!;
+    ctx.imageSmoothingQuality = 'high';
 
     const take: Take = { id: o.id, doc: o.doc, screen: o.screen, at: new Date().toISOString(), codec: codecId, w, h, ms: 0, frames: [] };
     let bytes = 0;
@@ -115,7 +114,7 @@ export async function startLongRecording(target: HTMLElement, o: { doc: string; 
         ended?.();
       },
     });
-    enc.configure({ codec, width: w, height: h, bitrate: BITRATE, bitrateMode: 'variable', latencyMode: 'realtime', framerate: 30 });
+    enc.configure({ codec, width: w, height: h, bitrate: bitrateFor(w, h), bitrateMode: 'variable', latencyMode: 'realtime', framerate: 30 });
 
     let t0 = -1;
     let lastT = -1;
