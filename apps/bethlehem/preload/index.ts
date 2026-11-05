@@ -13,6 +13,7 @@ const api: BethlehemApi = {
   wsForUrl: (url) => ipcRenderer.invoke('ws-for-url', url),
   openFile: () => ipcRenderer.invoke('open-file'),
   openPath: (path) => ipcRenderer.invoke('open-path', path),
+  exampleDoc: () => ipcRenderer.invoke('example-doc'),
   saveFile: (o) => ipcRenderer.invoke('save-file', o),
   exportAs: (o) => ipcRenderer.invoke('export-as', o),
   pickFolder: () => ipcRenderer.invoke('pick-folder'),

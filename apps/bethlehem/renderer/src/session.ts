@@ -370,6 +370,12 @@ export async function openDocument(path?: string): Promise<void> {
   }
 }
 
+export async function openExample(): Promise<void> {
+  const p = await api.exampleDoc().catch(() => null);
+  if (!p) return notify('예시 문서가 이 설치본에 없습니다.', 'error');
+  await openDocument(p);
+}
+
 /* ── 화면 등록 ─────────────────────────────────────────────────────── */
 
 export async function addScreenFromFolder(screenId?: string, folder?: string): Promise<void> {

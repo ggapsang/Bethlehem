@@ -22,6 +22,14 @@ npm start          # 빌드해서 run/ 에 실행본을 만들고 테라리움�
 - **Comment** — `Ctrl` 을 누른 채 요소를 클릭하거나 드래그한다. 화면이 멈춘 그림으로 덮이고, 대상 옆 팝업에 마크다운으로 쓴다. 그 순간의 화면이 Comment 에 함께 남는다. Comment 를 누르면 그 탭·캔버스 속 화면·다른 페이지로 다시 찾아간다. `Delete` 로 지우고 `Ctrl+Z` 로 되돌린다.
 - **저장** — 고치면 자동으로 저장된다. 받은 사람은 브라우저로 열어 Comment·답글을 달고 돌려보낸다. 돌아온 파일을 작업 폴더의 `returned/` 에 넣으면 "회신" 이 떠서 병합한다.
 
+Windows 설치 파일 만들기:
+
+```sh
+npm run dist       # 빌드 → build/app 에 실행본 → release/Terrarium-Setup-<버전>.exe (NSIS, 사용자별 설치)
+```
+
+설치본에는 예시 문서 하나(`apps/bethlehem/resources/examples` — modu.daim.co.kr URL 화면)가 들어 있다. 첫 화면의 **예시 문서** 를 누르면 문서 폴더의 `Terrarium 예시` 에 복사해 연다. 코드 서명은 하지 않으므로 처음 실행할 때 SmartScreen 이 묻는다.
+
 명령줄로 굽기:
 
 ```sh

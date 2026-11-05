@@ -441,6 +441,21 @@ ipcMain.handle('open-path', async (_e, p: string) => {
   return { path: abs, name: basename(abs), html };
 });
 
+/** 예시 문서 — 프로그램에 든 것(resources/examples)을 문서 폴더의 "Terrarium 예시" 에 한 번 복사한다. 이미 있으면 그것을 연다 */
+ipcMain.handle('example-doc', async () => {
+  const src = beside('resources/examples', 'apps/bethlehem/resources/examples');
+  const name = (await readdir(src).catch(() => [] as string[])).find((f) => f.endsWith(`.${EXT}`));
+  if (!name) return null;
+  const dir = join(app.getPath('documents'), 'Terrarium 예시');
+  const out = join(dir, name);
+  if (!existsSync(out)) {
+    await mkdir(dir, { recursive: true });
+    // 설치본에서는 asar 안에 있다 — 읽어서 쓴다
+    await writeFile(out, await readFile(join(src, name)));
+  }
+  return grant(out);
+});
+
 /** 단일 문서 저장 — path 가 있으면 그대로 덮어쓰기, saveAs 이거나 path 가 없으면 대화상자 */
 ipcMain.handle('save-file', async (e, o: { html: string; path: string | null; suggestedName: string; saveAs: boolean }) => {
   let target = o.path && !o.saveAs && allowed(o.path) ? resolve(o.path) : null;

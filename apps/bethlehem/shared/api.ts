@@ -41,6 +41,8 @@ export interface BethlehemApi {
   /* 단일 문서 */
   openFile(): Promise<OpenedFile | null>;
   openPath(path: string): Promise<OpenedFile>;
+  /** 예시 문서 — 프로그램에 든 것을 문서 폴더에 한 번 복사해 두고 그 경로를 준다 (고친 것은 그대로 남는다) */
+  exampleDoc(): Promise<string | null>;
   saveFile(o: { html: string; path: string | null; suggestedName: string; saveAs: boolean }): Promise<string | null>;
   exportAs(o: { html: string; suggestedName: string }): Promise<string | null>;
   /* 화면 폴더 */

@@ -1,7 +1,7 @@
 /* 화면이 없을 때 — 폴더나 문서를 열고, 작업 폴더가 있으면 화면을 추가한다 */
-import { FileText, FolderGit2, FolderOpen, FolderPlus, Globe, Image } from 'lucide-preact';
+import { BookOpen, FileText, FolderGit2, FolderOpen, FolderPlus, Globe, Image } from 'lucide-preact';
 import keyArt from '../../../../docs/key_art.png';
-import { addImageScreen, addScreenFromFolder, askUrl, docAsk, mode, openDocument, openFolder, openUrl, openWorkspace, recent, unpackInto, urlAsk } from './session';
+import { addImageScreen, addScreenFromFolder, askUrl, docAsk, mode, openDocument, openExample, openFolder, openUrl, openWorkspace, recent, unpackInto, urlAsk } from './session';
 
 const ICON = { size: 16, strokeWidth: 1.5 };
 
@@ -22,6 +22,7 @@ export function Welcome() {
             <button type="button" class="btn btn-primary" onClick={() => openFolder()}><FolderOpen {...ICON} /> 폴더 열기</button>
             <button type="button" class="btn btn-secondary" onClick={() => openDocument()}><FileText {...ICON} /> 문서 열기</button>
             <button type="button" class="btn btn-secondary" onClick={() => (urlAsk.value = { open: true })}><Globe {...ICON} /> URL 열기</button>
+            <button type="button" class="btn btn-ghost" title="URL 화면 하나가 든 예시 문서 (modu.daim.co.kr)" onClick={() => openExample()}><BookOpen {...ICON} /> 예시 문서</button>
           </div>
         )}
         {!inWorkspace && <RecentPlaces />}
