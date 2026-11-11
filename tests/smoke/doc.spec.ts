@@ -133,6 +133,80 @@ export const docSpecs: Spec[] = [
     },
   },
   {
+    name: 'doc-groups',
+    kind: 'doc',
+    files: [new RegExp(`^${M}(actions|ui/(Panel|Popover))\\.tsx?$`), /^packages\/core\/src\/merge\.ts$/, ...shared],
+    async run() {
+      // 화면 전체 Comment 넷 — 하나 · 둘 · 셋 · 넷
+      const { doc: nd, blobs } = parseManna(readFileSync(DOC, 'utf8'));
+      const t = nd.meta.updatedAt;
+      const v = nd.screens[0].versions.at(-1)!.v;
+      nd.screens[0].annotations = ['하나', '둘', '셋', '넷'].map((title, i) => ({ id: `g${i + 1}`, version: v, title, body: '', author: '기획자', createdAt: t, updatedAt: t, replies: [], history: [] }));
+      const file = join(OUT, 'smoke-groups.terr.html');
+      writeFileSync(file, serializeManna(nd, blobs, { js: readFileSync('out/manna/manna-runtime.js', 'utf8'), css: readFileSync('out/manna/manna-runtime.css', 'utf8') }));
+      const { page } = await openDoc(file);
+      page.on('dialog', (d) => d.accept());
+      const names = (sel: string) => page.$$eval(`${sel} .card-name`, (els) => els.map((e) => e.textContent).join(','));
+      const sec = (name: string) => `.cgroup[aria-label="그룹 ${name}"]`;
+      const drag = async (from: string, to: string, at: 'top' | 'mid' = 'mid') => {
+        const a = (await (await page.$(from))!.boundingBox())!;
+        const b = (await (await page.$(to))!.boundingBox())!;
+        await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(b.x + b.width / 2, b.y + (at === 'top' ? 4 : b.height / 2), { steps: 8 });
+        await page.mouse.up();
+      };
+      check('그룹이 없으면 순서대로 — 보기 단추 없음', !(await page.$('.cgroups')) && !(await page.$('button[aria-label="그룹별로 보기"]')) && (await names('.cards')) === '하나,둘,셋,넷');
+
+      await page.click('button[aria-label="그룹 만들기"]');
+      await (await until(() => page.$('.cgroup-input'), 3000))!.fill('holding');
+      await page.keyboard.press('Enter');
+      check('그룹 만들기 — 이름을 지으면 그룹별 보기', !!(await until(() => page.$(`${sec('holding')} .cgroup-empty`), 3000)) && (await names(sec('그룹 없음'))) === '하나,둘,셋,넷');
+
+      await drag(`${sec('그룹 없음')} .card[data-id="g2"] .grip`, `${sec('holding')} .cgroup-empty`);
+      check('카드를 끌어 그룹으로 — 번호는 그대로', !!(await until(async () => (await names(sec('holding'))) === '둘', 3000)) && (await names(sec('그룹 없음'))) === '하나,셋,넷' && ((await page.textContent(`${sec('holding')} .card .no`)) ?? '') === '2');
+      await drag(`${sec('그룹 없음')} .card[data-id="g4"] .grip`, `${sec('holding')} .card[data-id="g2"]`, 'top');
+      check('그룹 안의 자리에 놓기 — 앞에 들어가고 번호도 따라간다', !!(await until(async () => (await names(sec('holding'))) === '넷,둘', 3000)) && ((await page.textContent(`${sec('holding')} .card[data-id="g4"] .no`)) ?? '') === '2', await names(sec('holding')));
+      check('그룹 머리에 개수', ((await page.textContent(`${sec('holding')} .cgroup-toggle .count`)) ?? '') === '2');
+
+      await page.click(`${sec('holding')} .cgroup-toggle`);
+      check('접기 — 카드가 숨는다', !!(await until(async () => !(await page.$(`${sec('holding')} .card`)), 2000)) && (await page.getAttribute(`${sec('holding')} .cgroup-toggle`, 'aria-expanded')) === 'false');
+      await drag(`${sec('그룹 없음')} .card[data-id="g1"] .grip`, `${sec('holding')} .cgroup-head`);
+      check('접힌 그룹에 놓으면 그 그룹으로', !!(await until(async () => (await names(sec('그룹 없음'))) === '셋', 3000)) && ((await page.textContent(`${sec('holding')} .count`)) ?? '') === '3');
+      await page.keyboard.press('Control+z');
+      check('되돌리기', !!(await until(async () => (await names(sec('그룹 없음'))) === '하나,셋', 3000)));
+
+      await page.click('button[aria-label="번호 순서대로 보기"]');
+      check('순서대로 보기 — 접힌 그룹도 다 보이고 그룹 이름이 붙는다', !!(await until(async () => (await names('.cards')) === '하나,넷,둘,셋', 2000)) && (await page.$$('.cards .chip-group')).length === 2, await names('.cards'));
+      await page.click('button[aria-label="그룹별로 보기"]');
+      await page.click(`${sec('holding')} .cgroup-toggle`);
+
+      // 팝업에서 그룹 고르기
+      await page.click(`${sec('그룹 없음')} .card[data-id="g3"] .card-title`);
+      await page.selectOption('.popover-card select[aria-label="그룹"]', { label: 'holding' });
+      check('팝업에서 그룹을 고른다', !!(await until(async () => (await names(sec('holding'))).includes('셋'), 3000)));
+      await page.keyboard.press('Escape');
+
+      // 두 번째 그룹 — 끌어서 위로, 이름 바꾸기, 지우기
+      await page.click('button[aria-label="그룹 만들기"]');
+      await (await until(() => page.$('.cgroup-input'), 3000))!.fill('나중에');
+      await page.keyboard.press('Enter');
+      await until(() => page.$(sec('나중에')), 2000);
+      await drag(`${sec('나중에')} .cgroup-head .grip`, `${sec('holding')} .cgroup-head`, 'top');
+      const order = () => page.$$eval('.cgroup', (els) => els.map((e) => e.getAttribute('aria-label')!.slice(3)).join(','));
+      check('그룹 순서를 끌어서 바꾼다', !!(await until(async () => (await order()) === '그룹 없음,나중에,holding', 3000)), await order());
+      await page.dblclick(`${sec('나중에')} .cgroup-toggle`);
+      await (await until(() => page.$('.cgroup-input'), 3000))!.fill('보류');
+      await page.keyboard.press('Enter');
+      check('두 번 눌러 이름 바꾸기', !!(await until(() => page.$(sec('보류')), 2000)));
+      await drag(`${sec('holding')} .card[data-id="g2"] .grip`, `${sec('보류')} .cgroup-empty`);
+      await until(async () => (await names(sec('보류'))) === '둘', 3000);
+      await page.hover(`${sec('보류')} .cgroup-head`);
+      await page.click(`${sec('보류')} .cgroup-x`);
+      check('그룹을 지우면 Comment 는 그룹 없음으로', !!(await until(async () => !(await page.$(sec('보류'))) && (await names(sec('그룹 없음'))) === '하나,둘', 3000)), await names(sec('그룹 없음')));
+    },
+  },
+  {
     name: 'doc-popover',
     kind: 'doc',
     files: [new RegExp(`^${M}ui/Popover\\.tsx$`), ...shared],

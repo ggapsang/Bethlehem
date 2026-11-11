@@ -469,6 +469,29 @@ body.is-resizing-v iframe, body.is-resizing-v webview { pointer-events: none; }
   padding: var(--unit-1) var(--unit-3); border-radius: var(--unit-3); background: var(--accent); color: var(--white); font-size: var(--text-xs); font-weight: 600;
 }
 
+/* Comment 그룹 — 그룹별로 볼 때 그룹마다 머리줄과 카드 묶음 */
+.cgroups { display: flex; flex-direction: column; gap: var(--unit-3); }
+.cgroup { display: flex; flex-direction: column; gap: var(--unit-1-5); border-radius: var(--unit-2); }
+.cgroup.is-drop.is-collapsed, .cgroup.is-drop:has(.cgroup-empty) { box-shadow: 0 0 0 2px var(--accent); background: var(--accent-soft); }
+.cgroup.is-dragging { opacity: .5; }
+.cgroup-head { display: flex; align-items: center; gap: var(--unit-0-5); min-height: 28px; }
+.cgroup-head .grip { width: var(--unit-5); border-radius: var(--unit-1); }
+.cgroup-pad { width: var(--unit-5); flex: none; }
+.cgroup-toggle {
+  display: flex; align-items: center; gap: var(--unit-1); flex: 1; min-width: 0; height: 28px; padding: 0 var(--unit-1);
+  border: 0; border-radius: var(--unit-1); background: transparent; text-align: left;
+  font-size: var(--text-xs); font-weight: 700; color: var(--text-secondary); letter-spacing: .02em;
+}
+button.cgroup-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+.cgroup.is-none .cgroup-toggle { color: var(--text-tertiary); }
+.cgroup-name { min-width: 0; }
+.cgroup-input { flex: 1; width: auto; }
+.cgroup-x { opacity: 0; }
+.cgroup-head:hover .cgroup-x, .cgroup-x:focus-visible { opacity: 1; }
+.cgroup-empty { list-style: none; padding: var(--unit-2) var(--unit-3); border: 1px dashed var(--border); border-radius: var(--unit-2); color: var(--text-tertiary); font-size: var(--text-xs); }
+.chip-group { background: var(--accent-soft); color: var(--accent-text); }
+.group-select { flex: none; width: auto; max-width: 40%; height: 30px; font-size: var(--text-sm); }
+
 .detail { display: flex; flex-direction: column; gap: var(--unit-3); padding: 0 var(--unit-3) var(--unit-3); }
 .replies { list-style: none; margin: 0; padding: var(--unit-2) 0 0; display: flex; flex-direction: column; gap: var(--unit-2); border-top: 1px solid var(--border); }
 .reply { display: flex; flex-direction: column; gap: var(--unit-0-5); }

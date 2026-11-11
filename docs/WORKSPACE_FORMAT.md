@@ -24,8 +24,8 @@
 | `screens/<ID>/notes.md`, `notes-<id>.md` | 자유 노트 본문. 마크다운 그대로 |
 | `terrarium.json` 의 `doc.connections` | 연결 `[{ "id", "a", "b", "author", "at" }]`. 끝(a · b)은 `{ "kind": "comment", "screen", "ann" }`(ann = Comment id) · `{ "kind": "area", "screen", "version", "page", "box": [x, y, w, h], "name" }`(화면 뷰포트 px) · `{ "kind": "screen", "screen" }` |
 | `screens/<ID>/screen.json` | `title`(화면 이름), `notesTitle`(첫 탭 이름), `moreNotes`(탭 목록 `[{ "id", "title" }]` — 탭을 더하면 `notes-<id>.md` 도 만든다), `pins`(핀 `[{ "id", "version", "x", "y", "shape": "pin"\|"nav", "name", "author", "at" }]` — x, y 는 화면 뷰포트 px) |
-| `screens/<ID>/comments.json` | Comment 의 `title`, `assignee`(담당), `body`, `replies`, `done`(완료). 순서를 바꾸면 번호가 바뀐다 |
-| `terrarium.json` | `doc.meta.title`(문서 제목), `doc.meta.version` |
+| `screens/<ID>/comments.json` | Comment 의 `title`, `assignee`(담당), `group`(그룹 id), `body`, `replies`, `done`(완료). 순서를 바꾸면 번호가 바뀐다 |
+| `terrarium.json` | `doc.meta.title`(문서 제목), `doc.meta.version`, `doc.meta.groups`(Comment 그룹 `[{ "id", "name", "collapsed" }]` — 배열 순서가 패널 순서, `collapsed: true` 면 접힌 그룹) |
 
 `versions`, `anchor`, `shot`, `clips`, `id`, `blobs/` 는 화면 · 위치 · 그림과 묶여 있으니 고치지 않는다.
 
@@ -37,6 +37,7 @@
   "version": 2,                   // 어느 화면 버전에 단 것인가
   "title": "탭 이름",             // 없어도 된다
   "assignee": "한재준",            // 담당 — 없어도 된다. "쓴 사람 → 담당" 으로 보인다
+  "group": "k3x9…",               // 그룹 — terrarium.json 의 doc.meta.groups[].id. 없으면 그룹 없음
   "body": "## 마크다운\n- [ ] 할 일",
   "author": "이상현",
   "createdAt": "2026-10-02T03:00:00.000Z",

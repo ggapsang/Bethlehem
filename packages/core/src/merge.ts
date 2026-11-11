@@ -33,6 +33,12 @@ export function mergeDoc(base: MannaDoc, incoming: MannaDoc, baseBlobs: BlobStor
     if (b) baseBlobs.set(sha, b);
   };
 
+  // Comment 그룹 — 없는 그룹은 더한다 (이름 · 접힘은 원본 것을 둔다)
+  for (const g of incoming.meta.groups ?? []) {
+    if (!(base.meta.groups ?? []).some((x) => x.id === g.id)) (base.meta.groups ??= []).push({ ...g });
+  }
+  const groupIds = new Set((base.meta.groups ?? []).map((g) => g.id));
+
   for (const inc of incoming.screens) {
     const s = base.screens.find((x) => x.id === inc.id);
     if (!s) continue; // 원본에서 지운 화면 — 합치지 않는다
@@ -92,6 +98,13 @@ export function mergeDoc(base: MannaDoc, incoming: MannaDoc, baseBlobs: BlobStor
         a.history.push({ at: now(), by, field: 'assignee', from: a.assignee ?? '', to: ia.assignee ?? '' });
         if (ia.assignee) a.assignee = ia.assignee;
         else delete a.assignee;
+        r.updated++;
+      }
+      // 그룹 — 회신본이 옮겼고 원본이 그 뒤로 그대로면 따른다 (원본에 없는 그룹이면 두지 않는다)
+      if (theyEdited && (ia.group ?? '') !== (a.group ?? '') && !(since && a.updatedAt > since) && (!ia.group || groupIds.has(ia.group))) {
+        a.history.push({ at: now(), by, field: 'group', from: a.group ?? null, to: ia.group ?? null });
+        if (ia.group) a.group = ia.group;
+        else delete a.group;
         r.updated++;
       }
       // 완료 — 회신본에서 체크하거나 풀었으면 따른다 (원본도 그 뒤로 고쳤으면 원본)

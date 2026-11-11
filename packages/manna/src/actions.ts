@@ -537,3 +537,91 @@ export function applySiteSnapshot(screenId: string, v: number, snap: SiteSnap): 
 export function setMarkerColor(c: MarkerColor): void {
   mutate((d) => (d.meta.marker = c), { label: '마커 색' });
 }
+
+/* ── Comment 그룹 ─────────────────────────────────────────────────────
+ * 그룹은 문서 전체에 한 벌(meta.groups) — 화면마다 같은 그룹을 쓴다. Comment 는 group 에 그룹 id 를 둔다.
+ * 번호는 그룹과 상관없이 화면 버전 안의 순서 그대로다. */
+
+export const groups = () => doc.peek().meta.groups ?? [];
+
+/** 그룹 만들기 — 만든 그룹 id. 같은 이름이 있으면 그것을 돌려준다 */
+export function addGroup(name: string): string | null {
+  const n = name.trim();
+  if (!n) return null;
+  const same = groups().find((g) => g.name === n);
+  if (same) return same.id;
+  const id = uid();
+  mutate((d) => (d.meta.groups ??= []).push({ id, name: n }), { label: '그룹 만들기' });
+  return id;
+}
+
+export function renameGroup(id: string, name: string): void {
+  const g = groups().find((x) => x.id === id);
+  const n = name.trim();
+  if (!g || !n || g.name === n) return;
+  mutate(() => (g.name = n), { label: '그룹 이름' });
+}
+
+/** 접기 · 펴기 — 문서에 남는다(받는 사람도 접힌 채로 본다). 되돌리기에는 넣지 않는다 */
+export function toggleGroup(id: string): void {
+  const g = groups().find((x) => x.id === id);
+  if (!g) return;
+  mutate(() => {
+    if (g.collapsed) delete g.collapsed;
+    else g.collapsed = true;
+  }, { undoable: false });
+}
+
+/** 그룹 지우기 — 그 그룹의 Comment 는 지우지 않고 그룹 없음으로 */
+export function removeGroup(id: string): boolean {
+  const g = groups().find((x) => x.id === id);
+  if (!g) return false;
+  const d = doc.peek();
+  const members = d.screens.flatMap((s) => s.annotations.filter((a) => a.group === id));
+  if (!confirm(`"${g.name}" 그룹을 지울까요?${members.length ? ` Comment ${members.length}개는 지우지 않고 그룹 없음으로 옮깁니다.` : ''} (Ctrl+Z 로 되돌릴 수 있습니다)`)) return false;
+  mutate((x) => {
+    x.meta.groups = (x.meta.groups ?? []).filter((y) => y.id !== id);
+    if (!x.meta.groups.length) delete x.meta.groups;
+    for (const a of members) {
+      setField(a, 'group', undefined, user.peek() ?? '');
+      delete a.group;
+    }
+  }, { label: '그룹 지우기' });
+  return true;
+}
+
+/** 그룹 순서 — to 는 다른 그룹들 사이의 자리 */
+export function moveGroup(id: string, to: number): void {
+  const list = groups();
+  const g = list.find((x) => x.id === id);
+  if (!g) return;
+  const rest = list.filter((x) => x !== g);
+  rest.splice(Math.max(0, Math.min(to, rest.length)), 0, g);
+  if (rest.every((x, i) => x === list[i])) return;
+  mutate((d) => (d.meta.groups = rest), { label: '그룹 순서' });
+}
+
+/** Comment 를 그룹으로 옮긴다 (group 이 null 이면 그룹 없음).
+ * before 가 있으면 그 Comment 바로 앞으로, 없으면 그 그룹의 맨 끝(그룹이 비었으면 자리는 그대로) */
+export function moveToGroup(id: string, group: string | null, before: string | null = null): void {
+  if (needName()) return;
+  const s = screen.peek();
+  const a = s?.annotations.find((x) => x.id === id);
+  if (!s || !a) return;
+  const g = group ?? undefined;
+  const same = annotations.peek().filter((x) => x.id !== id);
+  const members = same.filter((x) => (x.group ?? undefined) === g);
+  const anchor = before ? same.find((x) => x.id === before) : null;
+  const idx = anchor ? same.indexOf(anchor) : members.length ? same.indexOf(members[members.length - 1]!) + 1 : -1;
+  const cur = annotations.peek().indexOf(a);
+  const moves = idx >= 0 && idx !== cur;
+  if ((a.group ?? undefined) === g && !moves) return;
+  const name = g ? groups().find((x) => x.id === g)?.name : '그룹 없음';
+  mutate(() => {
+    if ((a.group ?? undefined) !== g) {
+      setField(a, 'group', g, user.peek()!);
+      if (!g) delete a.group;
+    }
+    if (moves) moveAnnotation(s, id, idx);
+  }, { label: (a.group ?? undefined) === g ? '순서 변경' : `${name} 로 옮기기` });
+}

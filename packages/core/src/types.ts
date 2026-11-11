@@ -184,6 +184,8 @@ export interface Annotation {
   assignee?: string;
   /** 완료 — 지우지 않고 숨긴다. "완료 보기" 로 다시 본다. 번호는 그대로 */
   done?: { by: string; at: string };
+  /** 그룹 — meta.groups 의 id. 없으면 그룹 없음 */
+  group?: string;
   /** 마크다운. 할 일은 - [ ] 체크박스로 */
   body: string;
   clips?: Clip[];
@@ -215,6 +217,13 @@ export interface Connection {
 export const MARKER_COLORS = ['auto', 'brand', 'black', 'white', 'blue', 'amber', 'red'] as const;
 export type MarkerColor = (typeof MARKER_COLORS)[number];
 
+/** Comment 그룹 (예: holding) — 사용자가 이름을 짓는다. 접어 두면 패널에서 카드를 숨긴다 */
+export interface CommentGroup {
+  id: string;
+  name: string;
+  collapsed?: boolean;
+}
+
 export interface Participant {
   name: string;
   role?: string;
@@ -233,6 +242,8 @@ export interface MannaDoc {
     marker?: MarkerColor;
     /** 작성자가 정한 탭 배치 — 열린 탭의 순서와 숨긴 화면. 받는 사람이 처음 열면 이대로 보인다 */
     tabs?: { open: string[]; hidden: string[] };
+    /** Comment 그룹 — 문서 전체에 한 벌(화면마다 같은 그룹을 쓴다). 배열 순서가 패널에 보이는 순서 */
+    groups?: CommentGroup[];
   };
   changelog: { version: string; date: string; author: string; note: string }[];
   participants: Participant[];

@@ -29,7 +29,7 @@ export interface Miss {
 
 /* notes 는 키를 바꿨다 — 개요는 이제 기본으로 접혀 있다 (전에 펼쳐 둔 기록을 따르지 않는다) */
 const LS = {
-  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels', fullPin: 'terr.fullPanelPin', showDone: 'terr.showDone', boxes: 'terr.showBoxes', links: 'terr.showLinks',
+  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels', fullPin: 'terr.fullPanelPin', showDone: 'terr.showDone', groupView: 'terr.groupView', boxes: 'terr.showBoxes', links: 'terr.showLinks',
   tabs: (docId: string) => `terr.tabs.${docId}`,
 };
 
@@ -198,6 +198,12 @@ export const showDone = signal(lsGet(LS.showDone) === '1');
 export function setShowDone(on: boolean): void {
   showDone.value = on;
   lsSet(LS.showDone, on ? '1' : '0');
+}
+/** Comment 를 그룹별로 모아 볼지(기본) · 그룹 없이 순서대로 볼지 — 그룹이 있을 때만 의미가 있다 */
+export const groupView = signal(lsGet(LS.groupView) !== '0');
+export function setGroupView(on: boolean): void {
+  groupView.value = on;
+  lsSet(LS.groupView, on ? '1' : '0');
 }
 /** 지금 보일 Comment — 완료한 것은 "완료 보기" 일 때만. 번호는 annotations(전체) 순서 그대로다 */
 export const shownAnnotations = computed(() => (showDone.value ? annotations.value : annotations.value.filter((a) => !a.done)));

@@ -244,6 +244,20 @@ describe('merge', () => {
     expect(base.screens[0].notes).toBe('수신자 개요');
   });
 
+  it('회신본이 만든 그룹을 더하고, Comment 를 그 그룹으로 옮긴 것을 따른다', async () => {
+    const { mergeDoc } = await import('./merge');
+    const base = mk();
+    base.meta.groups = [{ id: 'g0', name: 'holding', collapsed: true }];
+    const inc: MannaDoc = JSON.parse(JSON.stringify(base));
+    inc.origin = { by: '수신자', at: '2026-10-02T00:00:00.000Z', baseUpdatedAt: base.meta.updatedAt };
+    inc.meta.groups = [{ id: 'g0', name: '이름을 바꿈' }, { id: 'g1', name: '나중에' }];
+    inc.screens[0].annotations[0].group = 'g1';
+    inc.screens[0].annotations[0].updatedAt = '2026-10-02T00:00:00.000Z';
+    mergeDoc(base, inc, new Map(), new Map());
+    expect(base.meta.groups).toEqual([{ id: 'g0', name: 'holding', collapsed: true }, { id: 'g1', name: '나중에' }]);
+    expect(base.screens[0].annotations[0].group).toBe('g1');
+  });
+
   it('양쪽이 고쳤으면 원본을 두고 회신본 본문을 답글로 남긴다', async () => {
     const { mergeDoc } = await import('./merge');
     const base = mk();

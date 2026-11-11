@@ -5,9 +5,9 @@ import { createPortal } from 'preact/compat';
 import { Camera, Circle, Copy, FileOutput, Film, MonitorPlay, Pin, Square, Trash2, X } from 'lucide-preact';
 import type { Annotation, Clip } from '@core';
 import { displayNo } from '@core';
-import { CLIP_MAX_MS, recStats, editAssignee, toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleRecording, toggleSnipRecording } from '../actions';
+import { CLIP_MAX_MS, recStats, editAssignee, moveToGroup, toggleDone, snipAvailable, addFromDraft, addReply, editBody, editReply, editTitle, removeClip, removeComment, toggleRecording, toggleSnipRecording } from '../actions';
 import type { Host } from '../host';
-import { annotations, draft, draftClip, popHidden, recording, rev, screen, selected, snipMode, snipRec, stageRef, still, toView, user, version } from '../store';
+import { annotations, doc, draft, draftClip, popHidden, recording, rev, screen, selected, snipMode, snipRec, stageRef, still, toView, user, version } from '../store';
 import { useBlobUrl } from '../stage/media';
 import { CommentLinks } from '../stage/Links';
 import { copyCommentLink } from '../links';
@@ -365,6 +365,18 @@ export function Detail({ a, host }: { a: Annotation; host: Host }) {
           defaultValue={a.assignee ?? ''}
           onChange={(e) => editAssignee(a, e.currentTarget.value)}
         />
+        {(doc.value.meta.groups?.length ?? 0) > 0 && (
+          <select
+            class="input input-sm group-select"
+            aria-label="그룹"
+            title="그룹 — 패널에서 이 그룹에 모여 보인다"
+            value={a.group && doc.value.meta.groups!.some((g) => g.id === a.group) ? a.group : ''}
+            onChange={(e) => moveToGroup(a.id, e.currentTarget.value || null)}
+          >
+            <option value="">그룹 없음</option>
+            {doc.value.meta.groups!.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        )}
       </label>
       <PeopleList />
       <MarkdownEditor

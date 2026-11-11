@@ -1,14 +1,14 @@
 /* 오른쪽 패널 — 위에 화면 개요(마크다운), 아래에 Comment 목록. 한 스크롤로 이어진다 */
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { CheckSquare, Camera, ChevronDown, ChevronRight, Copy, EyeOff, FileOutput, Film, GripVertical, MessageSquare, Plus, X } from 'lucide-preact';
+import { CheckSquare, Camera, ChevronDown, ChevronRight, Copy, EyeOff, FileOutput, Film, FolderPlus, GripVertical, Layers, ListOrdered, MessageSquare, Plus, X } from 'lucide-preact';
 import { ExportCommentsDialog, exportAsk } from './ExportComments';
 import type { Annotation, Screen } from '@core';
 import { displayNo } from '@core';
-import { toggleDone, MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, moveNoteTab, reorder, moveCommentsHere } from '../actions';
+import { toggleDone, MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, moveNoteTab, reorder, moveCommentsHere, addGroup, moveGroup, moveToGroup, removeGroup, renameGroup, toggleGroup } from '../actions';
 import type { Host } from '../host';
 import {
-  setShowDone, showDone, shownAnnotations, version, annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible, selectScreen, user,
+  doc as docSig, groupView, setGroupView, setShowDone, showDone, shownAnnotations, version, annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible, selectScreen, user,
 } from '../store';
 import { MarkdownEditor, plainText } from './editor/MarkdownEditor';
 import { ago, markState } from './labels';
@@ -218,17 +218,42 @@ function Notes({ scr }: { scr: Screen }) {
 }
 
 function Comments({ scr }: { scr: Screen }) {
+  rev.value;
   const list = shownAnnotations.value;
   const doneN = annotations.value.filter((a) => a.done).length;
   const openN = annotations.value.length - doneN;
   const listRef = useRef<HTMLOListElement>(null);
+  const groupsRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ id: string; to: number; y: number } | null>(null);
+  /** 그룹별로 볼 때 끄는 중 — 놓을 그룹(null = 그룹 없음)과 그 안에서 앞에 올 Comment */
+  const [gdrop, setGdrop] = useState<{ id: string; y: number; group: string | null; before: string | null } | null>(null);
+  /** 그룹 순서를 끄는 중 — to 는 다른 그룹들 사이의 자리 */
+  const [gmove, setGmove] = useState<{ id: string; to: number; y: number } | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const gs = docSig.value.meta.groups ?? [];
+  const grouped = gs.length > 0 && groupView.value;
 
-  /* 끌어서 순서 바꾸기 — 손잡이를 잡고 위아래로 */
-  const startDrag = (e: PointerEvent, id: string) => {
+  /** 손잡이를 잡고 끌기 — 움직일 때마다 자리를 다시 재고, 놓으면 drop */
+  const follow = (e: PointerEvent, move: (y: number) => void, drop: (y: number) => void, end: () => void) => {
     e.preventDefault();
     const handle = e.currentTarget as HTMLElement;
     handle.setPointerCapture(e.pointerId);
+    move(e.clientY);
+    const mv = (ev: PointerEvent) => move(ev.clientY);
+    const up = (ev: PointerEvent) => {
+      handle.removeEventListener('pointermove', mv);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      end();
+      if (ev.type === 'pointerup') drop(ev.clientY);
+    };
+    handle.addEventListener('pointermove', mv);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  };
+
+  /* 순서대로 볼 때 — 위아래로 끌어 순서 바꾸기 */
+  const startDrag = (e: PointerEvent, id: string) => {
     const target = (y: number) => {
       const cards = Array.from(listRef.current?.querySelectorAll<HTMLElement>(':scope > .card') ?? []).filter((c) => c.dataset.id !== id);
       return cards.filter((c) => {
@@ -236,24 +261,70 @@ function Comments({ scr }: { scr: Screen }) {
         return r.top + r.height / 2 < y;
       }).length;
     };
-    setDrag({ id, to: target(e.clientY), y: e.clientY });
-    const move = (ev: PointerEvent) => setDrag({ id, to: target(ev.clientY), y: ev.clientY });
-    const up = (ev: PointerEvent) => {
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', up);
-      handle.removeEventListener('pointercancel', up);
-      const to = target(ev.clientY);
-      setDrag(null);
-      if (ev.type === 'pointerup' && to !== list.findIndex((a) => a.id === id)) reorder(id, to);
+    follow(e, (y) => setDrag({ id, to: target(y), y }), (y) => {
+      const to = target(y);
+      if (to !== list.findIndex((a) => a.id === id)) reorder(id, to);
+    }, () => setDrag(null));
+  };
+
+  /* 그룹별로 볼 때 — 다른 그룹 위에 놓으면 그 그룹으로 옮긴다. 접힌 그룹에 놓으면 그 그룹의 끝으로 */
+  const startGroupDrag = (e: PointerEvent, id: string) => {
+    const target = (y: number) => {
+      const secs = Array.from(groupsRef.current?.querySelectorAll<HTMLElement>(':scope > .cgroup') ?? []);
+      const sec = secs.find((el) => y < el.getBoundingClientRect().bottom) ?? secs[secs.length - 1];
+      const group = sec?.dataset.group || null;
+      if (!sec || sec.classList.contains('is-collapsed')) return { group, before: null };
+      const next = Array.from(sec.querySelectorAll<HTMLElement>(':scope > .cards > .card')).filter((c) => c.dataset.id !== id).find((c) => {
+        const r = c.getBoundingClientRect();
+        return r.top + r.height / 2 > y;
+      });
+      return { group, before: next?.dataset.id ?? null };
     };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', up);
-    handle.addEventListener('pointercancel', up);
+    follow(e, (y) => setGdrop({ id, y, ...target(y) }), (y) => {
+      const t = target(y);
+      moveToGroup(id, t.group, t.before);
+    }, () => setGdrop(null));
+  };
+
+  /* 그룹 머리의 손잡이 — 그룹 순서 바꾸기 */
+  const startMoveGroup = (e: PointerEvent, id: string) => {
+    const target = (y: number) =>
+      Array.from(groupsRef.current?.querySelectorAll<HTMLElement>(':scope > .cgroup[data-group]') ?? [])
+        .filter((el) => el.dataset.group !== id)
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top + Math.min(r.height, 40) / 2 < y;
+        }).length;
+    follow(e, (y) => setGmove({ id, to: target(y), y }), (y) => moveGroup(id, target(y)), () => setGmove(null));
+  };
+
+  const newGroup = () => {
+    let name = '새 그룹';
+    for (let k = 2; gs.some((g) => g.name === name); k++) name = `새 그룹 ${k}`;
+    const id = addGroup(name);
+    if (!id) return;
+    setGroupView(true);
+    if (!commentsOpen.peek()) toggleComments();
+    setRenaming(id);
   };
 
   // 끄는 카드는 자리를 지킨다(손잡이가 포인터를 잡고 있다). 들어갈 자리는 다른 카드들 사이에 선으로 보인다
   const others = list.filter((a) => a.id !== drag?.id);
   const lineBefore = drag && drag.to < others.length ? others[drag.to].id : null;
+  const card = (a: Annotation, grip: (e: PointerEvent, id: string) => void, dragging: boolean) => (
+    <Card a={a} scr={scr} onGrip={grip} dragging={dragging} group={grouped ? undefined : gs.find((g) => g.id === a.group)?.name} />
+  );
+
+  /* 그룹별 — 맨 위에 그룹 없음, 그 아래 그룹들(만든 순서 · 끌어서 바꾼 순서) */
+  const sections: { id: string | null; name: string; collapsed: boolean; cards: Annotation[] }[] = grouped
+    ? [
+      { id: null, name: '그룹 없음', collapsed: false, cards: list.filter((a) => !a.group || !gs.some((g) => g.id === a.group)) },
+      ...gs.map((g) => ({ id: g.id, name: g.name, collapsed: !!g.collapsed, cards: list.filter((a) => a.group === g.id) })),
+    ]
+    : [];
+  const movingGroups = gs.filter((g) => g.id !== gmove?.id);
+  const groupLineBefore = gmove && gmove.to < movingGroups.length ? movingGroups[gmove.to]!.id : null;
+
   return (
     <section class={`comments ${commentsOpen.value ? 'is-open' : ''}`}>
       <div class="section-row">
@@ -273,6 +344,20 @@ function Comments({ scr }: { scr: Screen }) {
             <CheckSquare {...ICON} size={14} /> 완료 {doneN} {showDone.value ? '숨기기' : '보기'}
           </button>
         )}
+        {gs.length > 0 && (
+          <button
+            type="button"
+            class="btn-icon btn-xs"
+            aria-label={grouped ? '번호 순서대로 보기' : '그룹별로 보기'}
+            title={grouped ? '그룹 없이 번호 순서대로 보기' : '그룹별로 모아 보기'}
+            onClick={() => setGroupView(!grouped)}
+          >
+            {grouped ? <ListOrdered {...ICON} size={15} /> : <Layers {...ICON} size={15} />}
+          </button>
+        )}
+        <button type="button" class="btn-icon btn-xs" title="Comment 그룹 만들기 — 카드를 끌어 그룹으로 옮긴다" aria-label="그룹 만들기" onClick={newGroup}>
+          <FolderPlus {...ICON} size={15} />
+        </button>
         {annotations.value.length > 0 && (
           <button type="button" class="btn-icon btn-xs" title="Comment 내보내기 — 골라서 HTML 한 장으로" aria-label="Comment 내보내기" onClick={() => (exportAsk.value = true)}>
             <FileOutput {...ICON} size={15} />
@@ -284,22 +369,114 @@ function Comments({ scr }: { scr: Screen }) {
       </div>
       <OtherVersions scr={scr} />
       <ExportCommentsDialog />
-      {commentsOpen.value && (
-      <div class="cards-scroll">
-      <ol class="cards" ref={listRef}>
-        {list.map((a) => (
-          <Fragment key={a.id}>
-            {lineBefore === a.id && <li class="drop-line" aria-hidden="true" />}
-            <Card a={a} scr={scr} onGrip={startDrag} dragging={drag?.id === a.id} />
-          </Fragment>
-        ))}
-        {drag && drag.to >= others.length && <li class="drop-line" aria-hidden="true" />}
-      </ol>
-      </div>
+      {commentsOpen.value && !grouped && (
+        <div class="cards-scroll">
+          <ol class="cards" ref={listRef}>
+            {list.map((a) => (
+              <Fragment key={a.id}>
+                {lineBefore === a.id && <li class="drop-line" aria-hidden="true" />}
+                {card(a, startDrag, drag?.id === a.id)}
+              </Fragment>
+            ))}
+            {drag && drag.to >= others.length && <li class="drop-line" aria-hidden="true" />}
+          </ol>
+        </div>
+      )}
+      {commentsOpen.value && grouped && (
+        <div class="cards-scroll">
+          <div class="cgroups" ref={groupsRef}>
+            {sections.map((sec) => {
+              const g = sec.id;
+              const here = !!gdrop && gdrop.group === g;
+              return (
+                <Fragment key={g ?? '-'}>
+                  {g && groupLineBefore === g && <div class="drop-line" aria-hidden="true" />}
+                  <section
+                    class={`cgroup ${sec.collapsed ? 'is-collapsed' : ''} ${here ? 'is-drop' : ''} ${g && gmove?.id === g ? 'is-dragging' : ''} ${g ? '' : 'is-none'}`}
+                    data-group={g ?? undefined}
+                    aria-label={`그룹 ${sec.name}`}
+                  >
+                    <div class="cgroup-head">
+                      {g ? (
+                        <span class="grip" title="끌어서 그룹 순서 바꾸기" aria-label={`${sec.name} 그룹 순서 바꾸기`} onPointerDown={(e) => startMoveGroup(e, g)}>
+                          <GripVertical {...ICON} size={14} />
+                        </span>
+                      ) : (
+                        <span class="cgroup-pad" />
+                      )}
+                      {g && renaming === g ? (
+                        <input
+                          class="note-tab-input cgroup-input"
+                          aria-label="그룹 이름"
+                          defaultValue={sec.name}
+                          ref={(el) => {
+                            if (el && el !== document.activeElement) requestAnimationFrame(() => (el.focus(), el.select()));
+                          }}
+                          onBlur={(e) => {
+                            if (!e.currentTarget.dataset.cancel) renameGroup(g, e.currentTarget.value);
+                            setRenaming(null);
+                          }}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === 'Escape') e.currentTarget.dataset.cancel = '1';
+                            if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
+                          }}
+                        />
+                      ) : g ? (
+                        <button
+                          type="button"
+                          class="cgroup-toggle"
+                          aria-expanded={!sec.collapsed}
+                          title={`${sec.collapsed ? '펴기' : '접기'} · 두 번 눌러 이름 바꾸기`}
+                          onClick={() => toggleGroup(g)}
+                          onDblClick={() => setRenaming(g)}
+                        >
+                          {sec.collapsed ? <ChevronRight {...ICON} size={14} /> : <ChevronDown {...ICON} size={14} />}
+                          <span class="cgroup-name ellipsis">{sec.name}</span>
+                          <span class="count">{sec.cards.length}</span>
+                        </button>
+                      ) : (
+                        <span class="cgroup-toggle">
+                          <span class="cgroup-name ellipsis">{sec.name}</span>
+                          <span class="count">{sec.cards.length}</span>
+                        </span>
+                      )}
+                      {g && renaming !== g && (
+                        <button type="button" class="btn-icon btn-xs cgroup-x" aria-label={`${sec.name} 그룹 지우기`} title="그룹 지우기 — Comment 는 그룹 없음으로 옮긴다" onClick={() => removeGroup(g)}>
+                          <X {...ICON} size={12} />
+                        </button>
+                      )}
+                    </div>
+                    {!sec.collapsed && (
+                      <ol class="cards">
+                        {sec.cards.map((a) => (
+                          <Fragment key={a.id}>
+                            {here && gdrop!.before === a.id && <li class="drop-line" aria-hidden="true" />}
+                            {card(a, startGroupDrag, gdrop?.id === a.id)}
+                          </Fragment>
+                        ))}
+                        {here && !gdrop!.before && sec.cards.some((a) => a.id !== gdrop!.id) && <li class="drop-line" aria-hidden="true" />}
+                        {!sec.cards.some((a) => a.id !== gdrop?.id) && (
+                          <li class="cgroup-empty">{gdrop ? '여기에 놓기' : g ? '카드를 끌어다 놓으면 이 그룹으로 옮깁니다' : '없음'}</li>
+                        )}
+                      </ol>
+                    )}
+                  </section>
+                </Fragment>
+              );
+            })}
+            {gmove && gmove.to >= movingGroups.length && <div class="drop-line" aria-hidden="true" />}
+          </div>
+        </div>
       )}
       {drag && (
         <div class="drag-ghost" style={{ top: `${drag.y}px` }}>
           {displayNo(scr, list.find((a) => a.id === drag.id)!)}번 옮기는 중
+        </div>
+      )}
+      {gdrop && (
+        <div class="drag-ghost" style={{ top: `${gdrop.y}px` }}>
+          {displayNo(scr, list.find((a) => a.id === gdrop.id)!)}번 → {gdrop.group ? gs.find((g) => g.id === gdrop.group)?.name : '그룹 없음'}
         </div>
       )}
     </section>
@@ -334,7 +511,7 @@ function OtherVersions({ scr }: { scr: Screen }) {
   );
 }
 
-function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip: (e: PointerEvent, id: string) => void; dragging?: boolean }) {
+function Card({ a, scr, onGrip, dragging, group }: { a: Annotation; scr: Screen; onGrip: (e: PointerEvent, id: string) => void; dragging?: boolean; group?: string }) {
   rev.value;
   const sel = selected.value === a.id;
   const st = markState(a, visible.value, version.value?.source?.mode === 'site');
@@ -376,6 +553,7 @@ function Card({ a, scr, onGrip, dragging }: { a: Annotation; scr: Screen; onGrip
             <span class="card-sub">
               <Who a={a} />
               {!a.anchor && <span class="chip">화면 전체</span>}
+              {group && <span class="chip chip-group" title="그룹">{group}</span>}
           {st === 'other' && <span class="chip chip-hint" title="다른 화면 상태에 있습니다. 누르면 그 상태로 이동합니다."><EyeOff {...ICON} size={12} /> 다른 상태</span>}
           {st === 'capture' && <span class="chip chip-capture" title="그린 영역을 찍어 둔 Comment 입니다. 실시간 화면에는 마커가 붙지 않습니다."><Camera {...ICON} size={12} /> 캡처</span>}
             </span>
