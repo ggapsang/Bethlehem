@@ -320,7 +320,7 @@ export const appSpecs: Spec[] = [
   {
     name: 'app-shell',
     kind: 'app',
-    files: [new RegExp(`^${B}(main/menu\\.ts|renderer/src/(Guide|menu|main)\\.tsx?)$`), /^docs\/USER_GUIDE\.md$/],
+    files: [new RegExp(`^${B}(main/(menu|tray)\\.ts|renderer/src/(Guide|menu|main)\\.tsx?)$`), /^docs\/USER_GUIDE\.md$/],
     async run() {
       const { app, page } = await appWithScreen({ screen: false });
       try {
@@ -330,6 +330,43 @@ export const appSpecs: Spec[] = [
         await until(async () => (await getTitle()).startsWith('terr-ws-'), 5000);
         const title = await getTitle();
         check('창 제목 — 열린 곳 이름 — Terrarium', / — Terrarium$/.test(title) && title.startsWith('terr-ws-'), title);
+        // 최소화하면 작업 표시줄 대신 알림 영역(트레이)으로 — 아이콘을 누르면 다시 뜬다
+        type T = { tray: { isDestroyed(): boolean }; reveal(): void; menu(): { items: { label: string; click(): void }[] } };
+        const tray = (fn: string) => app.evaluate((_e, f) => {
+          const t = (globalThis as unknown as { __terrTray: T }).__terrTray;
+          if (f === 'labels') return t.menu().items.map((i) => i.label).join('|');
+          if (f === 'toggle') return t.menu().items.find((i) => i.label === '최소화하면 트레이로')!.click();
+          if (f === 'reveal') return t.reveal();
+          return !!t.tray && !t.tray.isDestroyed();
+        }, fn);
+        // 숨김은 hide 이벤트 수로 본다 — Windows 에서는 그냥 최소화한 창도 isVisible() 이 false 다
+        const win = (f: 'min' | 'state') => app.evaluate(({ BrowserWindow }, f) => {
+          const w = BrowserWindow.getAllWindows()[0];
+          const g = globalThis as unknown as { __hides?: number };
+          if (f === 'min') {
+            if (g.__hides === undefined) {
+              g.__hides = 0;
+              w.on('hide', () => (g.__hides! += 1));
+            }
+            return w.minimize();
+          }
+          return `숨김 ${g.__hides ?? 0}/${w.isMinimized() ? 'min' : w.isVisible() ? 'shown' : 'hidden'}`;
+        }, f);
+        check('알림 영역 아이콘', (await tray('alive')) === true);
+        const labels = String(await tray('labels'));
+        check('트레이 메뉴 — 창 목록 · 새 창 · 설정 · 종료', labels.startsWith(title) && ['새 창', '최소화하면 트레이로', '종료'].every((l) => labels.includes(l)), labels);
+        await win('min');
+        check('최소화하면 창이 숨는다(작업 표시줄에서 빠짐)', !!(await until(async () => (await win('state')) === '숨김 1/min', 3000)), String(await win('state')));
+        await tray('reveal');
+        check('아이콘을 누르면 다시 뜬다', !!(await until(async () => (await win('state')) === '숨김 1/shown', 3000)), String(await win('state')));
+        await tray('toggle');
+        await win('min');
+        await until(async () => String(await win('state')).endsWith('/min'), 3000);
+        await new Promise((r) => setTimeout(r, 300));
+        check('설정을 끄면 보통 최소화(숨기지 않음)', (await win('state')) === '숨김 1/min', String(await win('state')));
+        await tray('toggle');
+        await tray('reveal');
+        check('숨긴 창이 없으면 아이콘이 창을 앞으로', !!(await until(async () => (await win('state')) === '숨김 1/shown', 3000)), String(await win('state')));
         await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.find((m) => m.label.startsWith('도움말'))?.submenu?.items.find((i) => i.label === '사용자 가이드')?.click());
         check('가이드 창 — 마크다운을 그린다', !!(await until(() => page.$('.guide-win .md-render table'), 5000)));
         const f0 = await page.$eval('.guide-body', (el) => parseFloat(getComputedStyle(el).fontSize));

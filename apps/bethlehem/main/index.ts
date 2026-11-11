@@ -15,6 +15,7 @@ import type { EncodedBlob, MannaDoc } from '@core';
 import { packFolder, scanFolder, sourceChanges, type Fetcher, type PackOptions } from '@core/node/pack';
 import { IMAGE_EXT, packImage } from './image';
 import { buildMenu } from './menu';
+import { hideOnMinimize, setupTray, showWindow } from './tray';
 import { killTerminal, setupTerminal } from './terminal';
 import { SITE_PARTITION, snapshotSite, watchSite } from './site';
 import {
@@ -75,6 +76,8 @@ interface Settings {
   recentWorkspaces: Recent[];
   /** URL 로 연 문서 — 작업 폴더는 프로그램 안(userData/sites/)에 둔다 */
   recentUrls?: { url: string; dir: string; at: string }[];
+  /** 최소화하면 작업 표시줄 대신 알림 영역(트레이)으로 — 없으면 켜짐 */
+  minimizeToTray?: boolean;
 }
 const SETTINGS = () => join(app.getPath('userData'), 'settings.json');
 let settings: Settings = { recentFiles: [], recentFolders: [], recentWorkspaces: [] };
@@ -160,9 +163,7 @@ function openedElsewhere(place: string, me?: Project | null): Project | null {
   return null;
 }
 function focusProject(p: Project): void {
-  if (p.win.isMinimized()) p.win.restore();
-  p.win.show();
-  p.win.focus();
+  showWindow(p.win);
 }
 
 /** 작업 폴더가 만드는 것들 — 원본 폴더와 같은 곳이어도 화면 파일로 보지 않는다 */
@@ -283,6 +284,7 @@ ipcMain.handle('open-screen-window', (e, o: { screen: string; detach: boolean; c
   w.setMenu(null);
   w.once('ready-to-show', () => w.show());
   guardWindow(w);
+  hideOnMinimize(w);
   owner.screens.add(w);
   const wid = w.webContents.id;
   mirrorOwner.set(wid, owner);
@@ -325,6 +327,7 @@ function createWindow(open?: OpenTarget): Project {
   lastProject = p;
   w.once('ready-to-show', () => w.show());
   guardWindow(w);
+  hideOnMinimize(w);
   w.on('focus', () => (lastProject = p));
   // 프로젝트 창을 닫으면 거기서 띄운 창(빼낸 탭 · 복제 보기), 감시, 터미널도 함께
   w.on('closed', () => {
@@ -693,6 +696,15 @@ app.whenReady().then(async () => {
     callback({ video: request.frame ?? undefined });
   });
   setupTerminal((sender) => projectOf(sender)?.current?.dir ?? null);
+  setupTray(ICON, {
+    projects: () => [...projects.values()].map((p) => p.win),
+    newWindow: () => createWindow(),
+    enabled: () => settings.minimizeToTray !== false,
+    setEnabled: (on) => {
+      settings.minimizeToTray = on;
+      saveSettings().catch(() => {});
+    },
+  });
   createWindow();
 });
 
