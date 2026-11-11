@@ -1,6 +1,6 @@
 {
   "name": "terrarium",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Terrarium — 동작하는 화면을 품은 화면정의서. Bethlehem(작성 프로그램)과 Manna(내보낸 문서).",
   "license": "Apache-2.0",

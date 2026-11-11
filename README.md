@@ -28,6 +28,8 @@ Windows 설치 파일 만들기:
 npm run dist       # 빌드 → build/app 에 실행본 → release/Terrarium-Setup-<버전>.exe (NSIS, 사용자별 설치)
 ```
 
+버전별 변경은 [CHANGELOG.md](CHANGELOG.md) 에 있다. 버전 번호는 `package.json` 의 `version` 이고, 올리라고 할 때만 올린다.
+
 설치본에는 예시 문서 하나(`apps/bethlehem/resources/examples` — modu.daim.co.kr URL 화면)가 들어 있다. 첫 화면의 **예시 문서** 를 누르면 문서 폴더의 `Terrarium 예시` 에 복사해 연다. 코드 서명은 하지 않으므로 처음 실행할 때 SmartScreen 이 묻는다.
 
 명령줄로 굽기:
