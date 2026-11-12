@@ -1,15 +1,16 @@
-/* 화면 막대 — 탭 아래. 지금 화면의 버전(시간적 상태)·페이지·실행 상태와 화면에 대한 조작 (Terrarium UI/UX 가이드 §10·§16)
- * 툴바에는 문서 수준의 것만 남기고, 화면에 붙은 조작(일시정지·녹화·마커 색·배율·전체화면)은 여기에 둔다.
- * versionTools 는 버전 칩 옆(Bethlehem: 새 버전), screenActions 는 끝(Bethlehem: 화면 지우기).
+/* 화면 막대 — 툴바 한 줄의 탭 오른쪽. 지금 화면의 버전(시간적 상태)·페이지·실행 상태와 화면에 대한 조작 (Terrarium UI/UX 가이드 §10·§16)
+ * 문서 수준의 것은 툴바 양 끝에, 화면에 붙은 조작(피커·일시정지·녹화·마커·배율·전체화면)은 여기에 둔다. 전체화면에서는 화면 위쪽 끝에 마우스를 대면 뜬다.
+ * versionTools 는 버전 칩 옆(Bethlehem: 새 버전), screenActions 는 끝.
  */
 import type { ComponentChildren } from 'preact';
-import { MapPin, Navigation, SquareDashedMousePointer, RotateCw, Pipette, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus } from 'lucide-preact';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { MapPin, Navigation, SquareDashedMousePointer, RotateCw, Pipette, Maximize2, Minimize2, Minus, PanelRight, Pause, Play, Plus, Proportions, Ellipsis } from 'lucide-preact';
 import type { Screen, ScreenVersion } from '@core';
 import { pinTool, setShowBoxes, showBoxes, fullPanelPinned, setFullPanelPinned, draft, fitMode, fullscreen, mode, setFitMode, paused, picking, recording, rev, selectScreen, zoom, zoomStep } from '../store';
 import { BackChip, ScreenLinksMenu } from './Links';
 import { MarkerColorPicker, RecordButton, enterFullscreen } from '../ui/Toolbar';
 
-const ICON = { size: 18, strokeWidth: 1.5 };
+const ICON = { size: 17, strokeWidth: 1.5 };
 
 export interface StageHeaderProps {
   scr: Screen;
@@ -61,8 +62,8 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
           </button>
         ))}
         {v.v !== scr.versions[scr.versions.length - 1]!.v && (
-          <button type="button" class="btn btn-sm ver-old" title="예전 버전을 보고 있습니다 — 여기서 단 Comment 는 이 버전에 붙습니다" onClick={() => selectScreen(scr.id, scr.versions[scr.versions.length - 1]!.v)}>
-            예전 v{v.v} 보는 중 · 최신 v{scr.versions[scr.versions.length - 1]!.v} 로
+          <button type="button" class="btn btn-sm ver-old" title={`예전 v${v.v} 를 보고 있습니다 — 여기서 단 Comment 는 이 버전에 붙습니다. 누르면 최신으로`} onClick={() => selectScreen(scr.id, scr.versions[scr.versions.length - 1]!.v)}>
+            최신 v{scr.versions[scr.versions.length - 1]!.v} 로
           </button>
         )}
       </div>
@@ -80,7 +81,22 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
       )}
       <BackChip />
       <span class="grow" />
-      <span class={`sc-state sc-${state.tone}`}><span class="sc-dot" aria-hidden="true" />{state.text}</span>
+      <span class={`sc-state sc-${state.tone}`} title={state.text}><span class="sc-dot" aria-hidden="true" /><span class="sc-state-text">{state.text}</span></span>
+      <button
+        type="button"
+        class={`btn-icon ${mode.value === 'annotate' ? 'is-on' : ''}`}
+        aria-pressed={mode.value === 'annotate'}
+        aria-label="피커"
+        title={mode.value === 'annotate' ? '피커 끄기 — 화면을 직접 조작한다' : '피커 — 화면의 요소를 골라 Comment 를 단다 (Ctrl 을 누르고 있는 동안에도)'}
+        onClick={() => {
+          if (mode.value === 'annotate') {
+            mode.value = 'view';
+            draft.value = null;
+          } else mode.value = 'annotate';
+        }}
+      >
+        <Pipette {...ICON} />
+      </button>
       <span class="sc-sep" />
       {!image && (
         <button
@@ -100,6 +116,7 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
         </button>
       )}
       {!image && <RecordButton />}
+      <MoreTools>
       <MarkerColorPicker />
       <button
         type="button"
@@ -121,10 +138,17 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
         </button>
       </div>
       <span class="sc-sep" />
-      <div class="seg seg-sm" role="radiogroup" aria-label="화면 맞춤">
-        <button type="button" role="radio" aria-checked={fitMode.value === 'fit'} class="seg-btn" title="여백을 두고 화면 비율 그대로" onClick={() => setFitMode('fit')}>여백</button>
-        <button type="button" role="radio" aria-checked={fitMode.value === 'fill'} class="seg-btn" title="탭을 꽉 채운다 — 화면 높이를 탭에 맞춰 다시 배치한다" onClick={() => setFitMode('fill')}>꽉 채움</button>
-      </div>
+      <button
+        type="button"
+        class={`btn-icon ${fitMode.value === 'fill' ? 'is-on-soft' : ''}`}
+        aria-pressed={fitMode.value === 'fill'}
+        aria-label="꽉 채움"
+        title={fitMode.value === 'fill' ? '꽉 채움 — 누르면 여백을 두고 화면 비율 그대로' : '여백 — 누르면 탭을 꽉 채운다 (화면 높이를 탭에 맞춰 다시 배치한다)'}
+        onClick={() => setFitMode(fitMode.value === 'fill' ? 'fit' : 'fill')}
+      >
+        <Proportions {...ICON} />
+      </button>
+      </MoreTools>
       <div class="zoom" role="group" aria-label="배율">
         <button type="button" class="btn-icon" aria-label="축소" title="축소 (Ctrl+휠)" onClick={() => zoomStep(-1, scale)}><Minus {...ICON} /></button>
         <button
@@ -139,18 +163,6 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
         <button type="button" class="btn-icon" aria-label="확대" title="확대 (Ctrl+휠)" onClick={() => zoomStep(1, scale)}><Plus {...ICON} /></button>
       </div>
       {fullscreen.value && (
-        <button
-          type="button"
-          class={`btn-icon ${mode.value === 'annotate' ? 'is-on-soft' : ''}`}
-          aria-pressed={mode.value === 'annotate'}
-          aria-label="피커"
-          title="피커 (Ctrl 을 누르고 있어도 됩니다)"
-          onClick={() => (mode.value = mode.value === 'annotate' ? 'view' : 'annotate')}
-        >
-          <Pipette {...ICON} />
-        </button>
-      )}
-      {fullscreen.value && (
         <button type="button" class={`btn-icon ${fullPanelPinned.value ? 'is-on-soft' : ''}`} aria-pressed={fullPanelPinned.value} aria-label="노트·Comment 패널 고정" title="패널 고정 — 풀면 오른쪽 끝에 마우스를 댈 때만 뜬다" onClick={() => setFullPanelPinned(!fullPanelPinned.value)}>
           <PanelRight {...ICON} />
         </button>
@@ -161,6 +173,31 @@ export function StageHeader({ scr, v, page, onHome, onReload, siteView, scale, v
         <button type="button" class="btn-icon" aria-label="전체화면" title="전체화면 (Esc 로 나가기)" onClick={enterFullscreen}><Maximize2 {...ICON} /></button>
       )}
       {screenActions}
+    </div>
+  );
+}
+
+/** 덜 자주 쓰는 화면 도구(마커 · 박스 · 링크 · 핀 · 맞춤) — 툴바 줄이 넉넉하면 그 자리에 그대로, 좁으면 ⋯ 단추 아래 한 줄로 접힌다(styles.css @container bar) */
+function MoreTools({ children }: { children: ComponentChildren }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  return (
+    <div class={`sc-more-wrap ${open ? 'is-open' : ''}`} ref={ref}>
+      <button type="button" class="btn-icon sc-more" aria-haspopup="true" aria-expanded={open} aria-label="화면 도구 더 보기" title="마커 색 · 박스 · 링크 · 핀 · 맞춤" onClick={() => setOpen(!open)}>
+        <Ellipsis {...ICON} />
+      </button>
+      <div class="sc-opt">{children}</div>
     </div>
   );
 }

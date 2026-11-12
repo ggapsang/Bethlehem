@@ -11,9 +11,10 @@ import { onKeyDown, onKeyUp } from '../keys';
 import {
   annotations, blobs, doc, draft, hovered, misses, paused, picking, recording, requestReveal, reveal, revealing, rev,
   setSiteGallery, siteGalleryOn, draftClip, fitMode, markerLabels, pinNaming, pinSel, pinTool, popHidden, showBoxes, showDone, screen, selected, shotView, snipMode, snipRec, stagePage, stageRef, stageScale, stageViewport, still, version, versionKey,
-  visible, zoom, zoomStep,
+  visible, zoom, zoomStep, barSlots, fullscreen,
 } from '../store';
-import type { ComponentChildren } from 'preact';
+import type { ComponentChildren, VNode } from 'preact';
+import { createPortal } from 'preact/compat';
 import { ago } from '../ui/labels';
 import { addPin, applySiteSnapshot, stopSnipRecording } from '../actions';
 import { RecordingBar, StagePopover } from '../ui/Popover';
@@ -26,7 +27,6 @@ import { TraceLayer, type TraceInput } from './Trace';
 import { AreaDraw, LinkAreaLayer, LinkingBar } from './Links';
 import { revealAfterLoad } from '../links';
 import { whoText } from '../ui/Who';
-import { MarkerStrip } from './MarkerStrip';
 import { SiteGallery } from './SiteGallery';
 import { PinLayer } from './Pins';
 import { useBlobUrl } from './media';
@@ -664,6 +664,8 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
 
 
   if (!v || !scr) return <div class="stage stage-empty">{empty}</div>;
+  const slots = barSlots.value;
+  const inBar = (el: VNode, k: 'tabs' | 'screen') => (fullscreen.value ? el : slots[k] ? createPortal(el, slots[k]!) : null);
   const scrolls = vfit === 'width' || z != null;
 
   const frameStyle = { left: `${fit.ox}px`, top: `${fit.oy}px`, width: `${vw * fit.s}px`, height: `${vh * fit.s}px` };
@@ -692,12 +694,12 @@ export function Stage({ host, empty, tabTools, versionTools, screenActions, wind
 
   return (
     <div class="stage-col">
-      <ScreenTabs tools={tabTools} canRename={host.author} windowTools={windowTools} />
+      {/* 탭 · 화면 막대 — 툴바 한 줄 안에. 전체화면이면(툴바가 없다) 화면 위쪽 끝에 마우스를 대면 뜬다 */}
+      {inBar(<ScreenTabs tools={tabTools} canRename={host.author} windowTools={windowTools} />, 'tabs')}
       <div class="full-hot" aria-hidden="true" />
       <div class="stage-top">
-      <StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} onReload={reloadScreen}
-        siteView={host.site && isSite ? { gallery: galleryView, set: setGalleryView } : undefined} scale={fit.s} versionTools={versionTools} screenActions={screenActions} />
-      <MarkerStrip />
+      {inBar(<StageHeader scr={scr} v={v} page={live ? null : page} onHome={() => setPage(null)} onReload={reloadScreen}
+        siteView={host.site && isSite ? { gallery: galleryView, set: setGalleryView } : undefined} scale={fit.s} versionTools={versionTools} screenActions={screenActions} />, 'screen')}
       </div>
     {gallery && (
       <div class="stage stage-gallery">

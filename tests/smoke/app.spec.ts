@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
 import { parseManna } from '../../packages/core/src';
 import {
-  CHROME, SITE, appWithScreen, splashDone, visibleMarkers, check, comments, ctrlPick, launchApp, nextOpen, openScreen, screenFrame, stagePoint, tempDir, typeIn, until, wait, type Spec,
+  CHROME, SITE, appWithScreen, barClick, pinnedContext, splashDone, visibleMarkers, check, comments, ctrlPick, launchApp, nextOpen, openScreen, screenFrame, stagePoint, tempDir, typeIn, until, wait, type Spec,
 } from './lib';
 
 const B = 'apps/bethlehem/';
@@ -46,7 +46,7 @@ export const appSpecs: Spec[] = [
         check('마커 줄에 캡처로', !!(await page.$('.mk-list .mk-capture')));
         // 핀 — 작업 폴더의 screen.json 에 남는다
         await page.keyboard.press('Escape');
-        await page.click('button[aria-label="핀 꽂기"]');
+        await barClick(page, '핀 꽂기');
         const fb = (await (await page.$('.stage-frame'))!.boundingBox())!;
         await page.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2);
         await page.waitForSelector('.pin-input');
@@ -91,7 +91,7 @@ export const appSpecs: Spec[] = [
         check('DOM 사본 HTML — 스크립트 없음 · 바깥 스타일시트 없음 · 캔버스는 그림으로', !!dom && !/<script/i.test(dom) && !/<link[^>]*stylesheet/i.test(dom) && /style="[^"]*data:image\/jpeg[^"]*"[^>]*data-terr-pixels/.test(dom) && !dom.includes('terr.shot'), dom ? `${Math.round(dom.length / 1024)}KB` : '없음');
         if (dom) {
           const br = await chromium.launch({ executablePath: CHROME });
-          const ctx = await br.newContext({ viewport: { width: 1920, height: 1080 }, offline: true });
+          const ctx = await pinnedContext(br, { viewport: { width: 1920, height: 1080 }, offline: true });
           const pg = await ctx.newPage();
           const failed: string[] = [];
           pg.on('requestfailed', (r) => failed.push(r.url()));
@@ -123,7 +123,7 @@ export const appSpecs: Spec[] = [
         await wait(2500);
         const dist = join(ws, 'dist', readdirSync(join(ws, 'dist')).find((n) => n.endsWith('.terr.html'))!);
         const br = await chromium.launch({ executablePath: CHROME });
-        const rp = await (await br.newContext({ viewport: { width: 1600, height: 960 } })).newPage();
+        const rp = await (await pinnedContext(br, { viewport: { width: 1600, height: 960 } })).newPage();
         await rp.goto(pathToFileURL(dist).href);
         await rp.fill('.modal input', '수신자');
         await rp.click('.modal button[type=submit]');
@@ -247,7 +247,7 @@ export const appSpecs: Spec[] = [
         const meta = parseManna(readFileSync(distFile, 'utf8')).doc.meta.tabs;
         check('문서에 탭 배치가 들어 있다 (순서 · 숨김)', meta?.open.join(',') === layout.join(',') && meta?.hidden.join(',') === hideId, JSON.stringify(meta));
         const br = await chromium.launch({ executablePath: CHROME });
-        const rp = await (await br.newContext({ viewport: { width: 1400, height: 900 } })).newPage();
+        const rp = await (await pinnedContext(br, { viewport: { width: 1400, height: 900 } })).newPage();
         await rp.goto(pathToFileURL(distFile).href);
         await rp.fill('.modal input', '받는이').catch(() => {});
         await rp.click('.modal button[type=submit]').catch(() => {});
@@ -320,7 +320,7 @@ export const appSpecs: Spec[] = [
   {
     name: 'app-shell',
     kind: 'app',
-    files: [new RegExp(`^${B}(main/(menu|tray)\\.ts|renderer/src/(Guide|menu|main)\\.tsx?)$`), /^docs\/USER_GUIDE\.md$/],
+    files: [new RegExp(`^${B}(main/(index|menu|tray)\\.ts|renderer/src/(Guide|menu|main|bethlehem)\\.(tsx?|css))$`), /^packages\/manna\/src\/ui\/Toolbar\.tsx$/, /^docs\/USER_GUIDE\.md$/],
     async run() {
       const { app, page } = await appWithScreen({ screen: false });
       try {
@@ -330,6 +330,24 @@ export const appSpecs: Spec[] = [
         await until(async () => (await getTitle()).startsWith('terr-ws-'), 5000);
         const title = await getTitle();
         check('창 제목 — 열린 곳 이름 — Terrarium', / — Terrarium$/.test(title) && title.startsWith('terr-ws-'), title);
+        // 제목 표시줄 · 메뉴 줄 대신 툴바 한 줄 — 메뉴는 맨 앞 단추로, 단축키는 그대로
+        const bw = await app.browserWindow(page);
+        check('메뉴 줄이 없고 툴바가 맨 위', !(await bw.evaluate((w) => w.isMenuBarVisible())) && (await page.$eval('.toolbar', (el) => Math.round(el.getBoundingClientRect().top))) === 0);
+        check('창 단추 자리를 비운다', (await page.$eval('.toolbar', (el) => parseFloat(getComputedStyle(el).paddingRight))) >= 100);
+        await app.evaluate(({ Menu }) => {
+          const m = Menu.getApplicationMenu()!;
+          const orig = m.popup.bind(m);
+          (globalThis as { __pop?: unknown }).__pop = null;
+          m.popup = (o) => {
+            (globalThis as { __pop?: unknown }).__pop = { x: o?.x, y: o?.y };
+            orig(o);
+            setTimeout(() => m.closePopup(), 200);
+          };
+        });
+        await page.click('button[aria-label="메뉴"]');
+        const pop = await until(() => app.evaluate(() => (globalThis as { __pop?: { x: number; y: number } | null }).__pop), 3000);
+        check('메뉴 단추 — 창 메뉴가 단추 아래에 펼쳐진다', !!pop && pop.y >= 30 && pop.y <= 44, JSON.stringify(pop));
+        await page.waitForTimeout(300);
         // 최소화하면 작업 표시줄 대신 알림 영역(트레이)으로 — 아이콘을 누르면 다시 뜬다
         type T = { tray: { isDestroyed(): boolean }; reveal(): void; menu(): { items: { label: string; click(): void }[] } };
         const tray = (fn: string) => app.evaluate((_e, f) => {
@@ -367,8 +385,12 @@ export const appSpecs: Spec[] = [
         await tray('toggle');
         await tray('reveal');
         check('숨긴 창이 없으면 아이콘이 창을 앞으로', !!(await until(async () => (await win('state')) === '숨김 1/shown', 3000)), String(await win('state')));
-        await app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.find((m) => m.label.startsWith('도움말'))?.submenu?.items.find((i) => i.label === '사용자 가이드')?.click());
-        check('가이드 창 — 마크다운을 그린다', !!(await until(() => page.$('.guide-win .md-render table'), 5000)));
+        // F1 — 메뉴 줄이 없어도 메뉴의 단축키는 창이 받는다 (before-input-event)
+        await (await app.browserWindow(page)).evaluate((w) => {
+          w.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F1' });
+          w.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F1' });
+        });
+        check('F1 → 가이드 창 — 마크다운을 그린다', !!(await until(() => page.$('.guide-win .md-render table'), 5000)));
         const f0 = await page.$eval('.guide-body', (el) => parseFloat(getComputedStyle(el).fontSize));
         await page.click('.guide-win button[aria-label="글자 크게"]');
         check('가이드 글자 크기', (await page.$eval('.guide-body', (el) => parseFloat(getComputedStyle(el).fontSize))) > f0);
@@ -779,7 +801,7 @@ export const appSpecs: Spec[] = [
         check('돌아가기 — 원래 탭 · Comment', !!(await until(async () => !!(await page.$('.tab[data-id="SCR-002"].is-on')) && ((await page.textContent('.popover-card').catch(() => '')) ?? '').includes('제품 쪽 화면'), 8000)));
         await page.keyboard.press('Escape');
         // Comment 없이 — 영역끼리 (탭과 상관없이)
-        await page.click('button[aria-label="연결"]');
+        await barClick(page, '연결');
         await page.click('.link-menu .popover-item:has-text("영역을 그려서 잇기")');
         const drag = async (x0: number, y0: number, x1: number, y1: number) => {
           const a = await stagePoint(page, x0, y0);
@@ -815,13 +837,13 @@ export const appSpecs: Spec[] = [
         check('화면 막대의 연결 수', ((await page.textContent('.link-count')) ?? '') === '2');
         // 화면의 연결 영역 — 숨기기 / 보이기 (숨겨도 연결은 그대로, 따라온 영역은 잠깐 보인다)
         await wait(2500);
-        await page.click('button[aria-label="연결"]');
+        await barClick(page, '연결');
         await page.click('.link-menu [role=menuitemcheckbox]');
         check('끄면 화면의 연결 영역이 숨는다', !!(await until(async () => (await page.$$('.link-area')).length === 0, 3000)));
         await page.click('.link-menu .link-row:has-text("SCR-001 영역")');
         check('숨겨도 연결을 따라온 영역은 반짝이는 동안 보인다', !!(await until(async () => !!(await page.$('.tab[data-id="SCR-001"].is-on')) && !!(await page.$('.link-area.is-flash')), 5000)));
         check('반짝임이 끝나면 다시 숨는다', !!(await until(async () => (await page.$$('.link-area')).length === 0, 5000)));
-        await page.click('button[aria-label="연결"]');
+        await barClick(page, '연결');
         await page.click('.link-menu [role=menuitemcheckbox]');
         await page.keyboard.press('Escape');
         check('켜면 다시 보인다', !!(await until(() => page.$('.link-area'), 3000)));
@@ -831,7 +853,7 @@ export const appSpecs: Spec[] = [
         await wait(2500);
         const dist = join(ws, 'dist', readdirSync(join(ws, 'dist')).find((n) => n.endsWith('.terr.html'))!);
         const br = await chromium.launch({ executablePath: CHROME });
-        const rp = await (await br.newContext({ viewport: { width: 1600, height: 960 } })).newPage();
+        const rp = await (await pinnedContext(br, { viewport: { width: 1600, height: 960 } })).newPage();
         await rp.goto(pathToFileURL(dist).href);
         await rp.fill('.modal input', '수신자');
         await rp.click('.modal button[type=submit]');
@@ -1042,6 +1064,7 @@ c.addEventListener('pointerdown', () => {
         await page.keyboard.type('- [ ] 할 일 <script>x</script>');
         await page.keyboard.press('Control+Enter');
         await until(async () => ((await page.textContent('.cards')) ?? '').includes('요소 쪽'), 8000);
+        await page.keyboard.press('Escape'); // 방금 단 Comment 의 팝업이 패널 카드를 가리지 않게
         // 팝업의 단추 — 그 Comment 하나만
         await page.click('.cards > .card:has-text("캡처 쪽")');
         await page.click('.popover-card button[aria-label="이 Comment 내보내기"]');
@@ -1065,7 +1088,7 @@ c.addEventListener('pointerdown', () => {
         check('본문 마크다운 — 굵게 · 할 일, HTML 은 글자로', html2.includes('<b>굵게</b>') && /class="task/.test(html2) && html2.includes('&lt;script&gt;x&lt;/script&gt;'));
         // 브라우저로 그대로 열린다 (오프라인)
         const br = await chromium.launch({ executablePath: CHROME });
-        const pg = await (await br.newContext({ viewport: { width: 1000, height: 900 }, offline: true })).newPage();
+        const pg = await (await pinnedContext(br, { viewport: { width: 1000, height: 900 }, offline: true })).newPage();
         const failed: string[] = [];
         pg.on('requestfailed', (r) => failed.push(r.url()));
         await pg.goto(pathToFileURL(join(out, two!)).href);

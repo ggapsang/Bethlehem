@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { _electron as electron, chromium, type Browser, type ElectronApplication, type Frame, type Page } from 'playwright-core';
+import { _electron as electron, chromium, type Browser, type BrowserContext, type BrowserContextOptions, type ElectronApplication, type Frame, type Page } from 'playwright-core';
 
 export const ROOT = resolve('.');
 export const OUT = resolve('out/smoke');
@@ -17,6 +17,21 @@ export const CHROME = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/usr/bin/google-chrome',
 ].find((p) => p && existsSync(p))!;
+
+/* 패널 — 대부분의 확인은 카드를 바로 누르므로 붙여 둔 채로 시작한다 (마우스를 대면 뜨는 패널은 doc-panel-modes 에서). 이미 정해 두었으면 그대로 */
+export const pinPanel = () => {
+  try {
+    if (!localStorage.getItem('terr.panelMode')) localStorage.setItem('terr.panelMode', 'pin');
+  } catch {
+    /* 파일 주소 · 막힌 저장소 */
+  }
+};
+/** 문서를 받는 사람의 브라우저 맥락 — 패널은 붙여 둔 채로 */
+export async function pinnedContext(br: Browser, o: BrowserContextOptions): Promise<BrowserContext> {
+  const ctx = await br.newContext(o);
+  await ctx.addInitScript(pinPanel);
+  return ctx;
+}
 
 /* ── 결과 ─────────────────────────────────────────────────────────── */
 export const results: { spec: string; name: string; ok: boolean; detail: string }[] = [];
@@ -108,6 +123,13 @@ export async function typeIn(page: Page, sel: string, text: string) {
   await page.keyboard.type(text);
 }
 
+/** 화면 막대의 단추 — 툴바 줄이 좁아 ⋯ 아래로 접혀 있으면 ⋯ 를 먼저 편다 */
+export async function barClick(page: Page, label: string): Promise<void> {
+  const sel = `button[aria-label="${label}"]`;
+  if (!(await page.isVisible(sel)) && (await page.isVisible('button[aria-label="화면 도구 더 보기"]'))) await page.click('button[aria-label="화면 도구 더 보기"]');
+  await page.click(sel);
+}
+
 /** 펼침 메뉴가 잘리지 않고 실제로 보이는가 */
 export async function menuVisible(page: Page, label: string): Promise<boolean> {
   await page.click(`button[aria-label="${label}"]`);
@@ -143,6 +165,7 @@ export async function openDoc(file = DOC, name = '검증봇', frame = true): Pro
   const ctx = await (await browser).newContext({ viewport: { width: 1600, height: 960 }, acceptDownloads: true });
   running.getStore()?.cleanup.push(() => ctx.close());
   ctx.setDefaultTimeout(8000);
+  await ctx.addInitScript(pinPanel);
   await ctx.addInitScript(() => {
     Object.defineProperty(window, 'showSaveFilePicker', { value: undefined });
     if (window.top !== window) return;
@@ -197,6 +220,10 @@ export async function launchApp(ud: string, grant: string[]): Promise<{ app: Ele
   app.on('window', (w) => w.setDefaultTimeout(8000));
   const page = await app.firstWindow();
   page.setDefaultTimeout(8000);
+  await page.waitForLoadState('domcontentloaded');
+  // 새 사용자 데이터 — 패널을 붙여 두고 다시 띄운다 (띄우는 창도 같은 저장소)
+  await page.evaluate(pinPanel);
+  await page.reload();
   await page.waitForLoadState('domcontentloaded');
   return { app, page };
 }

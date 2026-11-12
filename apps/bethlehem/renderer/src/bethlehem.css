@@ -122,3 +122,13 @@
 .recent-at { white-space: nowrap; }
 /* 버전 줄 — 원본 폴더가 바뀌었다 */
 .src-stale { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--warning-600); border-color: currentColor; }
+
+/* ── 제목 표시줄 대신 툴바 한 줄 ──
+   창 단추(최소화 · 최대화 · 닫기)가 오른쪽 끝에 얹히므로 그만큼 비워 두고, 빈 곳을 끌면 창이 움직인다(두 번 누르면 최대화). */
+.win-overlay .toolbar {
+  -webkit-app-region: drag;
+  padding-left: calc(env(titlebar-area-x, 0px) + var(--unit-2));
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px)) + var(--unit-2));
+}
+.win-overlay .toolbar :is(button, input, select, label, a, [role="separator"], .tab, .tb-titlebox, .popover, .seg, .zoom, .split, .ver-chips),
+.win-overlay :is(.modal-backdrop, .popover, .toast, .tab-menu, .drop-veil) { -webkit-app-region: no-drag; }

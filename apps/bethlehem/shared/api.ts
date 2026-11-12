@@ -98,6 +98,10 @@ export interface BethlehemApi {
   onMenu(cb: (cmd: MenuCommand) => void): void;
   /** 창 제목 · 저장 안 한 고침 · 열린 곳(같은 곳을 두 창에서 열지 않게) */
   setState(s: { title: string; dirty: boolean; place?: string | null }): void;
+  /** 창 메뉴(파일 · 편집 · 화면 · 보기 · 도움말)를 그 자리(창 좌표)에 펼친다 — 메뉴 줄 대신 툴바의 메뉴 단추 */
+  popupMenu(at: { x: number; y: number }): void;
+  /** 툴바가 대신하는 제목 표시줄 — 창 단추(최소화 · 최대화 · 닫기)의 바탕 · 글자 색을 테마에 맞춘다 */
+  titleBar(o: { dark: boolean }): void;
   onRequestSave(cb: () => void): void;
   closeNow(): void;
 }

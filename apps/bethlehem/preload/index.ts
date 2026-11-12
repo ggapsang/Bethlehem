@@ -59,6 +59,8 @@ const api: BethlehemApi = {
   toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
   onMenu: (cb) => on('menu', cb as never),
   setState: (s) => ipcRenderer.send('set-state', s),
+  popupMenu: (at) => ipcRenderer.send('menu-popup', at),
+  titleBar: (o) => ipcRenderer.send('title-bar', o),
   onRequestSave: (cb) => on('request-save', cb),
   closeNow: () => ipcRenderer.send('close-now'),
 };

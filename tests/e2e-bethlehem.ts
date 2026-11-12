@@ -50,6 +50,12 @@ async function launch(): Promise<{ app: ElectronApplication; page: Page }> {
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
+  // 패널은 붙여 둔 채로 — 처음 한 번만 (사용자 데이터 폴더를 이어 쓰므로 다시 띄울 때는 그대로)
+  if (!(await page.evaluate(() => localStorage.getItem('terr.panelMode')))) {
+    await page.evaluate(() => localStorage.setItem('terr.panelMode', 'pin'));
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+  }
   return { app, page };
 }
 
@@ -420,6 +426,7 @@ async function main() {
   const dist = join(WS, 'dist', distFile()!);
   const browser = await chromium.launch({ executablePath: CHROME });
   const rp = await (await browser.newContext({ viewport: { width: 1600, height: 960 } })).newPage();
+  await rp.context().addInitScript(() => { try { if (!localStorage.getItem('terr.panelMode')) localStorage.setItem('terr.panelMode', 'pin'); } catch {} });
   await rp.goto(pathToFileURL(dist).href);
   await rp.fill('.modal input', '수신자');
   await rp.click('.modal button[type=submit]');

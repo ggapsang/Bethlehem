@@ -6,19 +6,25 @@ import '@manna/styles.css';
 import './bethlehem.css';
 import { App } from '@manna/App';
 import icon from '@manna/assets/favicon.png';
-import { askName, dirty, doc, rev, screenId, user, versionNo } from '@manna/store';
+import { effect } from '@preact/signals';
+import { askName, dirty, doc, rev, screenId, theme, user, versionNo } from '@manna/store';
 import type { WindowTools } from '@manna/stage/ScreenTabs';
 import { ImportDialog } from './ImportDialog';
 import { docAsk, handleDrop, host, importing, mode, openDocument, openFolder, openUrl, placeName, rememberScreen, save, start, urlAsk } from './session';
 import { channelName, mirrorHost, startMainSync, startMirror } from './sync';
 import { runMenu } from './menu';
-import { AddScreenMenu, DeleteScreenButton, DocTools, NewVersionMenu } from './Tools';
+import { AddScreenMenu, DocTools, NewVersionMenu } from './Tools';
 import { UrlDialog } from './UrlDialog';
 import { DocChoice, Welcome } from './Welcome';
 import { GuideWindow, guideOpen } from './Guide';
 import { TerminalPanel, termOpen } from './Terminal';
 
 const api = window.bethlehem;
+
+/* 창 제목 표시줄은 툴바 한 줄이 대신한다 — 창 단추 색을 테마에 맞추고, 메뉴는 툴바 맨 앞 단추로 */
+effect(() => api.titleBar({ dark: theme.value === 'dark' }));
+if (!/Mac/i.test(navigator.platform)) document.documentElement.classList.add('win-overlay');
+const appMenu = (x: number, y: number) => api.popupMenu({ x, y });
 
 /** 탭을 새 창으로 빼기 · 복제 보기 — 띄운 창은 본 창과 문서를 나눠 쓴다(sync.ts) */
 const windowTools: WindowTools = {
@@ -79,7 +85,7 @@ function Bethlehem() {
 
   return (
     <>
-      <App host={host} windowTools={windowTools} start={<DocTools />} tabTools={<AddScreenMenu />} versionTools={<NewVersionMenu />} screenActions={<DeleteScreenButton />} empty={<Welcome />} bottom={<TerminalPanel />} />
+      <App host={host} appMenu={appMenu} windowTools={windowTools} start={<DocTools />} tabTools={<AddScreenMenu />} versionTools={<NewVersionMenu />} empty={<Welcome />} bottom={<TerminalPanel />} />
       {importing.value && <ImportDialog key={importing.value.dir + importing.value.screenId} target={importing.value} />}
       {urlAsk.value && <UrlDialog screenId={urlAsk.value.screenId} open={urlAsk.value.open} />}
       {docAsk.value && <DocChoice />}
@@ -102,7 +108,7 @@ function Mirror() {
   useEffect(() => {
     document.title = s ? `${s.id} ${s.title} — Terrarium` : 'Terrarium';
   }, [s?.id, s?.title]);
-  return <App host={mirrorAt} />;
+  return <App host={mirrorAt} appMenu={appMenu} />;
 }
 
 const q = new URLSearchParams(location.search);

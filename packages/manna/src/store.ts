@@ -29,7 +29,7 @@ export interface Miss {
 
 /* notes 는 키를 바꿨다 — 개요는 이제 기본으로 접혀 있다 (전에 펼쳐 둔 기록을 따르지 않는다) */
 const LS = {
-  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels', fullPin: 'terr.fullPanelPin', showDone: 'terr.showDone', groupView: 'terr.groupView', boxes: 'terr.showBoxes', links: 'terr.showLinks',
+  theme: 'manna.theme', user: 'manna.user', panelW: 'manna.panelW', panel: 'manna.panel', panelMode: 'terr.panelMode', notes: 'terr.notesOpen', comments: 'terr.commentsOpen', titleW: 'terr.titleW', notesRatio: 'terr.notesRatio', fit: 'terr.fit', labels: 'terr.markerLabels', fullPin: 'terr.fullPanelPin', showDone: 'terr.showDone', groupView: 'terr.groupView', boxes: 'terr.showBoxes', links: 'terr.showLinks',
   tabs: (docId: string) => `terr.tabs.${docId}`,
 };
 
@@ -92,11 +92,17 @@ export const toast = signal<{ text: string; tone: 'info' | 'error'; action?: Toa
 export type SaveKind = 'idle' | 'pending' | 'saving' | 'saved' | 'local' | 'error';
 export const saveState = signal<{ kind: SaveKind; where?: string; at?: number; message?: string }>({ kind: 'idle' });
 export const fullscreen = signal(false);
-export const panelOpen = signal(lsGet(LS.panel) !== '0');
+/** 오른쪽 노트·Comment 패널 — 'pin' 붙여 두기(화면이 그만큼 줄어든다) · 'auto' 오른쪽 줄에 마우스를 대거나 패널에서 작업하는 동안만 화면 위로 뜬다 · 'hide' 숨김
+ * 예전 manna.panel 이 '0'(닫아 둠)이었으면 숨김으로 시작한다 */
+export type PanelMode = 'pin' | 'auto' | 'hide';
+const savedPanel = lsGet(LS.panelMode);
+export const panelMode = signal<PanelMode>(savedPanel === 'pin' || savedPanel === 'auto' || savedPanel === 'hide' ? savedPanel : lsGet(LS.panel) === '0' ? 'hide' : 'auto');
+/** 툴바 한 줄에 탭 · 화면 막대가 들어갈 자리 — 툴바가 그리면 채워지고, 스테이지가 그 자리로 그린다(전체화면이면 툴바가 없어 스테이지 위에) */
+export const barSlots = signal<{ tabs: HTMLElement | null; screen: HTMLElement | null }>({ tabs: null, screen: null });
 export const panelWidth = signal(Number(lsGet(LS.panelW)) || 400);
 export const notesOpen = signal(lsGet(LS.notes) === '1');
 /** 툴바의 문서 제목 칸 폭 — 휠이나 손잡이로 늘이고 줄인다 */
-export const titleWidth = signal(Math.min(720, Math.max(120, Number(lsGet(LS.titleW)) || 320)));
+export const titleWidth = signal(Math.min(720, Math.max(120, Number(lsGet(LS.titleW)) || 240)));
 /** 열린 화면 탭 — 브라우저 탭처럼 여러 화면을 띄워 두고 오간다 */
 export const openTabs = signal<string[]>([]);
 /** 화면 배율 — null 이면 남는 자리에 맞춘다 */
@@ -484,9 +490,13 @@ export function setPanelWidth(w: number): void {
   lsSet(LS.panelW, String(Math.round(w)));
 }
 
-export function togglePanel(open = !panelOpen.value): void {
-  panelOpen.value = open;
-  lsSet(LS.panel, open ? '1' : '0');
+export function setPanelMode(m: PanelMode): void {
+  panelMode.value = m;
+  lsSet(LS.panelMode, m);
+}
+/** 메뉴 · 단축키의 "노트·Comment 패널" — 붙여 두기와 마우스를 대면 뜨기를 오간다 (숨겨 두었으면 붙인다) */
+export function togglePanel(): void {
+  setPanelMode(panelMode.peek() === 'pin' ? 'auto' : 'pin');
 }
 
 export function setNotesRatio(r: number): void {

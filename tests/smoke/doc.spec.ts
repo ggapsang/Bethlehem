@@ -31,7 +31,7 @@ export const docSpecs: Spec[] = [
     files: [new RegExp(`^${M}(ui/(Popover|Panel|labels)|actions|keys)\\.tsx?$`), new RegExp(`^${M}ui/editor/`), new RegExp(`^${M}stage/Stage\\.tsx$`), ...shared],
     async run() {
       const { page, f } = await openDoc();
-      await page.click('.seg-btn:has-text("피커")');
+      await page.click('button[aria-label="피커"]');
       await ctrlPick(page, await pagePoint(page, f, '#tabB'));
       await page.fill('.composer .title-input', '탭 이름');
       await page.fill('.composer .assignee-input', '한재준');
@@ -39,7 +39,7 @@ export const docSpecs: Spec[] = [
       await page.keyboard.press('Control+Enter');
       await until(async () => (await cardCount(page)) === 1, 3000);
       check('제목 · 본문 Comment 가 생긴다', (await cardCount(page)) === 1);
-      check('피커를 고정해 두었어도 달고 나면 보기로 돌아온다', !!(await page.$('.seg-btn[aria-checked="true"]:has-text("보기")')));
+      check('피커를 고정해 두었어도 달고 나면 보기로 돌아온다', !!(await page.$('button[aria-label="피커"][aria-pressed="false"]')));
       check('카드 첫 줄에 제목, 둘째 줄에 쓴 사람 → 담당', ((await page.textContent('.card .card-name')) ?? '') === '탭 이름' && ((await page.textContent('.card .card-meta')) ?? '').startsWith('검증봇→한재준'), (await page.textContent('.card .card-meta')) ?? '');
       check('마커 옆 이름표에도 담당', (await page.getAttribute('.marker', 'data-label')) === '탭 이름 · 검증봇 → 한재준');
       await page.fill('.popover-card .detail .assignee-input', '김민수');
@@ -47,11 +47,11 @@ export const docSpecs: Spec[] = [
       check('팝업에서 담당을 바꾼다', !!(await until(async () => ((await page.textContent('.card .assignee')) ?? '') === '김민수', 2000)));
       check('담당은 고르기 목록에 남는다', !!(await page.$('#terr-people option[value="김민수"]')));
       // 연 Comment 에서 Esc 한 번 — 팝업 · 선택 · 피커를 모두 걷고 지금 화면으로
-      await page.click('.seg-btn:has-text("피커")');
+      await page.click('button[aria-label="피커"]');
       await page.waitForSelector('.popover-card .detail');
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
       await page.keyboard.press('Escape');
-      check('Esc 한 번이면 보기로 — 팝업 · 선택 · 피커가 모두 걷힌다', !(await page.$('.popover-card')) && !(await page.$('.card.is-sel')) && !!(await page.$('.seg-btn[aria-checked="true"]:has-text("보기")')));
+      check('Esc 한 번이면 보기로 — 팝업 · 선택 · 피커가 모두 걷힌다', !(await page.$('.popover-card')) && !(await page.$('.card.is-sel')) && !!(await page.$('button[aria-label="피커"][aria-pressed="false"]')));
       await page.click('.cards > .card:first-child .card-title');
       await page.fill('.popover-card .detail .title-input', '탭 이름 고침');
       await page.keyboard.press('Escape');
@@ -264,6 +264,86 @@ export const docSpecs: Spec[] = [
     },
   },
   {
+    name: 'doc-one-row',
+    kind: 'doc',
+    files: [new RegExp(`^${M}(App|ui/(Toolbar|Panel)|stage/(Stage|StageHeader|ScreenTabs|MarkerStrip))\\.tsx$`), ...shared],
+    async run() {
+      // 툴바 한 줄 — 탭 · 화면 막대가 툴바 안에, 화면은 그 바로 아래부터. 패널: 붙여 두기 · 마우스를 대면 · 숨기기
+      const { doc: nd, blobs } = parseManna(readFileSync(DOC, 'utf8'));
+      const t = nd.meta.updatedAt;
+      const v = nd.screens[0].versions.at(-1)!.v;
+      nd.screens[0].annotations = ['하나', '둘', '셋'].map((title, i) => ({ id: `r${i + 1}`, version: v, title, body: '', author: '기획자', createdAt: t, updatedAt: t, replies: [], history: [] }));
+      const file = join(OUT, 'smoke-one-row.terr.html');
+      writeFileSync(file, serializeManna(nd, blobs, { js: readFileSync('out/manna/manna-runtime.js', 'utf8'), css: readFileSync('out/manna/manna-runtime.css', 'utf8') }));
+      const { page } = await openDoc(file);
+      const box = async (sel: string) => (await (await page.$(sel))!.boundingBox())!;
+      const tb = await box('.toolbar');
+      const stage = await box('.stage');
+      check('한 줄 — 탭 · 화면 막대 · 저장이 툴바 안에, 화면은 그 아래부터',
+        tb.height <= 41 && !!(await page.$('.toolbar .tabs .tab')) && !!(await page.$('.toolbar .sc-bar .ver-chip')) && !!(await page.$('.toolbar .split-main')) && Math.abs(stage.y - (tb.y + tb.height)) < 2,
+        `툴바 ${tb.height} · 화면 위 ${stage.y}`);
+      check('줄이 넘치지 않는다', await page.$eval('.toolbar', (el) => el.scrollWidth <= el.clientWidth + 1));
+      check('붙여 두기 — 패널 머리에 마커 줄', (await page.$$('.panel-dock .panel-top .mk-list .mk')).length === 3 && !(await page.$('.panel-rail')));
+
+      const pickMode = async (label: string) => {
+        await page.click('button[aria-label="노트·Comment 패널"]');
+        await page.click(`.popover [role="menuitemradio"]:has-text("${label}")`);
+        await page.waitForTimeout(150);
+      };
+      const opened = () => page.$('.panel-float.is-open');
+      await pickMode('마우스를 대면');
+      const st2 = await box('.stage');
+      check('마우스를 대면 — 화면이 넓어지고 오른쪽 줄에 번호', st2.width > stage.width + 200 && (await page.$$('.panel-rail .mk-list .mk')).length === 3 && !(await page.$('.panel-dock')) && !(await opened()), `${stage.width} → ${st2.width} · 번호 ${(await page.$$('.panel-rail .mk-list .mk')).length} · 펼침 ${!!(await opened())}`);
+      const rail = await box('.panel-rail');
+      await page.mouse.move(rail.x + rail.width / 2, rail.y + rail.height - 20);
+      check('오른쪽 줄에 대면 패널이 뜬다', !!(await until(opened, 2000)));
+      check('뜬 패널은 화면을 줄이지 않는다', Math.abs((await box('.stage')).width - st2.width) < 2);
+      await page.mouse.move(st2.x + 200, st2.y + 200);
+      check('떠나면 접힌다', !!(await until(async () => !(await opened()), 2000)));
+
+      // 작업하는 동안 — 그룹 이름을 쓰는 중이면 마우스가 나가도 펴 둔다
+      await page.mouse.move(rail.x + rail.width / 2, rail.y + rail.height - 20);
+      await until(opened, 2000);
+      const fl = await box('.panel-float');
+      await page.mouse.move(fl.x + fl.width / 2, fl.y + 120);
+      await page.click('.panel-float button[aria-label="그룹 만들기"]');
+      await page.waitForSelector('.panel-float .cgroup-input');
+      await page.mouse.move(st2.x + 200, st2.y + 200);
+      await page.waitForTimeout(700);
+      check('글을 쓰는 동안은 마우스가 나가도 펴 둔다', !!(await opened()) && (await page.evaluate(() => !!document.activeElement?.classList.contains('cgroup-input'))));
+      await page.keyboard.press('Enter');
+      check('다 쓰면 접힌다', !!(await until(async () => !(await opened()), 2000)));
+
+      // 오른쪽 줄의 번호 — 그 Comment 를 열고, 화면이 보이게 패널은 접어 둔다
+      await page.mouse.move(rail.x + rail.width / 2, rail.y + rail.height - 20);
+      await until(opened, 2000);
+      await page.click('.panel-rail .mk[data-id="r2"]');
+      check('번호를 누르면 그 Comment 가 열리고 패널은 접힌다', !!(await until(async () => !(await opened()), 2000)) && !!(await page.$('.popover-card')));
+      await page.keyboard.press('Escape');
+
+      await pickMode('숨기기');
+      check('숨기기 — 패널도 오른쪽 줄도 없다', !(await page.$('.panel-rail')) && !(await page.$('.panel-dock')) && !(await page.$('.panel-float')));
+      await page.reload();
+      await page.waitForSelector('.toolbar .tabs .tab');
+      check('고른 방식은 다시 열어도 그대로', !(await page.$('.panel-rail')) && !(await page.$('.panel-dock')));
+      await pickMode('마우스를 대면');
+      await page.click('.panel-rail button[aria-label="노트·Comment 패널 붙여 두기"]');
+      check('오른쪽 줄의 패널 단추 — 붙여 둔다', !!(await until(() => page.$('.panel-dock .panel'), 2000)) && !(await page.$('.panel-rail')));
+      await page.click('.panel-dock button[aria-label="패널 숨기기"]');
+      check('패널 머리의 숨기기', !(await page.$('.panel-dock')));
+      await pickMode('붙여 두기');
+
+      // 좁은 창 — 덜 쓰는 화면 도구는 ⋯ 아래로, 줄은 넘치지 않는다
+      await page.setViewportSize({ width: 1100, height: 900 });
+      await page.waitForTimeout(300);
+      check('좁으면 ⋯ 로 접힌다', (await page.isVisible('button[aria-label="화면 도구 더 보기"]')) && !(await page.isVisible('button[aria-label="박스 보이기"]')) && (await page.$eval('.toolbar', (el) => el.scrollWidth <= el.clientWidth + 1)));
+      await page.click('button[aria-label="화면 도구 더 보기"]');
+      check('⋯ 를 누르면 그 도구들이 보인다', await page.isVisible('button[aria-label="박스 보이기"]'));
+      await page.click('button[aria-label="핀 꽂기"]');
+      check('⋯ 안의 도구도 그대로 동작한다', !!(await page.$('.pin-place')));
+    },
+  },
+  {
     name: 'doc-popover',
     kind: 'doc',
     files: [new RegExp(`^${M}ui/Popover\\.tsx$`), ...shared],
@@ -361,12 +441,12 @@ export const docSpecs: Spec[] = [
       check('확대하면 커지고 스크롤', (await fw()) > w0 * 1.1 && !!(await page.$('.stage.stage-scroll')));
       await page.click('.zoom-val');
       check('배율 칸 → 맞춤', Math.abs((await fw()) - w0) < 2);
-      await page.click('.seg-btn:has-text("꽉 채움")');
+      await page.click('button[aria-label="꽉 채움"]');
       await page.waitForTimeout(300);
       const s = (await (await page.$('.stage'))!.boundingBox())!;
       const fb = (await (await page.$('.stage-frame'))!.boundingBox())!;
       check('꽉 채움 — 탭을 가득', Math.abs(fb.width - s.width) < 3 && Math.abs(fb.height - s.height) < 3);
-      await page.click('.seg-btn:has-text("여백")');
+      await page.click('button[aria-label="꽉 채움"]');
     },
   },
   {
@@ -386,8 +466,8 @@ export const docSpecs: Spec[] = [
       const vw = await page.evaluate(() => innerWidth);
       await page.mouse.move(vw - 3, 400);
       await page.waitForTimeout(200);
-      check('오른쪽 끝 → 패널이 뜬다', !!(await page.$('.panel-float .panel')));
-      await page.click('.panel-float button[aria-label="패널 고정"]');
+      check('오른쪽 끝 → 패널이 뜬다', !!(await page.$('.panel-float.is-open .panel')));
+      await page.click('.panel-float.is-open button[aria-label="패널 고정"]');
       check('고정하면 옆에 붙는다', !!(await until(() => page.$('.panel-dock .panel'), 2000)));
       await page.click('.panel-dock button[aria-label="패널 고정 풀기"]');
       await page.keyboard.press('Escape');

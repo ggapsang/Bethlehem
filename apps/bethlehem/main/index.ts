@@ -226,6 +226,15 @@ function rendererUrl(): string {
   return pathToFileURL(join(here, '../renderer/index.html')).href;
 }
 
+/* 창 제목 표시줄과 메뉴 줄은 없애고 렌더러의 툴바 한 줄이 대신한다 — 최소화 · 최대화 · 닫기 단추만 그 오른쪽 끝에 얹는다.
+   메뉴는 툴바 맨 앞 단추로 펼친다(menu-popup). 높이는 툴바와 같게(styles.css .toolbar) */
+const BAR_H = 40;
+const overlay = (dark: boolean) => ({ color: dark ? '#1C1917' : '#FFFFFF', symbolColor: dark ? '#D6D3D1' : '#44403C', height: BAR_H });
+const FRAME = () => (process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : { titleBarStyle: 'hidden' as const, titleBarOverlay: overlay(false) });
+
+/** 렌더러의 Fullscreen API 를 사용자 동작으로 — 툴바를 숨기는 전체화면 (F11 · 보기 메뉴) */
+const TOGGLE_FULLSCREEN = 'document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()';
+
 const WEB_PREFS = () => ({
   preload: join(here, '../preload/index.cjs'),
   contextIsolation: true,
@@ -244,9 +253,23 @@ function guardWindow(w: BrowserWindow): void {
   w.webContents.on('will-navigate', (e, url) => {
     if (url !== w.webContents.getURL()) e.preventDefault();
   });
-  w.webContents.on('before-input-event', (_e, input) => {
-    if (input.type === 'keyDown' && (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i'))) {
-      w.webContents.toggleDevTools();
+  w.webContents.on('before-input-event', (e, input) => {
+    if (input.type !== 'keyDown') return;
+    const k = input.key.toLowerCase();
+    if (input.key === 'F12' || (input.control && input.shift && k === 'i')) return w.webContents.toggleDevTools();
+    /* 메뉴 줄이 없다(툴바 한 줄이 대신) — 메뉴의 단축키는 여기서 받고, 메뉴에는 표시만 한다 (menu.ts registerAccelerator: false) */
+    if (input.key === 'F1') {
+      e.preventDefault();
+      w.webContents.send('menu', 'guide');
+    } else if (input.key === 'F11') {
+      e.preventDefault();
+      w.webContents.executeJavaScript(TOGGLE_FULLSCREEN, true).catch(() => {});
+    } else if (input.control && input.shift && !input.alt && k === 'n') {
+      e.preventDefault();
+      createWindow();
+    } else if (input.control && input.shift && !input.alt && k === 'r') {
+      e.preventDefault();
+      w.webContents.reload();
     }
   });
   /* URL 화면의 webview — preload·격리를 메인 프로세스가 정한다. 다른 세션·다른 스킴은 붙이지 않는다 */
@@ -279,6 +302,7 @@ ipcMain.handle('open-screen-window', (e, o: { screen: string; detach: boolean; c
     icon: ICON,
     backgroundColor: '#0c0a09',
     show: false,
+    ...FRAME(),
     webPreferences: WEB_PREFS(),
   });
   w.setMenu(null);
@@ -320,6 +344,7 @@ function createWindow(open?: OpenTarget): Project {
     icon: ICON,
     backgroundColor: '#F5F5F4',
     show: false,
+    ...FRAME(),
     webPreferences: WEB_PREFS(),
   });
   const p: Project = { id: w.webContents.id, win: w, current: null, place: null, unwatch: [], dirty: false, closing: false, screens: new Set() };
@@ -679,6 +704,21 @@ ipcMain.on('set-state', (e, s: { title: string; dirty: boolean; place?: string |
   // 창이 여럿이면 작업 표시줄에서 구분되게 — 열린 곳의 이름
   p.win.setTitle(s.title ? `${s.title} — Terrarium` : 'Terrarium');
   p.win.setDocumentEdited(s.dirty);
+});
+
+ipcMain.on('menu-popup', (e, at: { x: number; y: number }) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (w) Menu.getApplicationMenu()?.popup({ window: w, x: Math.round(at.x), y: Math.round(at.y) });
+});
+
+ipcMain.on('title-bar', (e, o: { dark: boolean }) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (!w || process.platform === 'darwin') return;
+  try {
+    w.setTitleBarOverlay(overlay(!!o.dark));
+  } catch {
+    /* 단추를 얹지 않은 창 */
+  }
 });
 
 ipcMain.on('close-now', (e) => {

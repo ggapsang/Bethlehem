@@ -113,6 +113,7 @@ async function main() {
   await mkdir(OUT, { recursive: true });
   const browser = await chromium.launch({ executablePath: CHROME });
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 960 }, acceptDownloads: true });
+  await ctx.addInitScript(() => { try { if (!localStorage.getItem('terr.panelMode')) localStorage.setItem('terr.panelMode', 'pin'); } catch {} }); // 패널은 붙여 둔 채로 (카드를 바로 누른다)
   await ctx.addInitScript(() => {
     // 저장은 다운로드 흐름으로, 화면 공유는 움직이는 캔버스 스트림으로 바꿔 끼운다 (자동 테스트에서 대화상자를 띄울 수 없다)
     Object.defineProperty(window, 'showSaveFilePicker', { value: undefined });
@@ -416,14 +417,14 @@ async function main() {
   check('위쪽 끝 → 화면 막대가 뜬다', (await topOpacity()) === '1');
   await page.mouse.move(700, 500);
   await page.waitForTimeout(250);
-  check('전체화면 — 패널은 숨어 있다 (화면이 꽉)', !(await page.$('.panel-dock')) && !(await page.$('.panel-float')));
+  check('전체화면 — 패널은 숨어 있다 (화면이 꽉)', !(await page.$('.panel-dock')) && !(await page.$('.panel-float.is-open')));
   const vw = await page.evaluate(() => innerWidth);
   await page.mouse.move(vw - 3, 400);
   await page.waitForTimeout(200);
-  check('오른쪽 끝에 마우스를 대면 패널이 화면 위로 뜬다', !!(await page.$('.panel-float .panel')));
-  await page.click('.panel-float button[aria-label="패널 고정"]');
+  check('오른쪽 끝에 마우스를 대면 패널이 화면 위로 뜬다', !!(await page.$('.panel-float.is-open .panel')));
+  await page.click('.panel-float.is-open button[aria-label="패널 고정"]');
   await page.waitForTimeout(200);
-  check('고정하면 패널이 붙고 화면은 그만큼 줄어든다', !!(await page.$('.panel-dock .panel')) && !(await page.$('.panel-float')));
+  check('고정하면 패널이 붙고 화면은 그만큼 줄어든다', !!(await page.$('.panel-dock .panel')) && !(await page.$('.panel-float.is-open')));
   await page.click('.panel-dock button[aria-label="패널 고정 풀기"]');
   await page.screenshot({ path: resolve(OUT, '3-fullscreen.png') });
   await page.mouse.move(800, 3);
@@ -443,14 +444,14 @@ async function main() {
   check('탭 줄과 화면 목록이 있다', (await page.$$('.tabs .tab')).length === 1 && !!(await page.$('.tabs button[aria-label="화면 목록"]')));
   check('화면 목록(▾)을 누르면 목록이 보인다', await menuVisible(page, '화면 목록'));
   const stageW = async () => (await (await page.$('.stage'))!.boundingBox())!;
-  await page.click('.seg-btn:has-text("꽉 채움")');
+  await page.click('button[aria-label="꽉 채움"]');
   await page.waitForTimeout(300);
   const sb = await stageW();
   const fb = (await (await page.$('.stage-frame'))!.boundingBox())!;
   check('꽉 채움 — 화면이 탭을 가득 채운다', Math.abs(fb.width - sb.width) < 3 && Math.abs(fb.height - sb.height) < 3, `${Math.round(fb.width)}×${Math.round(fb.height)} / ${Math.round(sb.width)}×${Math.round(sb.height)}`);
   f = await screenFrame(page);
   check('꽉 채움에서도 마커가 붙는다', (await visibleMarkers(page)).length >= 1);
-  await page.click('.seg-btn:has-text("여백")');
+  await page.click('button[aria-label="꽉 채움"]');
   await page.waitForTimeout(300);
 
   console.log('\n[10] 개요 편집 · 저장 → 다시 열기');
@@ -543,6 +544,7 @@ async function main() {
   await page2.click('.ver-chip[data-v="1"]');
   f = await screenFrame(page2);
   check('v1(옛 화면)도 같은 데이터로 뜬다', await splashDone(f));
+  await page2.click('button[aria-label="내 이름 · 테마"]');
   await page2.click('button[aria-label="테마 전환"]');
   await page2.waitForTimeout(100);
   check('라이트 테마로 바뀐다', (await page2.getAttribute('html', 'data-theme')) === 'light');

@@ -1,5 +1,5 @@
-/* 창 메뉴 — 파일 · 편집 · 화면 · 보기 · 도움말
- * 렌더러가 하는 일은 'menu' 메시지로 보낸다. 단축키는 렌더러가 이미 처리하므로 메뉴에는 표시만 한다(registerAccelerator: false).
+/* 창 메뉴 — 파일 · 편집 · 화면 · 보기 · 도움말. 메뉴 줄은 없고 툴바 맨 앞 단추로 펼친다(menu-popup).
+ * 렌더러가 하는 일은 'menu' 메시지로 보낸다. 단축키는 렌더러나 창의 before-input-event(index.ts)가 처리하므로 메뉴에는 표시만 한다(registerAccelerator: false).
  * 잘라내기·복사·붙여넣기·모두 선택은 Electron 기본 동작(role)을 쓴다.
  */
 import { app, dialog, Menu, type BrowserWindow, type MenuItemConstructorOptions } from 'electron';
@@ -22,7 +22,7 @@ export function buildMenu(getWin: () => BrowserWindow | null, newWindow: () => v
     {
       label: '파일(&F)',
       submenu: [
-        { label: '새 창', accelerator: 'Ctrl+Shift+N', click: () => newWindow() },
+        { label: '새 창', accelerator: 'Ctrl+Shift+N', registerAccelerator: false, click: () => newWindow() },
         { type: 'separator' },
         // 열기 = 새 프로젝트. 이 창에 프로젝트가 열려 있으면 새 창에서 연다 (지금 프로젝트에 더하려면 화면 메뉴)
         item('폴더 열기 (새 프로젝트)…', 'open-folder'),
@@ -81,6 +81,7 @@ export function buildMenu(getWin: () => BrowserWindow | null, newWindow: () => v
         {
           label: '전체화면',
           accelerator: 'F11',
+          registerAccelerator: false,
           // 렌더러의 Fullscreen API 를 사용자 동작으로 부른다 — 툴바를 숨기는 전체화면과 같은 것
           click: () => getWin()?.webContents.executeJavaScript('document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()', true).catch(() => {}),
         },
@@ -93,13 +94,13 @@ export function buildMenu(getWin: () => BrowserWindow | null, newWindow: () => v
           click: () => getWin()?.webContents.toggleDevTools(),
         },
         item('작업 폴더 다시 불러오기', 'reload'),
-        { label: '프로그램 화면 새로 고침', accelerator: 'Ctrl+Shift+R', click: () => getWin()?.webContents.reload() },
+        { label: '프로그램 화면 새로 고침', accelerator: 'Ctrl+Shift+R', registerAccelerator: false, click: () => getWin()?.webContents.reload() },
       ],
     },
     {
       label: '도움말(&H)',
       submenu: [
-        { label: '사용자 가이드', accelerator: 'F1', click: () => send('guide') },
+        { label: '사용자 가이드', accelerator: 'F1', registerAccelerator: false, click: () => send('guide') },
         { type: 'separator' },
         {
           label: 'Terrarium 정보',
