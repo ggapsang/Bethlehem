@@ -137,7 +137,8 @@ export const onTop = (page: Page, sel: string) =>
 /* ── 문서(브라우저) ───────────────────────────────────────────────── */
 let browser: Promise<Browser> | null = null;
 /** 새 브라우저 맥락(저장소 비움)으로 문서를 연다 */
-export async function openDoc(file = DOC, name = '검증봇'): Promise<{ page: Page; f: Frame; errors: string[] }> {
+/** frame: false — 품은 화면이 없는 문서(URL 화면의 캡처 모음 등). 그때 f 는 쓰지 않는다 */
+export async function openDoc(file = DOC, name = '검증봇', frame = true): Promise<{ page: Page; f: Frame; errors: string[] }> {
   browser ??= chromium.launch({ executablePath: CHROME });
   const ctx = await (await browser).newContext({ viewport: { width: 1600, height: 960 }, acceptDownloads: true });
   running.getStore()?.cleanup.push(() => ctx.close());
@@ -167,6 +168,7 @@ export async function openDoc(file = DOC, name = '검증봇'): Promise<{ page: P
     await page.fill('.modal input', name);
     await page.click('.modal button[type=submit]');
   }
+  if (!frame) return { page, f: null as unknown as Frame, errors };
   const f = await screenFrame(page);
   await splashDone(f);
   return { page, f, errors };

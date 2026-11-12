@@ -1,5 +1,6 @@
 /* 문서(받는 사람 브라우저) 스모크 — 기능마다 따로, 새 브라우저 맥락에서 */
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -224,6 +225,42 @@ export const docSpecs: Spec[] = [
       await page.hover(`${sec('보류')} .cgroup-head`);
       await page.click(`${sec('보류')} .cgroup-x`);
       check('그룹을 지우면 Comment 는 그룹 없음으로', !!(await until(async () => !(await page.$(sec('보류'))) && (await names(sec('그룹 없음'))) === '하나,둘', 3000)), await names(sec('그룹 없음')));
+    },
+  },
+  {
+    name: 'doc-groups-stage',
+    kind: 'doc',
+    files: [new RegExp(`^${M}(groups|stage/(SiteGallery|MarkerStrip))\\.tsx?$`), ...shared],
+    async run() {
+      // URL 화면을 받은 사람 — 캡처 모음과 마커 줄이 패널처럼 그룹별 차례: 그룹 없음(1 · 3) → holding(2 · 4, 접힘)
+      const { doc: nd, blobs } = parseManna(readFileSync(DOC, 'utf8'));
+      const t = nd.meta.updatedAt;
+      const ver = nd.screens[0].versions.at(-1)!;
+      ver.source = { url: 'http://example.invalid/monitor', mode: 'site', at: t };
+      const jpg = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+      const sha = createHash('sha256').update(Buffer.from(jpg, 'base64')).digest('hex');
+      blobs.set(sha, { enc: 'b64', data: jpg });
+      nd.meta.groups = [{ id: 'h', name: 'holding', collapsed: true }];
+      nd.screens[0].annotations = ['하나', '둘', '셋', '넷'].map((title, i) => ({
+        id: `s${i + 1}`, version: ver.v, title, body: '', author: '기획자', createdAt: t, updatedAt: t, replies: [], history: [],
+        shot: { sha, w: 1600, h: 900 }, ...(i % 2 ? { group: 'h' } : {}),
+      }));
+      const file = join(OUT, 'smoke-groups-stage.terr.html');
+      writeFileSync(file, serializeManna(nd, blobs, { js: readFileSync('out/manna/manna-runtime.js', 'utf8'), css: readFileSync('out/manna/manna-runtime.css', 'utf8') }));
+      const { page } = await openDoc(file, '검증봇', false);
+      const gal = () => page.$$eval('.gallery .gal-group', (els) => els.map((e) => `${e.getAttribute('aria-label')!.slice(3)}:${Array.from(e.querySelectorAll('.gal-item .no')).map((n) => n.textContent).join('.')}`).join(' | '));
+      const strip = () => page.$$eval('.mk-list > *', (els) => els.map((e) => (e.classList.contains('mk-group') ? `[${(e.textContent ?? '').replace(/\s+/g, '')}${e.classList.contains('is-collapsed') ? '▸' : ''}]` : e.textContent)).join(','));
+      await until(() => page.$('.gallery .gal-item'), 8000);
+      check('캡처 모음 — 그룹 없음 먼저, 접힌 holding 은 머리만', (await gal()) === '그룹 없음:1.3 | holding:', await gal());
+      check('마커 줄 — 그룹 없음 번호 뒤에 접힌 holding 하나', (await strip()) === '1,3,[holding2▸]', await strip());
+      await page.click('.gal-group[aria-label="그룹 holding"] .gal-group-head');
+      check('캡처 모음에서 holding 을 펴면 2 · 4', !!(await until(async () => (await gal()) === '그룹 없음:1.3 | holding:2.4', 3000)) && (await strip()) === '1,3,[holding],2,4', `${await gal()} / ${await strip()}`);
+      check('패널도 같이 펴진다', (await page.getAttribute('.cgroup[aria-label="그룹 holding"] .cgroup-toggle', 'aria-expanded')) === 'true');
+      await page.click('.mk-list .mk-group');
+      check('마커 줄의 그룹 이름을 누르면 접힌다', !!(await until(async () => (await strip()) === '1,3,[holding2▸]', 3000)) && (await gal()) === '그룹 없음:1.3 | holding:');
+      await page.click('button[aria-label="번호 순서대로 보기"]');
+      const flat = () => page.$$eval('.gallery .gal-item .no', (els) => els.map((e) => e.textContent).join('.'));
+      check('순서대로 보기 — 캡처 모음 · 마커 줄 모두 번호 순서, 그룹 이름이 붙는다', !!(await until(async () => (await flat()) === '1.2.3.4', 3000)) && (await strip()) === '1,2,3,4' && (await page.$$('.gallery .chip-group')).length === 2, `${await flat()} / ${await strip()}`);
     },
   },
   {
