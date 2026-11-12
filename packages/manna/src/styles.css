@@ -881,6 +881,9 @@ body.is-moving iframe, body.is-moving webview { pointer-events: none; }
 .export-list label:hover { background: var(--bg-hover); }
 .export-list label.is-done { color: var(--text-secondary); }
 .export-list .ellipsis { flex: 1; min-width: 0; }
+.export-list ul { list-style: none; margin: 0 0 4px; padding: 0 0 0 20px; }
+.export-group + .export-group { margin-top: 4px; border-top: 1px solid var(--border); padding-top: 4px; }
+.export-group-head { font-weight: 600; }
 /* 멈춤 그림을 찍는 동안 — 화면 위에 뜬 것은 그림에 들어가지 않게 */
 body.is-capturing .popover-card, body.is-capturing .snip-target, body.is-capturing .hl-box,
 body.is-capturing .link-bar, body.is-capturing .rec-bar, body.is-capturing .toast { visibility: hidden !important; }

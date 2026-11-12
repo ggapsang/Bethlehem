@@ -7,6 +7,7 @@ import type { Annotation, Screen } from '@core';
 import { displayNo } from '@core';
 import { toggleDone, MAIN_NOTE, addNoteTab, addScreenComment, editBody, editNoteTab, noteTabs, removeNoteTab, renameNoteTab, moveNoteTab, reorder, moveCommentsHere, addGroup, moveGroup, moveToGroup, removeGroup, renameGroup, toggleGroup } from '../actions';
 import type { Host } from '../host';
+import { commentSections, groupName } from '../groups';
 import {
   doc as docSig, groupView, setGroupView, setShowDone, showDone, shownAnnotations, version, annotations, commentsOpen, hovered, notesOpen, notesRatio, popHidden, rev, screen, selected, setNotesRatio, toggleComments, toggleNotes, visible, selectScreen, user,
 } from '../store';
@@ -312,16 +313,11 @@ function Comments({ scr }: { scr: Screen }) {
   const others = list.filter((a) => a.id !== drag?.id);
   const lineBefore = drag && drag.to < others.length ? others[drag.to].id : null;
   const card = (a: Annotation, grip: (e: PointerEvent, id: string) => void, dragging: boolean) => (
-    <Card a={a} scr={scr} onGrip={grip} dragging={dragging} group={grouped ? undefined : gs.find((g) => g.id === a.group)?.name} />
+    <Card a={a} scr={scr} onGrip={grip} dragging={dragging} group={grouped ? undefined : groupName(a, gs)} />
   );
 
   /* 그룹별 — 맨 위에 그룹 없음, 그 아래 그룹들(만든 순서 · 끌어서 바꾼 순서) */
-  const sections: { id: string | null; name: string; collapsed: boolean; cards: Annotation[] }[] = grouped
-    ? [
-      { id: null, name: '그룹 없음', collapsed: false, cards: list.filter((a) => !a.group || !gs.some((g) => g.id === a.group)) },
-      ...gs.map((g) => ({ id: g.id, name: g.name, collapsed: !!g.collapsed, cards: list.filter((a) => a.group === g.id) })),
-    ]
-    : [];
+  const sections = grouped ? commentSections(list, gs) : [];
   const movingGroups = gs.filter((g) => g.id !== gmove?.id);
   const groupLineBefore = gmove && gmove.to < movingGroups.length ? movingGroups[gmove.to]!.id : null;
 

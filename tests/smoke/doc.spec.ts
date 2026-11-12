@@ -135,7 +135,7 @@ export const docSpecs: Spec[] = [
   {
     name: 'doc-groups',
     kind: 'doc',
-    files: [new RegExp(`^${M}(actions|ui/(Panel|Popover))\\.tsx?$`), /^packages\/core\/src\/merge\.ts$/, ...shared],
+    files: [new RegExp(`^${M}(actions|groups|export-comments|ui/(Panel|Popover|ExportComments))\\.tsx?$`), /^packages\/core\/src\/merge\.ts$/, ...shared],
     async run() {
       // 화면 전체 Comment 넷 — 하나 · 둘 · 셋 · 넷
       const { doc: nd, blobs } = parseManna(readFileSync(DOC, 'utf8'));
@@ -148,6 +148,18 @@ export const docSpecs: Spec[] = [
       page.on('dialog', (d) => d.accept());
       const names = (sel: string) => page.$$eval(`${sel} .card-name`, (els) => els.map((e) => e.textContent).join(','));
       const sec = (name: string) => `.cgroup[aria-label="그룹 ${name}"]`;
+      const exported = async (all: boolean) => {
+        await page.click('button[aria-label="Comment 내보내기"]');
+        await page.waitForSelector('.export-modal');
+        const picked = await page.$$eval('.export-modal .export-list li:not(.export-group) input:checked', (els) => els.length);
+        const heads = await page.$$eval('.export-modal .export-group', (els) => els.map((e) => e.getAttribute('aria-label')!.slice(3)).join(','));
+        if (all && !(await page.isChecked('.export-modal .export-all input'))) await page.click('.export-modal .export-all input');
+        const dl = page.waitForEvent('download');
+        await page.click('.export-modal .btn-primary');
+        const html = readFileSync((await (await dl).path())!, 'utf8');
+        const data = JSON.parse(/<script type="application\/json" id="terr-comments">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? '{}');
+        return { picked, heads, html, data, titles: (data.comments ?? []).map((c: { title: string }) => c.title).join(',') };
+      };
       const drag = async (from: string, to: string, at: 'top' | 'mid' = 'mid') => {
         const a = (await (await page.$(from))!.boundingBox())!;
         const b = (await (await page.$(to))!.boundingBox())!;
@@ -176,8 +188,16 @@ export const docSpecs: Spec[] = [
       await page.keyboard.press('Control+z');
       check('되돌리기', !!(await until(async () => (await names(sec('그룹 없음'))) === '하나,셋', 3000)));
 
+      // 내보내기 — 패널에 보이는 차례 그대로: 그룹 없음(하나 1 · 셋 4) → holding(넷 2 · 둘 3, 접힘)
+      const ex = await exported(true);
+      check('내보내기 창도 그룹별 — 처음엔 펼쳐진 것만 골라져 있다', ex.heads === '그룹 없음,holding' && ex.picked === 2, `${ex.heads} / ${ex.picked}`);
+      check('내보낸 장 — 화면에 보이는 차례(그룹 없음 → holding)', ex.titles === '하나,셋,넷,둘' && ex.data.comments.map((c: { group: string | null }) => c.group ?? '-').join(',') === '-,-,holding,holding', ex.titles);
+      check('내보낸 장 — 그룹 머리, 접힌 그룹은 접힌 채로', /<details class="grp is-none" id="g-1" open>/.test(ex.html) && /<details class="grp" id="g-2">\s*<summary><span class="gname">holding<\/span><span class="gcount">2<\/span>/.test(ex.html) && /<nav class="toc">/.test(ex.html));
+
       await page.click('button[aria-label="번호 순서대로 보기"]');
       check('순서대로 보기 — 접힌 그룹도 다 보이고 그룹 이름이 붙는다', !!(await until(async () => (await names('.cards')) === '하나,넷,둘,셋', 2000)) && (await page.$$('.cards .chip-group')).length === 2, await names('.cards'));
+      const ex2 = await exported(true);
+      check('순서대로 볼 때 내보내면 번호 순서 + 그룹 이름', ex2.titles === '하나,넷,둘,셋' && !/<details class="grp/.test(ex2.html) && (ex2.html.match(/<span class="chip">holding<\/span>/g) ?? []).length === 2, ex2.titles);
       await page.click('button[aria-label="그룹별로 보기"]');
       await page.click(`${sec('holding')} .cgroup-toggle`);
 

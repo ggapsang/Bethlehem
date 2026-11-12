@@ -7,7 +7,8 @@
 import type { Annotation, MannaDoc, Screen } from '@core';
 import { decodeBlob, displayNo, toBase64 } from '@core';
 import { endLabel, linksOf } from './links';
-import { blobs, doc, notify, user } from './store';
+import { blobs, doc, groupView, notify, user } from './store';
+import { NO_GROUP, commentSections, groupName, inShownOrder } from './groups';
 import { downloadFile } from './host';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -93,15 +94,21 @@ const when = (iso: string) => new Date(iso).toLocaleString('ko-KR', { dateStyle:
 export interface ExportOptions {
   /** 녹화 영상을 넣는가 (크다) */
   clips: boolean;
+  /** 그룹별로 묶어 쓰는가 — 없으면 패널의 보기(그룹별 / 순서대로)를 따른다 */
+  grouped?: boolean;
 }
 
-/** 고른 Comment 들의 HTML — 같은 화면 것만 (탭 하나) */
-export async function commentsHtml(d: MannaDoc, s: Screen, list: Annotation[], o: ExportOptions): Promise<string> {
+/** 고른 Comment 들의 HTML — 같은 화면 것만 (탭 하나). 차례는 패널에 보이는 차례 그대로 */
+export async function commentsHtml(d: MannaDoc, s: Screen, picked: Annotation[], o: ExportOptions): Promise<string> {
   const by = user.peek() ?? '';
   const multiVer = s.versions.length > 1;
-  const items: string[] = [];
+  const gs = d.meta.groups ?? [];
+  const grouped = gs.length > 0 && (o.grouped ?? groupView.peek());
+  const list = inShownOrder(picked, gs, grouped);
+  const cardHtml = new Map<string, string>();
   const data: unknown[] = [];
   for (const a of list) {
+    const gname = groupName(a, gs);
     const no = displayNo(s, a);
     const tag = `${s.id}${multiVer ? ` v${a.version}` : ''} #${no}`;
     const shot = a.shot ? await dataUrl(a.shot.sha, 'image/jpeg') : null;
@@ -118,11 +125,11 @@ export async function commentsHtml(d: MannaDoc, s: Screen, list: Annotation[], o
       return `<li><b>${esc(l.tag)}</b> ${esc(l.text)}</li>`;
     });
     const anchor = a.anchor;
-    items.push(`<article class="c ${a.done ? 'is-done' : ''}" id="c-${esc(a.id)}">
+    cardHtml.set(a.id, `<article class="c ${a.done ? 'is-done' : ''}" id="c-${esc(a.id)}">
   <header>
     <span class="no">${no}</span>
     <div class="head">
-      <div class="title">${a.title ? esc(a.title) : '<span class="muted">제목 없음</span>'}</div>
+      <div class="title">${a.title ? esc(a.title) : '<span class="muted">제목 없음</span>'}${!grouped && gname ? ` <span class="chip">${esc(gname)}</span>` : ''}</div>
       <div class="meta"><span class="mono">${esc(tag)}</span> · ${esc(a.author)}${a.assignee ? ` → <b>${esc(a.assignee)}</b>` : ''} · ${esc(when(a.createdAt))}${a.done ? ` · <span class="done">완료 (${esc(a.done.by)})</span>` : ''}</div>
     </div>
   </header>
@@ -134,15 +141,31 @@ export async function commentsHtml(d: MannaDoc, s: Screen, list: Annotation[], o
   ${anchor ? `<details class="anchor"><summary>대상 요소</summary><dl>${anchor.page ? `<dt>페이지</dt><dd class="mono">${esc(anchor.page)}</dd>` : ''}<dt>선택자</dt><dd class="mono">${esc(anchor.fp.selector)}</dd>${anchor.fp.text ? `<dt>글자</dt><dd>${esc(anchor.fp.text)}</dd>` : ''}${anchor.trail?.length ? `<dt>상태</dt><dd>${esc(anchor.trail.join(' › '))}</dd>` : ''}${anchor.html ? `<dt>HTML</dt><dd><pre><code>${esc(anchor.html)}</code></pre></dd>` : ''}</dl></details>` : ''}
 </article>`);
     data.push({
-      tag, no, version: a.version, title: a.title ?? '', author: a.author, assignee: a.assignee ?? '', done: a.done ?? null, createdAt: a.createdAt,
+      tag, no, version: a.version, group: gname ?? null, title: a.title ?? '', author: a.author, assignee: a.assignee ?? '', done: a.done ?? null, createdAt: a.createdAt,
       body: a.body, replies: a.replies.map((r) => ({ author: r.author, at: r.at, body: r.body })),
       anchor: anchor ? { page: anchor.page, selector: anchor.fp.selector, text: anchor.fp.text, html: anchor.html, trail: anchor.trail } : null,
       shotBox: box ?? null, clips: (a.clips ?? []).length,
       links: linksOf(d, (e) => e.kind === 'comment' && e.screen === s.id && e.ann === a.id).map(({ other }) => endLabel(d, other)),
     });
   }
+  // 그룹별 — 패널처럼 그룹 없음 → 그룹들 차례로 묶고, 접힌 그룹은 접힌 채로(눌러서 편다). 고른 것이 없는 묶음은 뺀다
+  const sections = grouped ? commentSections(list, gs).filter((sec) => sec.cards.length) : [];
+  const secId = (i: number) => `g-${i + 1}`;
+  const body = grouped
+    ? sections.map((sec, i) => `<details class="grp${sec.id ? '' : ' is-none'}" id="${secId(i)}"${sec.collapsed ? '' : ' open'}>
+<summary><span class="gname">${esc(sec.name)}</span><span class="gcount">${sec.cards.length}</span>${sec.collapsed ? '<span class="gnote">접힌 그룹 — 눌러서 펴기</span>' : ''}</summary>
+${sec.cards.map((a) => cardHtml.get(a.id)).join('\n')}
+</details>`).join('\n')
+    : list.map((a) => cardHtml.get(a.id)).join('\n');
+  const toc = grouped && sections.length > 1
+    ? `<nav class="toc">${sections.map((sec, i) => `<a href="#${secId(i)}">${esc(sec.name)} <span class="gcount">${sec.cards.length}</span>${sec.collapsed ? ' <span class="muted">(접힘)</span>' : ''}</a>`).join('')}</nav>`
+    : '';
   const title = `${d.meta.title} · ${s.id} ${s.title} — Comment ${list.length}개`;
-  const json = JSON.stringify({ document: d.meta.title, docVersion: d.meta.version, screen: { id: s.id, title: s.title }, exportedAt: new Date().toISOString(), exportedBy: by, comments: data }).replace(/</g, '\\u003c');
+  const json = JSON.stringify({
+    document: d.meta.title, docVersion: d.meta.version, screen: { id: s.id, title: s.title }, exportedAt: new Date().toISOString(), exportedBy: by,
+    ...(gs.length ? { groupView: grouped, groups: [NO_GROUP, ...gs.map((g) => g.name)].map((name, i) => ({ name, collapsed: i > 0 && !!gs[i - 1]!.collapsed })) } : {}),
+    comments: data,
+  }).replace(/</g, '\\u003c');
   return `<!doctype html>
 <!-- 테라리움 Comment 내보내기 — 사람은 아래 카드를, AI 나 도구는 id 가 terr-comments 인 script 의 JSON 을 읽으면 된다.
      tag 는 "화면id #번호", shotBox 는 달 때 찍은 그림 안에서 대상의 자리(0~1 비율), anchor.html 은 대상 요소의 HTML 조각 -->
@@ -191,6 +214,19 @@ details.anchor { margin-top: 10px; font-size: 13px; }
 details.anchor dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 8px 0 0; }
 details.anchor dt { color: var(--m); }
 details.anchor dd { margin: 0; min-width: 0; }
+.chip { display: inline-block; vertical-align: 2px; margin-left: 6px; padding: 0 8px; border: 1px solid var(--b); border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--m); background: #f5f5f4; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.toc a { padding: 3px 10px; border: 1px solid var(--b); border-radius: 999px; background: #fff; color: var(--t); text-decoration: none; font-size: 13px; }
+.toc a:hover { border-color: var(--acc); }
+details.grp { margin: 0 0 22px; }
+details.grp > summary { display: flex; align-items: center; gap: 8px; padding: 6px 2px 10px; margin-bottom: 10px; border-bottom: 2px solid var(--b); cursor: pointer; list-style: none; }
+details.grp > summary::-webkit-details-marker { display: none; }
+details.grp > summary::before { content: "▸"; color: var(--m); transition: transform .15s; }
+details.grp[open] > summary::before { transform: rotate(90deg); }
+.gname { font-size: 18px; font-weight: 700; }
+.gcount { min-width: 22px; padding: 0 7px; border-radius: 999px; background: var(--b); color: var(--t); font-size: 12px; font-weight: 700; text-align: center; }
+.gnote { font-size: 12px; color: var(--m); }
+details.grp.is-none .gname { color: var(--m); }
 @media print { body { background: #fff; } .c { border-color: #ccc; } }
 </style>
 </head>
@@ -199,8 +235,9 @@ details.anchor dd { margin: 0; min-width: 0; }
 <section class="doc">
   <h1>${esc(s.id)} ${esc(s.title)} — Comment ${list.length}개</h1>
   <div class="meta">${esc(d.meta.title)} v${esc(d.meta.version)} · 내보낸 사람 ${esc(by)} · ${esc(when(new Date().toISOString()))}</div>
+  ${toc}
 </section>
-${items.join('\n')}
+${body}
 </main>
 <script type="application/json" id="terr-comments">${json}</script>
 </body>
@@ -216,7 +253,8 @@ export async function exportComments(s: Screen, list: Annotation[], o: ExportOpt
   try {
     const d = doc.peek();
     const html = await commentsHtml(d, s, list, o);
-    const nos = list.map((a) => displayNo(s, a));
+    const gs = d.meta.groups ?? [];
+    const nos = inShownOrder(list, gs, gs.length > 0 && (o.grouped ?? groupView.peek())).map((a) => displayNo(s, a));
     const name = `${safe(d.meta.title)}_${s.id}_Comment_${nos.length > 4 ? `${nos.length}개` : nos.map((n) => `${n}`).join('-')}.html`;
     downloadFile(html, name, 'text/html');
     notify(`Comment ${list.length}개를 내보냈습니다 — ${name} (브라우저로 바로 열립니다)`);
